@@ -4,6 +4,7 @@ project(async_coro)
 
 add_subdirectory(async_coro)
 
-file(GLOB_RECURSE tests_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "tests/**.h" "tests/**.cpp")
+set(gtest_force_shared_crt ON CACHE BOOL "Force use dynamic libs in tests" FORCE)
 
-add_executable(async_coro_tests ${tests_src})
+add_subdirectory(googletest)
+add_subdirectory(tests)
