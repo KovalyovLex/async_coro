@@ -1,3 +1,5 @@
+#pragma once
+
 #include <coroutine>
 
 namespace async_coro
@@ -6,11 +8,12 @@ namespace async_coro
 	class [[nodiscard]] generator final
 	{
 	public:
-        class promise_type;
+		class promise_type;
 
 		using handle = std::coroutine_handle<promise_type>;
 
-		struct void_struct
+		// This structure for use in generator<void>. Dont use it explicitly, its enought to write co_yield {};
+		struct void_result
 		{};
 
 		class iterator
@@ -221,7 +224,7 @@ namespace async_coro
 		class value_holder<U, std::enable_if_t<std::is_void_v<U>>>
 		{
 		public:
-			std::suspend_always yield_value(void_struct&&) noexcept
+			std::suspend_always yield_value(void_result&&) noexcept
 			{
 				return {};
 			}

@@ -1,4 +1,0 @@
-namespace async_coro
-{
-    
-}

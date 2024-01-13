@@ -60,3 +60,20 @@ TEST(generator, yeld_internal) {
     ASSERT_TRUE(routine.is_finished());
     ASSERT_EQ(routine.get_value(), nullptr);
 }
+
+TEST(generator, void_co_yield) {
+    auto routine = []() -> async_coro::generator<void> {
+        co_yield {};
+		co_return;
+    }();
+
+    ASSERT_FALSE(routine.is_finished());
+    ASSERT_EQ(routine.get_value(), nullptr);
+
+    routine.move_next();
+    ASSERT_FALSE(routine.is_finished());
+
+    routine.move_next();
+    ASSERT_TRUE(routine.is_finished());
+    ASSERT_EQ(routine.get_value(), nullptr);
+}
