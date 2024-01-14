@@ -90,7 +90,7 @@ namespace async_coro
 			action_destroy,
 		};
 
-		using t_move_or_destroy_f = bool(*)(move_only_function& self, move_only_function* other, deinit_op op) noexcept;
+		using t_move_or_destroy_f = void(*)(move_only_function& self, move_only_function* other, deinit_op op) noexcept;
 
 		template<typename Fx>
 		inline static constexpr bool is_small_f = sizeof(Fx) <= sizeof(void*) && alignof(Fx) <= alignof(void*);
@@ -118,18 +118,69 @@ namespace async_coro
 			: super(std::move(other))
 			, _move_or_destroy(other._move_or_destroy)
 		{
-			other._invoke = nullptr;
-			if (_move_or_destroy && _move_or_destroy(*this, &other, action_move)) {
-				other.clear();
-			} else {
-				this->_fx = other._fx;
+			if (_move_or_destroy) {
+				_move_or_destroy(*this, &other, action_move);
 			}
+			other.clear();
 		}
 
 		template<typename Fx, typename = std::enable_if_t<super::is_invocable<Fx>::value>>
 		move_only_function(Fx&& func) noexcept(is_noexecept_init<Fx>)
 			: move_only_function(no_init { })
 		{
+			init(std::forward<Fx>(func));
+		}
+
+		~move_only_function() noexcept {
+			if (_move_or_destroy) {
+				_move_or_destroy(*this, nullptr, action_destroy);
+			}
+		}
+
+		move_only_function& operator=(const move_only_function&) const = delete;
+		move_only_function& operator=(move_only_function&& other) noexcept {
+			if (this == &other) {
+				return * this;
+			}
+
+			clear();
+
+			if (other._move_or_destroy) {
+				other._move_or_destroy(*this, &other, action_move);
+			} else {
+				this->_fx = std::exchange(other._fx, nullptr);
+			}
+
+			this->_invoke = std::exchange(other._invoke, nullptr);
+			_move_or_destroy = std::exchange(other._move_or_destroy, nullptr);
+			
+			return *this;
+		}
+		move_only_function& operator=(std::nullptr_t) noexcept {
+			clear();
+			return *this;
+		}
+
+		template<typename Fx, typename = std::enable_if_t<super::is_invocable<Fx>::value && !std::is_same_v<Fx, move_only_function>>>
+		move_only_function& operator=(Fx&& func) noexcept(is_noexecept_init<Fx>)
+		{
+			clear();
+			init(std::forward<Fx>(func));
+			return *this;
+		}
+
+		explicit operator bool() const noexcept {
+			return this->_invoke != nullptr;
+		}
+
+		using super::operator();
+
+	private:
+		template<typename Fx, typename = std::enable_if_t<super::is_invocable<Fx>::value>>
+		void init(Fx&& func) noexcept(is_noexecept_init<Fx>)
+		{
+			static_assert(std::is_nothrow_destructible_v<Fx>, "lambda should have noexcept destructor");
+
 			constexpr bool is_small_function = is_small_f<std::remove_cvref_t<Fx>>;
 
 			this->_invoke = static_cast<super::t_invoke_f>([](void* const& fx, auto&&... args) noexcept(super::is_noexcept_invoke) {
@@ -145,15 +196,13 @@ namespace async_coro
 			if constexpr (is_small_function) {
 				// small object
 				if constexpr (!std::is_trivially_destructible_v<Fx> || !std::is_trivially_move_constructible_v<Fx>) {
-					this->_move_or_destroy = +[](move_only_function& self, move_only_function* other, auto op) {
+					this->_move_or_destroy = +[](move_only_function& self, move_only_function* other, deinit_op op) noexcept {
 						if (op == action_destroy) {
 							if constexpr (!std::is_trivially_destructible_v<Fx>) {
-								static_assert(std::is_nothrow_destructible_v<Fx>, "lambda should have noexcept destructor");
-								
 								auto* fx = reinterpret_cast<Fx*>(&self._fx);
 								std::destroy_at(fx);
-								self._fx = nullptr;
 							}
+							self._fx = nullptr;
 						} else {
 							// action_move
 							if constexpr (!std::is_trivially_move_constructible_v<Fx>) {
@@ -162,9 +211,9 @@ namespace async_coro
 								auto* to = reinterpret_cast<Fx*>(&self._fx);
 								auto& from = reinterpret_cast<Fx&>(other->_fx);
 								new (to) Fx(std::move(from));
+								other->_fx = nullptr;
 							}
 						}
-						return true;
 					};
 				} else {
 					this->_move_or_destroy = nullptr;
@@ -173,54 +222,22 @@ namespace async_coro
 				new (&this->_fx) Fx(std::forward<Fx>(func));
 			} else {
 				// large function
-				this->_move_or_destroy = +[](move_only_function& self, move_only_function*, auto op) noexcept {
-					if (op == action_destroy){
-						auto* fx = static_cast<Fx*>(self._fx);
-						delete fx;
-						self._fx = nullptr;
-						return true;
+				_move_or_destroy = +[](move_only_function& self, move_only_function* other, auto op) noexcept {
+					if (op == action_destroy) {
+						if (self._fx) {
+							auto* fx = static_cast<Fx*>(self._fx);
+							delete fx;
+							self._fx = nullptr;
+						}
+					} else {
+						// action_move
+						self._fx = std::exchange(other->_fx, nullptr);
 					}
-					return false;
 				};
 				this->_fx = new Fx(std::forward<Fx>(func));
 			}
 		}
 
-		~move_only_function() noexcept {
-			if (this->_move_or_destroy) {
-				this->_move_or_destroy(*this, nullptr, action_destroy);
-			}
-		}
-
-		move_only_function& operator=(const move_only_function&) const = delete;
-		move_only_function& operator=(move_only_function&& other) noexcept {
-			if (this == &other) {
-				return * this;
-			}
-
-			clear();
-
-			if (!other._move_or_destroy || !other._move_or_destroy(*this, &other, action_move)) {
-				this->_fx = std::exchange(other._fx, nullptr);
-			}
-
-			this->_invoke = std::exchange(other._invoke, nullptr);
-			_move_or_destroy = std::exchange(other._move_or_destroy, nullptr);
-			
-			return *this;
-		}
-		move_only_function& operator=(std::nullptr_t) noexcept {
-			clear();
-			return *this;
-		}
-
-		explicit operator bool() const noexcept {
-			return this->_invoke != nullptr;
-		}
-
-		using super::operator();
-
-	private:
 		void clear() noexcept {
 			if (_move_or_destroy) {
 				_move_or_destroy(*this, nullptr, action_destroy);

@@ -1,29 +1,14 @@
 #include <gtest/gtest.h>
 #include <async_coro/move_only_function.h>
 #include <stdexcept>
+#include "memory_hooks.h"
 
-namespace move_function_test_details {
-	std::atomic_size_t num_allocated = 0;
-}
-
-void* operator new (std::size_t count) {
-	move_function_test_details::num_allocated += count + sizeof(std::size_t);
-	auto mem = static_cast<std::size_t*>(std::malloc(count + sizeof(std::size_t)));
-	*mem = count;
-	return mem + 1;
-}
-
-void operator delete(void* ptr) noexcept {
-	auto mem = static_cast<std::size_t*>(ptr) - 1;
-	move_function_test_details::num_allocated -= *mem + sizeof(std::size_t);
-	std::free(mem);
-}
 
 template<bool is_noexcept>
 static auto test_small_f() {
 	using namespace async_coro;
 
-	const size_t before = move_function_test_details::num_allocated;
+	const size_t before = mem_hook::num_allocated;
 
 	move_only_function<void() noexcept(is_noexcept)> f;
 
@@ -39,7 +24,7 @@ static auto test_small_f() {
 		}
 	};
 
-	EXPECT_EQ(before, move_function_test_details::num_allocated);
+	EXPECT_EQ(before, mem_hook::num_allocated);
 
 	ASSERT_TRUE(f);
 
@@ -66,7 +51,7 @@ static auto test_small_f() {
 	f2 = nullptr;
 	EXPECT_FALSE(f);
 
-	EXPECT_EQ(before, move_function_test_details::num_allocated);
+	EXPECT_EQ(before, mem_hook::num_allocated);
 }
 
 TEST(move_only_function, except_small_f) {
@@ -82,7 +67,7 @@ template<bool is_noexcept>
 static auto test_large_f() {
 	using namespace async_coro;
 
-	const size_t before = move_function_test_details::num_allocated;
+	const size_t before = mem_hook::num_allocated;
 
 	move_only_function<void() noexcept(is_noexcept)> f;
 
@@ -97,7 +82,7 @@ static auto test_large_f() {
 		}
 	};
 
-	EXPECT_GT(move_function_test_details::num_allocated, before);
+	EXPECT_GT(mem_hook::num_allocated, before);
 
 	ASSERT_TRUE(f);
 
@@ -122,7 +107,7 @@ static auto test_large_f() {
 
 	EXPECT_FALSE(f);
 
-	EXPECT_EQ(move_function_test_details::num_allocated, before);
+	EXPECT_EQ(mem_hook::num_allocated, before);
 }
 
 TEST(move_only_function, noexcept_large_f) {
@@ -138,4 +123,136 @@ TEST(move_only_function, size_check) {
 	using namespace async_coro;
 
 	EXPECT_EQ(sizeof(move_only_function<void()>), sizeof(void*) * 3);
+}
+
+template<bool is_noexcept>
+static auto num_moves_large_f() {
+	using namespace async_coro;
+
+	static int num_moves = 0;
+	static int num_copyes = 0;
+
+	struct cleaner {
+		~cleaner() noexcept {
+			num_moves = 0;
+			num_copyes = 0;
+		}
+	};
+
+	struct test_struct {
+		test_struct() noexcept = default;
+		test_struct(const test_struct&) {
+			num_copyes++;
+		}
+		test_struct(test_struct&&) {
+			num_moves++;
+		}
+		~test_struct() noexcept = default;
+
+		void test() const noexcept(is_noexcept) {
+			EXPECT_DOUBLE_EQ(a, 23.1);
+			EXPECT_DOUBLE_EQ(b, 13.3);
+			EXPECT_DOUBLE_EQ(c, 14.6);
+		}
+
+		double a = 23.1;
+		double b = 13.3;
+		double c = 14.6;
+	};
+
+	cleaner clear{};
+
+	move_only_function<void() noexcept(is_noexcept)> f;
+
+	EXPECT_EQ(num_moves, 0);
+
+	f = [tst = test_struct{}]() noexcept(is_noexcept) {
+		tst.test();
+	};
+
+	EXPECT_EQ(num_moves, 1);
+
+	auto f2 = std::move(f);
+
+	EXPECT_EQ(num_moves, 1);
+
+	ASSERT_TRUE(f2);
+
+	f2();
+
+	f2 = nullptr;
+
+	EXPECT_EQ(num_moves, 1);
+	EXPECT_EQ(num_copyes, 0);
+}
+
+TEST(move_only_function, num_moves_large_f_noexcept) {
+	num_moves_large_f<true>();
+}
+
+TEST(move_only_function, num_moves_large_f_except) {
+	num_moves_large_f<true>();
+}
+
+template<bool is_noexcept>
+static auto num_moves_small_f() {
+	using namespace async_coro;
+
+	static int num_moves = 0;
+	static int num_copyes = 0;
+
+	struct cleaner {
+		~cleaner() noexcept {
+			num_moves = 0;
+			num_copyes = 0;
+		}
+	};
+
+	struct test_struct {
+		test_struct() noexcept = default;
+		test_struct(const test_struct&) {
+			num_copyes++;
+		}
+		test_struct(test_struct&&) noexcept {
+			num_moves++;
+		}
+		~test_struct() noexcept = default;
+
+		void test() const noexcept(is_noexcept) {
+			EXPECT_GT(num_moves, 0);
+		}
+	};
+
+	cleaner clear{};
+
+	move_only_function<void() noexcept(is_noexcept)> f;
+
+	EXPECT_EQ(num_moves, 0);
+
+	f = [tst = test_struct{}]() noexcept(is_noexcept) {
+		tst.test();
+	};
+
+	EXPECT_EQ(num_moves, 1);
+
+	auto f2 = std::move(f);
+
+	EXPECT_EQ(num_moves, 2);
+
+	ASSERT_TRUE(f2);
+
+	f2();
+
+	f2 = nullptr;
+
+	EXPECT_EQ(num_moves, 2);
+	EXPECT_EQ(num_copyes, 0);
+}
+
+TEST(move_only_function, num_moves_small_f_noexcept) {
+    num_moves_small_f<true>();
+}
+
+TEST(move_only_function, num_moves_small_f_except) {
+    num_moves_small_f<false>();
 }
