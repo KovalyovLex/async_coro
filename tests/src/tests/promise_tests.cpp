@@ -3,11 +3,11 @@
 #include <async_coro/await_callback.h>
 
 namespace promise_tests {
-	struct coro_runner : async_coro::base_promise
+	struct coro_runner : async_coro::base_handle
 	{
 		template<typename T>
 		void run_coroutine(async_coro::promise<T>& coro) {
-			coro.resume(async_coro::internal::passkey{ this });
+			coro.get_handle(async_coro::internal::passkey{ this }).resume();
 		}
 	};
 }

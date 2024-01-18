@@ -26,20 +26,20 @@ namespace async_coro::internal
 		bool has_result() const noexcept { return is_initialized && is_result; }
 
 #if !ASYNC_CORO_NO_EXCEPTIONS
-		auto unhandled_exception() noexcept {
+		void unhandled_exception() noexcept {
 			ASYNC_CORO_ASSERT(!is_initialized);
 			new (&store.exception) std::exception_ptr(std::current_exception());
 			is_initialized = true;
 			is_result = false;
 		}
 
-		void check_exception() {
+		void check_exception() const {
 			if (is_initialized && !is_result) {
 				std::rethrow_exception(store.exception);
 			}
 		}
 #else
-		void check_exception() noexcept { }
+		void check_exception() const noexcept { }
 #endif
 
 	protected:
@@ -97,15 +97,18 @@ namespace async_coro::internal
 		}
 
 		void get_result_ref() noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
-			check_exception();
+			this->check_exception();
+			ASYNC_CORO_ASSERT(this->has_result());
 		}
 
-		void get_result_cref() noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
-			check_exception();
+		void get_result_cref() const noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
+			this->check_exception();
+			ASYNC_CORO_ASSERT(this->has_result());
 		}
 
 		void move_result() noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
-			check_exception();
+			this->check_exception();
+			ASYNC_CORO_ASSERT(this->has_result());
 		}
 	};
 }

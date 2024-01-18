@@ -3,18 +3,19 @@
 #include <async_coro/config.h>
 #include <async_coro/internal/promise_result.h>
 #include <async_coro/internal/passkey.h>
-#include <async_coro/base_promise.h>
+#include <async_coro/base_handle.h>
+#include <async_coro/scheduler.h>
 #include <coroutine>
 #include <concepts>
 #include <utility>
 
 namespace async_coro
 {
-	template <typename R>
+	template<typename R>
 	struct promise;
 
-	template <typename R>
-	struct promise_type final : internal::promise_result<R>, base_promise
+	template<typename R>
+	struct promise_type final : internal::promise_result<R>, base_handle
 	{
 		// construct my promise from me
 		constexpr auto get_return_object() noexcept { return std::coroutine_handle<promise_type>::from_promise(*this); }
@@ -22,12 +23,12 @@ namespace async_coro
 		// all promises awaits to be started in scheduller or after embedding
 		constexpr auto initial_suspend() noexcept {
 			return std::suspend_always();
-		};
+		}
 
 		// resume parent routine
 		constexpr auto final_suspend() noexcept {
 			return std::suspend_always();
-		};
+		}
 
 		template<typename T>
 		constexpr decltype(auto) await_transform(T&& in) {
@@ -37,14 +38,13 @@ namespace async_coro
 
 		template<typename T>
 		constexpr decltype(auto) await_transform(promise<T>&& in) {
-			// start execution of internal coroutine
-			in.resume(internal::passkey { this });
+			get_scheduler().on_child_coro_added(*this, in.get_handle(internal::passkey { this }));
 			return std::move(in);
 		}
 	};
 
 	// Default type for all coroutines
-	template <typename R>
+	template<typename R>
 	struct promise final
 	{
 		using promise_type = async_coro::promise_type<R>;
@@ -128,9 +128,12 @@ namespace async_coro
 			return _handle.done();
 		}
 
-		// coroutines can only be started and executed in scheduler or can be continued after finish of embedded coro
-		void resume(internal::passkey_successors<base_promise>) {
-			_handle.resume();
+		std::coroutine_handle<base_handle> get_handle(internal::passkey_successors<base_handle>) {
+			return std::coroutine_handle<base_handle>::from_promise(_handle.promise());
+		}
+
+		std::coroutine_handle<base_handle> release_handle(internal::passkey_successors<scheduler>) {
+			return std::move(_handle);
 		}
 
 	private:

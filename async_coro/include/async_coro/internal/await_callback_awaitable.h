@@ -1,7 +1,6 @@
 #pragma once
 
-#include <async_coro/base_promise.h>
-
+#include <async_coro/base_handle.h>
 #include <concepts>
 #include <coroutine>
 
@@ -23,7 +22,7 @@ namespace async_coro::internal
 
 		bool await_ready() { return false; }
 
-		template<typename U> requires(std::derived_from<U, base_promise>)
+		template<typename U> requires(std::derived_from<U, base_handle>)
 		void await_suspend(std::coroutine_handle<U> h)
 		{
 			_on_await([h]() {

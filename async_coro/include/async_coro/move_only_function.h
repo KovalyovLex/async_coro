@@ -3,6 +3,7 @@
 #include <utility>
 #include <functional>
 #include <type_traits>
+#include <async_coro/internal/always_false.h>
 
 namespace async_coro
 {
@@ -11,7 +12,7 @@ namespace async_coro
 		template<typename T>                                                        
 		class function_impl_call
 		{ 
-			static_assert(sizeof(T) < 0, "move_only_function only accepts function types as template arguments.");
+			static_assert(always_false<T>::value, "move_only_function only accepts function types as template arguments.");
 		};
 
 		template<typename R, typename... TArgs>
@@ -181,36 +182,37 @@ namespace async_coro
 		{
 			static_assert(std::is_nothrow_destructible_v<Fx>, "lambda should have noexcept destructor");
 
-			constexpr bool is_small_function = is_small_f<std::remove_cvref_t<Fx>>;
+			using TFunc = std::remove_cvref_t<Fx>;
+			constexpr bool is_small_function = is_small_f<TFunc>;
 
 			this->_invoke = static_cast<super::t_invoke_f>([](void* const& fx, auto&&... args) noexcept(super::is_noexcept_invoke) {
 				if constexpr (is_small_function) {
-					auto& fx_t = reinterpret_cast<const Fx&>(fx);
+					auto& fx_t = reinterpret_cast<const TFunc&>(fx);
 					std::invoke(fx_t, std::forward<decltype(args)>(args)...);
 				} else {
-					auto* fx_t = static_cast<Fx*>(fx);
+					auto* fx_t = static_cast<TFunc*>(fx);
 					std::invoke(*fx_t, std::forward<decltype(args)>(args)...);
 				}
 			});
 
 			if constexpr (is_small_function) {
 				// small object
-				if constexpr (!std::is_trivially_destructible_v<Fx> || !std::is_trivially_move_constructible_v<Fx>) {
+				if constexpr (!std::is_trivially_destructible_v<TFunc> || !std::is_trivially_move_constructible_v<TFunc>) {
 					this->_move_or_destroy = +[](move_only_function& self, move_only_function* other, deinit_op op) noexcept {
 						if (op == action_destroy) {
-							if constexpr (!std::is_trivially_destructible_v<Fx>) {
-								auto* fx = reinterpret_cast<Fx*>(&self._fx);
+							if constexpr (!std::is_trivially_destructible_v<TFunc>) {
+								auto* fx = reinterpret_cast<TFunc*>(&self._fx);
 								std::destroy_at(fx);
 							}
 							self._fx = nullptr;
 						} else {
 							// action_move
-							if constexpr (!std::is_trivially_move_constructible_v<Fx>) {
-								static_assert(std::is_nothrow_move_constructible_v<Fx>, "lambda should have noexcept move contructor");
+							if constexpr (!std::is_trivially_move_constructible_v<TFunc>) {
+								static_assert(std::is_nothrow_move_constructible_v<TFunc>, "lambda should have noexcept move contructor");
 
-								auto* to = reinterpret_cast<Fx*>(&self._fx);
-								auto& from = reinterpret_cast<Fx&>(other->_fx);
-								new (to) Fx(std::move(from));
+								auto* to = reinterpret_cast<TFunc*>(&self._fx);
+								auto& from = reinterpret_cast<TFunc&>(other->_fx);
+								new (to) TFunc(std::move(from));
 								other->_fx = nullptr;
 							}
 						}
@@ -225,7 +227,7 @@ namespace async_coro
 				_move_or_destroy = +[](move_only_function& self, move_only_function* other, auto op) noexcept {
 					if (op == action_destroy) {
 						if (self._fx) {
-							auto* fx = static_cast<Fx*>(self._fx);
+							auto* fx = static_cast<TFunc*>(self._fx);
 							delete fx;
 							self._fx = nullptr;
 						}
@@ -234,7 +236,7 @@ namespace async_coro
 						self._fx = std::exchange(other->_fx, nullptr);
 					}
 				};
-				this->_fx = new Fx(std::forward<Fx>(func));
+				this->_fx = new TFunc(std::forward<Fx>(func));
 			}
 		}
 

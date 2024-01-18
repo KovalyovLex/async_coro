@@ -77,6 +77,8 @@
         "xmemory": "cpp",
         "xstring": "cpp",
         "xtr1common": "cpp",
-        "xtree": "cpp"
+        "xtree": "cpp",
+        "queue": "cpp",
+        "ranges": "cpp"
     }
 }
