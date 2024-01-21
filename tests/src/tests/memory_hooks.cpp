@@ -10,7 +10,6 @@ void* operator new (std::size_t count) {
 
 void operator delete(void* ptr) noexcept {
 	if (ptr == nullptr) {
-		assert(ptr != nullptr);
 		return;
 	}
 

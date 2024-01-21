@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <async_coro/config.h>
 #include <thread>
+#include <coroutine>
 
 namespace async_coro
 {
@@ -35,9 +36,15 @@ namespace async_coro
 			return _execution_thread == std::this_thread::get_id();
 		}
 
+	protected:
+		void init_promise(std::coroutine_handle<> h) noexcept {
+			_handle = h;
+		}
+
 	private:
 		base_handle* _parent = nullptr;
 		scheduler* _scheduler = nullptr;
+		std::coroutine_handle<> _handle;
 		std::thread::id _execution_thread = {};
 		coroutine_state _state = coroutine_state::created;
 	};

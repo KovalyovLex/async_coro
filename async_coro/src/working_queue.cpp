@@ -1,6 +1,5 @@
 #include <async_coro/config.h>
 #include <async_coro/working_queue.h>
-#include "working_queue.h"
 
 namespace async_coro
 {
@@ -69,7 +68,7 @@ namespace async_coro
 		}
 	}
 
-	bool working_queue::is_current_thread_worker() const noexcept
+	bool working_queue::is_current_thread_worker() noexcept
 	{
 		if (!_has_workers.load(std::memory_order_acquire)) {
 			// no workers at all

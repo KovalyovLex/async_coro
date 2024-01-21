@@ -22,7 +22,7 @@ namespace async_coro
 		// seting up num of worker threads and create all of them or stops
 		void set_num_threads(std::uint32_t num);
 	
-		bool is_current_thread_worker() const noexcept;
+		bool is_current_thread_worker() noexcept;
 
 	private:
 		void start_up_threads();

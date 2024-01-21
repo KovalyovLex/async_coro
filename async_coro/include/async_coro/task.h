@@ -4,7 +4,6 @@
 #include <async_coro/internal/promise_result.h>
 #include <async_coro/internal/passkey.h>
 #include <async_coro/base_handle.h>
-#include <async_coro/scheduler.h>
 #include <coroutine>
 #include <concepts>
 #include <utility>
@@ -12,7 +11,9 @@
 namespace async_coro
 {
 	template<typename R>
-	struct promise;
+	struct task;
+
+	class scheduler;
 
 	template<typename R>
 	struct promise_type final : internal::promise_result<R>, base_handle
@@ -22,6 +23,7 @@ namespace async_coro
 
 		// all promises awaits to be started in scheduller or after embedding
 		constexpr auto initial_suspend() noexcept {
+			init_promise(get_return_object());
 			return std::suspend_always();
 		}
 
@@ -37,45 +39,48 @@ namespace async_coro
 		}
 
 		template<typename T>
-		constexpr decltype(auto) await_transform(promise<T>&& in) {
-			get_scheduler().on_child_coro_added(*this, in.get_handle(internal::passkey { this }));
+		constexpr decltype(auto) await_transform(task<T>&& in) {
+			auto handle = in.get_handle(internal::passkey { this });
+			get_scheduler().on_child_coro_added(*this, handle.promise());
 			return std::move(in);
 		}
 	};
 
 	// Default type for all coroutines
 	template<typename R>
-	struct promise final
+	struct task final
 	{
 		using promise_type = async_coro::promise_type<R>;
 		using handle_type = std::coroutine_handle<promise_type>;
 		using return_type = R;
 
-		promise(handle_type h) noexcept
+		task(handle_type h) noexcept
 			: _handle(std::move(h))
 		{ }
 
-		promise(const promise&) = delete;
-		promise(promise&& other) noexcept
+		task(const task&) = delete;
+		task(task&& other) noexcept
 			: _handle(std::exchange(other._handle, nullptr))
 		{ }
 
-		promise& operator=(const promise&) = delete;
-		promise& operator=(promise&& other) noexcept {
+		task& operator=(const task&) = delete;
+		task& operator=(task&& other) noexcept {
 			std::swap(_handle, other._handle);
 			return *this;
 		}
 
-		~promise() noexcept {
+		~task() noexcept {
 			if (_handle) {
 				_handle.destroy();
 			}
 		}
 
 		struct awaiter {
-			promise& t;
+			task& t;
 
-			bool await_ready() const noexcept { return t._handle.done(); }
+			bool await_ready() const noexcept {
+				return t._handle.done();
+			}
 
 			template <typename T>
 			void await_suspend(std::coroutine_handle<T>) const noexcept { }
@@ -91,49 +96,20 @@ namespace async_coro
 		}
 
 		auto operator co_await() & = delete;
-
 		auto operator co_await() const & = delete;
-
 		auto operator co_await() const && = delete;
-
-		// access
-		decltype(auto) get() & {
-			return _handle.promise().get_result_ref();
-		}
-
-		decltype(auto) get() const & {
-			return _handle.promise().get_result_cref();
-		}
-
-		decltype(auto) get() && {
-			return _handle.promise().move_result();
-		}
-
-		void get() const && = delete;
-
-		template <typename Y> requires(std::same_as<Y, R> && !std::same_as<R, void>)
-		operator Y&() & {
-			return _handle.promise().get_result_ref();
-		}
-		template <typename Y> requires(std::same_as<Y, R> && !std::same_as<R, void>)
-		operator const Y&() const & {
-			return _handle.promise().get_result_cref();
-		}
-		template <typename Y> requires(std::same_as<Y, R> && !std::same_as<R, void>)
-		operator Y() && {
-			return _handle.promise().move_result();
-		}
 
 		bool done() const {
 			return _handle.done();
 		}
 
-		std::coroutine_handle<base_handle> get_handle(internal::passkey_successors<base_handle>) {
-			return std::coroutine_handle<base_handle>::from_promise(_handle.promise());
+		template<typename T>
+		handle_type get_handle(internal::passkey<async_coro::promise_type<T>>) {
+			return _handle;
 		}
 
-		std::coroutine_handle<base_handle> release_handle(internal::passkey_successors<scheduler>) {
-			return std::move(_handle);
+		handle_type release_handle(internal::passkey_successors<scheduler>) {
+			return std::exchange(_handle, {});
 		}
 
 	private:

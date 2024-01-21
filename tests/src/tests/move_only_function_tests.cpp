@@ -256,3 +256,138 @@ TEST(move_only_function, num_moves_small_f_noexcept) {
 TEST(move_only_function, num_moves_small_f_except) {
     num_moves_small_f<false>();
 }
+
+TEST(move_only_function, forward_value) {
+	using namespace async_coro;
+
+	static int num_moves = 0;
+	static int num_copyes = 0;
+
+	struct cleaner {
+		~cleaner() noexcept {
+			num_moves = 0;
+			num_copyes = 0;
+		}
+	};
+
+    struct test_struct {
+		test_struct() noexcept = default;
+		test_struct(const test_struct&) {
+			num_copyes++;
+		}
+		test_struct(test_struct&&) {
+			num_moves++;
+		}
+		~test_struct() noexcept = default;
+	};
+
+	cleaner clean{};
+
+	move_only_function<void(test_struct)> f = [](auto s) {
+		EXPECT_NE(&s, nullptr);
+	};
+
+	EXPECT_EQ(num_copyes, 0);
+	EXPECT_EQ(num_moves, 0);
+
+	f({});
+
+	EXPECT_EQ(num_copyes, 0);
+	EXPECT_EQ(num_moves, 1);
+}
+
+TEST(move_only_function, return_value) {
+	using namespace async_coro;
+
+	static int num_moves = 0;
+	static int num_copyes = 0;
+
+	struct cleaner {
+		~cleaner() noexcept {
+			num_moves = 0;
+			num_copyes = 0;
+		}
+	};
+
+    struct test_struct {
+		test_struct() noexcept = default;
+		test_struct(const test_struct&) {
+			num_copyes++;
+		}
+		test_struct(test_struct&&) {
+			num_moves++;
+		}
+		~test_struct() noexcept = default;
+	};
+
+	cleaner clean{};
+
+	move_only_function<test_struct(int)> f = [](auto s) {
+		EXPECT_EQ(s, 3);
+		return test_struct{};
+	};
+
+	EXPECT_EQ(num_copyes, 0);
+	EXPECT_EQ(num_moves, 0);
+
+	f(3);
+
+	EXPECT_EQ(num_copyes, 0);
+	EXPECT_EQ(num_moves, 0);
+}
+
+TEST(move_only_function, rvalue_forward) {
+	using namespace async_coro;
+
+	static int num_moves = 0;
+	static int num_copyes = 0;
+
+	struct cleaner {
+		~cleaner() noexcept {
+			num_moves = 0;
+			num_copyes = 0;
+		}
+	};
+
+    struct test_struct {
+		test_struct() noexcept = default;
+		test_struct(const test_struct&) {
+			num_copyes++;
+		}
+		test_struct(test_struct&&) {
+			num_moves++;
+		}
+		~test_struct() noexcept = default;
+	};
+
+	cleaner clean{};
+
+	{
+		move_only_function<void(test_struct&&, int)> f = [](auto&& s, auto i) {
+			EXPECT_NE(&s, nullptr);
+			EXPECT_EQ(i, 7);
+		};
+
+		EXPECT_EQ(num_copyes, 0);
+		EXPECT_EQ(num_moves, 0);
+
+		f({}, 7);
+
+		EXPECT_EQ(num_copyes, 0);
+		EXPECT_EQ(num_moves, 0);
+	}
+	
+	{
+		move_only_function<void(test_struct&&)> f = [](auto s) {
+			EXPECT_NE(&s, nullptr);
+		};
+
+		EXPECT_EQ(num_copyes, 0);
+		EXPECT_EQ(num_moves, 0);
+
+		f({});
+
+		EXPECT_EQ(num_copyes, 0);
+		EXPECT_EQ(num_moves, 1);
+	}
+}

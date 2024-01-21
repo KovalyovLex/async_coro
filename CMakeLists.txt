@@ -15,6 +15,11 @@ file(GLOB_RECURSE tests_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "tests/src/
 add_executable(async_coro_tests ${tests_src})
 set_property(TARGET async_coro_tests PROPERTY CXX_STANDARD 20)
 target_link_libraries(async_coro_tests gtest async_coro)
+target_compile_options(async_coro PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror>
+)
+
 
 gtest_add_tests(TARGET      async_coro_tests
                 TEST_SUFFIX .noArgs

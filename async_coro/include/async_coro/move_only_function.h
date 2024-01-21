@@ -19,7 +19,7 @@ namespace async_coro
 		class function_impl_call<R (TArgs...)>
 		{
 		protected:
-			using t_invoke_f = void(*)(void* const& fx, TArgs... args);
+			using t_invoke_f = R(*)(void* const& fx, TArgs&&... args);
 
 			inline static constexpr bool is_noexcept_invoke = false;
 
@@ -35,7 +35,7 @@ namespace async_coro
 			function_impl_call(function_impl_call&&) noexcept = default;
 
 		public:
-			R operator()(TArgs... args) const {
+			R operator()(TArgs&&... args) const {
 				if (_invoke == nullptr) [[unlikely]] {
 					std::abort();
 				}
@@ -51,7 +51,7 @@ namespace async_coro
 		class function_impl_call<R (TArgs...) noexcept>
 		{
 		protected:
-			using t_invoke_f = void(*)(void* const& fx, TArgs... args) noexcept;
+			using t_invoke_f = R(*)(void* const& fx, TArgs&&... args) noexcept;
 			
 			inline static constexpr bool is_noexcept_invoke = true;
 
@@ -67,7 +67,7 @@ namespace async_coro
 			function_impl_call(function_impl_call&&) noexcept = default;
 
 		public:
-			R operator()(TArgs... args) const noexcept {
+			R operator()(TArgs&&... args) const noexcept {
 				if (_invoke == nullptr) [[unlikely]] {
 					std::abort();
 				}
@@ -185,15 +185,7 @@ namespace async_coro
 			using TFunc = std::remove_cvref_t<Fx>;
 			constexpr bool is_small_function = is_small_f<TFunc>;
 
-			this->_invoke = static_cast<super::t_invoke_f>([](void* const& fx, auto&&... args) noexcept(super::is_noexcept_invoke) {
-				if constexpr (is_small_function) {
-					auto& fx_t = reinterpret_cast<const TFunc&>(fx);
-					std::invoke(fx_t, std::forward<decltype(args)>(args)...);
-				} else {
-					auto* fx_t = static_cast<TFunc*>(fx);
-					std::invoke(*fx_t, std::forward<decltype(args)>(args)...);
-				}
-			});
+			this->_invoke = make_invoke<TFunc>(static_cast<super::t_invoke_f>(nullptr));
 
 			if constexpr (is_small_function) {
 				// small object
@@ -248,6 +240,19 @@ namespace async_coro
 			}
 			_move_or_destroy = nullptr;
 			this->_invoke = nullptr;
+		}
+
+		template<typename TFunc, typename R, typename... TArgs>
+		static auto make_invoke(R(*)(void* const&, TArgs...)noexcept(super::is_noexcept_invoke)) noexcept {
+			return static_cast<super::t_invoke_f>([](void* const& fx, TArgs&&... args) noexcept(super::is_noexcept_invoke) {
+				if constexpr (is_small_f<TFunc>) {
+					auto& fx_t = reinterpret_cast<const TFunc&>(fx);
+					return std::invoke(fx_t, std::forward<TArgs>(args)...);
+				} else {
+					auto* fx_t = static_cast<TFunc*>(fx);
+					return std::invoke(*fx_t, std::forward<TArgs>(args)...);
+				}
+			});
 		}
 
 	private:

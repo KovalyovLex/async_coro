@@ -8,3 +8,8 @@ add_library(async_coro ${async_coro_src})
 target_include_directories(async_coro PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 set_property(TARGET async_coro PROPERTY CXX_STANDARD 20)
+
+target_compile_options(async_coro PRIVATE
+  $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
+  $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror>
+)
