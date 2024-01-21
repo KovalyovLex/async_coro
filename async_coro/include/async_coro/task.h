@@ -15,6 +15,12 @@ namespace async_coro
 
 	class scheduler;
 
+	template<typename T>
+	concept embeddable_task = requires(T a)
+	{
+		a.embed_task(std::declval<base_handle&>());
+	};
+
 	template<typename R>
 	struct promise_type final : internal::promise_result<R>, base_handle
 	{
@@ -33,15 +39,14 @@ namespace async_coro
 		}
 
 		template<typename T>
-		constexpr decltype(auto) await_transform(T&& in) {
+		constexpr decltype(auto) await_transform(T&& in) noexcept {
 			// return non standart awaiters as is
 			return std::move(in);
 		}
 
-		template<typename T>
-		constexpr decltype(auto) await_transform(task<T>&& in) {
-			auto handle = in.get_handle(internal::passkey { this });
-			get_scheduler().on_child_coro_added(*this, handle.promise());
+		template<embeddable_task T>
+		constexpr decltype(auto) await_transform(T&& in) {
+			in.embed_task(*this);
 			return std::move(in);
 		}
 	};
@@ -103,9 +108,8 @@ namespace async_coro
 			return _handle.done();
 		}
 
-		template<typename T>
-		handle_type get_handle(internal::passkey<async_coro::promise_type<T>>) {
-			return _handle;
+		void embed_task(base_handle& parent) {
+			parent.get_scheduler().on_child_coro_added(parent, _handle.promise());
 		}
 
 		handle_type release_handle(internal::passkey_successors<scheduler>) {

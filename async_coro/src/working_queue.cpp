@@ -88,7 +88,7 @@ namespace async_coro
 		return false;
 	}
 
-	void working_queue::start_up_threads()
+	void working_queue::start_up_threads() // guarded by _threads_mutex
 	{
 		if (_num_alive_threads == _num_threads) {
 			return;
@@ -96,24 +96,34 @@ namespace async_coro
 
 		_has_workers.store(_num_threads > 0, std::memory_order_release);
 
+		// cleanup finished threads first
+		const auto it = std::remove_if(_threads.begin(), _threads.end(), [](auto&& thread){
+			return !thread.joinable();
+		});
+		if (it != _threads.end()){
+			_threads.erase(it);
+		}
+
 		while (_num_threads > _num_alive_threads) {
 			_threads.emplace_back([this]() {
-				std::unique_lock lock {_mutex};
-
 				while (true) {
 					int to_destroy = _num_threads_to_destroy.load(std::memory_order_acquire);
 
 					// if there is no work to do - go to sleep
-					if (to_destroy == 0 && _tasks.empty()) {
-						_num_sleeping_threads++;
+					if (to_destroy == 0) {
+						std::unique_lock lock {_mutex};
 
-						_condition.wait(lock, [this]() {
-							return _num_threads_to_destroy.load(std::memory_order_acquire) > 0 || !_tasks.empty();
-						});
+						if (_tasks.empty()) {
+							_num_sleeping_threads++;
 
-						_num_sleeping_threads--;
+							_condition.wait(lock, [this]() {
+								return _num_threads_to_destroy.load(std::memory_order_acquire) > 0 || !_tasks.empty();
+							});
 
-						to_destroy = _num_threads_to_destroy.load(std::memory_order_acquire);
+							_num_sleeping_threads--;
+
+							to_destroy = _num_threads_to_destroy.load(std::memory_order_acquire);
+						}
 					}
 
 					// maybe it's time for retirement?
@@ -126,6 +136,8 @@ namespace async_coro
 					}
 
 					// do some work
+					std::unique_lock lock {_mutex};
+
 					if (!_tasks.empty()) {
 						auto f = std::move(_tasks.front());
 						_tasks.pop();
@@ -134,11 +146,10 @@ namespace async_coro
 
 						f();
 						f = nullptr;
-
-						lock.lock();
 					}
 				}
 			});
+			_num_alive_threads++;
 		}
 	}
 }
