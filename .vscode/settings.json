@@ -79,6 +79,9 @@
         "xtr1common": "cpp",
         "xtree": "cpp",
         "queue": "cpp",
-        "ranges": "cpp"
-    }
+        "ranges": "cpp",
+        "numeric": "cpp"
+    },
+    "clang-format.executable": "${workspaceRoot}/node_modules/.bin/clang-format",
+    "editor.formatOnSave": true
 }
