@@ -21,17 +21,17 @@ class base_handle {
 
  public:
   scheduler& get_scheduler() noexcept {
-	ASYNC_CORO_ASSERT(_scheduler != nullptr);
-	return *_scheduler;
+    ASYNC_CORO_ASSERT(_scheduler != nullptr);
+    return *_scheduler;
   };
 
   const scheduler& get_scheduler() const noexcept {
-	ASYNC_CORO_ASSERT(_scheduler != nullptr);
-	return *_scheduler;
+    ASYNC_CORO_ASSERT(_scheduler != nullptr);
+    return *_scheduler;
   };
 
   bool is_current_thread_same() const noexcept {
-	return _execution_thread == std::this_thread::get_id();
+    return _execution_thread == std::this_thread::get_id();
   }
 
  protected:

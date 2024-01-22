@@ -353,7 +353,7 @@ TEST(move_only_function, rvalue_forward) {
   }
 
   {
-    move_only_function<void(test_struct &&)> f = [](auto s) {
+    move_only_function<void(test_struct&&)> f = [](auto s) {
       EXPECT_NE(&s, nullptr);
     };
 

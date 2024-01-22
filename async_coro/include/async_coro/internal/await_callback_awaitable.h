@@ -12,7 +12,7 @@ struct await_callback_awaitable {
   T _on_await;
 
   explicit await_callback_awaitable(T&& on_await)
-	  : _on_await(std::move(on_await)) {}
+      : _on_await(std::move(on_await)) {}
   await_callback_awaitable(const await_callback_awaitable&) = delete;
   await_callback_awaitable(await_callback_awaitable&&) = delete;
 
@@ -22,16 +22,16 @@ struct await_callback_awaitable {
   bool await_ready() const noexcept { return false; }
 
   template <typename U>
-	requires(std::derived_from<U, base_handle>)
+    requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> h) {
-	_on_await([h, executed = false]() mutable {
-	  if (!executed) [[likely]] {
-		executed = true;
+    _on_await([h, executed = false]() mutable {
+      if (!executed) [[likely]] {
+        executed = true;
 
-		base_handle& handle = h.promise();
-		handle.get_scheduler().continue_execution(handle);
-	  }
-	});
+        base_handle& handle = h.promise();
+        handle.get_scheduler().continue_execution(handle);
+      }
+    });
   }
 
   void await_resume() const noexcept {}

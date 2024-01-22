@@ -22,14 +22,14 @@ template <typename T, typename... Others>
 struct passkey_any {
  public:
   template <typename U>
-	requires(std::same_as<U, T> || (std::same_as<U, Others> || ...))
+    requires(std::same_as<U, T> || (std::same_as<U, Others> || ...))
   passkey_any(const passkey<U>&) {}
 };
 
 template <typename T, typename... Others>
 struct passkey_successors {
   template <typename U>
-	requires(std::derived_from<U, T> || (std::derived_from<U, Others> || ...))
+    requires(std::derived_from<U, T> || (std::derived_from<U, Others> || ...))
   passkey_successors(const passkey<U>&) {}
 };
 }  // namespace async_coro::internal

@@ -32,13 +32,13 @@ class scheduler {
 
   template <typename R>
   task_handle<R> start_task(
-	  task<R> coro, execution_thread thread = execution_thread::main_thread) {
-	auto handle = coro.release_handle(internal::passkey{this});
-	if (!handle.done()) [[likely]] {
-	  add_coroutine(handle.promise(), thread);
-	  return task_handle<R>{std::move(handle)};
-	}
-	return {};
+      task<R> coro, execution_thread thread = execution_thread::main_thread) {
+    auto handle = coro.release_handle(internal::passkey{this});
+    if (!handle.done()) [[likely]] {
+      add_coroutine(handle.promise(), thread);
+      return task_handle<R>{std::move(handle)};
+    }
+    return {};
   }
 
   working_queue& get_working_queue() noexcept { return _queue; }
@@ -61,7 +61,7 @@ class scheduler {
   std::vector<base_handle*> _managed_coroutines;  // guarded by _mutex
   std::vector<move_only_function<void(scheduler&)>> _update_tasks;
   std::vector<move_only_function<void(scheduler&)>>
-	  _update_tasks_syncronized;  // guarded by _task_mutex
+      _update_tasks_syncronized;  // guarded by _task_mutex
   std::thread::id _main_thread = {};
   bool _is_destroying = false;  // guarded by _mutex
   std::atomic_bool _has_syncronized_tasks = false;

@@ -13,7 +13,7 @@ namespace async_coro::internal {
 template <typename T>
 union store_type {
   static inline constexpr bool nothrow_destructible =
-	  std::is_nothrow_destructible_v<T>;
+      std::is_nothrow_destructible_v<T>;
 
   T result;
 
@@ -21,7 +21,7 @@ union store_type {
   ~store_type() noexcept {}
   void destroy_exception() {}
   void destroy_result() noexcept(noexcept(std::is_nothrow_destructible_v<T>)) {
-	std::destroy_at(&result);
+    std::destroy_at(&result);
   }
 };
 
@@ -38,8 +38,8 @@ union store_type<void> {
 template <typename T>
 union store_type {
   static inline constexpr bool nothrow_destructible =
-	  std::is_nothrow_destructible_v<std::exception_ptr> &&
-	  std::is_nothrow_destructible_v<T>;
+      std::is_nothrow_destructible_v<std::exception_ptr> &&
+      std::is_nothrow_destructible_v<T>;
 
   std::exception_ptr exception;
   T result;
@@ -47,26 +47,26 @@ union store_type {
   store_type() noexcept {}
   ~store_type() noexcept {}
   void destroy_exception() noexcept(
-	  std::is_nothrow_destructible_v<std::exception_ptr>) {
-	std::destroy_at(&exception);
+      std::is_nothrow_destructible_v<std::exception_ptr>) {
+    std::destroy_at(&exception);
   }
   void destroy_result() noexcept(noexcept(std::is_nothrow_destructible_v<T>)) {
-	std::destroy_at(&result);
+    std::destroy_at(&result);
   }
 };
 
 template <>
 union store_type<void> {
   static inline constexpr bool nothrow_destructible =
-	  std::is_nothrow_destructible_v<std::exception_ptr>;
+      std::is_nothrow_destructible_v<std::exception_ptr>;
 
   std::exception_ptr exception;
 
   store_type() noexcept {}
   ~store_type() noexcept {}
   void destroy_exception() noexcept(
-	  std::is_nothrow_destructible_v<std::exception_ptr>) {
-	std::destroy_at(&exception);
+      std::is_nothrow_destructible_v<std::exception_ptr>) {
+    std::destroy_at(&exception);
   }
   void destroy_result() noexcept {}
 };

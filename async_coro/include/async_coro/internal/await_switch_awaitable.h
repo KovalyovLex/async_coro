@@ -18,18 +18,18 @@ struct await_switch_awaitable {
   bool await_ready() const noexcept { return !need_switch; }
 
   template <typename U>
-	requires(std::derived_from<U, base_handle>)
+    requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> h) {
-	if (need_switch) {
-	  base_handle& handle = h.promise();
-	  handle.get_scheduler().change_thread(handle, thread);
-	}
+    if (need_switch) {
+      base_handle& handle = h.promise();
+      handle.get_scheduler().change_thread(handle, thread);
+    }
   }
 
   void await_resume() const noexcept {}
 
   void embed_task(base_handle& parent) noexcept {
-	need_switch = !parent.get_scheduler().is_current_thread_fits(thread);
+    need_switch = !parent.get_scheduler().is_current_thread_fits(thread);
   }
 
   execution_thread thread;
