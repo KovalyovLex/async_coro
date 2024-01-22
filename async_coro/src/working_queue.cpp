@@ -97,6 +97,12 @@ bool working_queue::is_current_thread_worker() noexcept {
   return false;
 }
 
+bool working_queue::is_finished(task_id id) noexcept {
+  std::unique_lock lock{_mutex};
+
+  return _tasks.empty() || _tasks.front().second > id;
+}
+
 void working_queue::start_up_threads()  // guarded by _threads_mutex
 {
   // cleanup finished threads first

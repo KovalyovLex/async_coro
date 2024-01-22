@@ -25,27 +25,39 @@ class working_queue {
   working_queue() = default;
   ~working_queue();
 
-  // plan function for execution
+  /// @brief Plan function for execution on worker thread
+  /// @param f function to execute
+  /// @return task id to monitor accomplishment
   task_id execute(task_function f);
 
-  /// @brief Execute Fx with values of *It parallel. bucket_size
+  /// @brief Execute Fx with values from range [begin, end). Execution will be performed on worker threads and in current thread
   /// @tparam Fx lambda with signature void(*It)
   /// @tparam It Random access iterator
   /// @param f function to execute
   /// @param begin iterator on beginning or range
   /// @param end iterator of end
-  /// @param bucket_size how work will be shrinked. Bu default all range (end - begin) splita on num_threads
+  /// @param bucket_size how work will be shrinked. By default all range (end - begin) splited on num_threads + 1 chunks and executes in parralel
   template <typename Fx, std::random_access_iterator It>
     requires(std::invocable<Fx, decltype(*std::declval<It>())>)
   void parallel_for(const Fx& f, It begin, It end,
                     uint32_t bucket_size = bucket_size_default);
 
-  // seting up num of worker threads and create all of them or stops
+  /// @brief Seting up num of worker threads and create all of them or stops
+  /// @param num number of threads to set. If num > num_threads - spawns new threads, otherwise stops extra threads
   void set_num_threads(uint32_t num);
 
-  uint32_t get_num_threads(uint32_t num);
+  /// @brief Returns current number or worker threads
+  /// @return num_threads
+  uint32_t get_num_threads() const noexcept { return _num_alive_threads.load(std::memory_order_acquire); }
 
+  /// @brief Checks it current thread belogs to worker threads
+  /// @return true if current thread is worker
   bool is_current_thread_worker() noexcept;
+
+  /// @brief Plan function for execution on worker thread
+  /// @param f function to execute
+  /// @return task id to monitor accomplishment
+  bool is_finished(task_id id) noexcept;
 
  private:
   void start_up_threads();
@@ -79,17 +91,20 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
     bucket_size = static_cast<uint32_t>(size) / num_workers;
   }
 
+  std::atomic<uint32_t> num_not_finished = 0;
   std::unique_lock lock{_mutex};
   uint32_t rest = static_cast<uint32_t>(size);
   for (auto it = begin; it != end;) {
     const auto step = std::min(rest, bucket_size);
     rest -= step;
     const auto end_chuk_it = it + static_cast<difference_t>(step);
+    num_not_finished.fetch_add(1, std::memory_order_release);
     _tasks.push(std::make_pair<task_function, task_id>(
-        [it, end_chuk_it, &f]() mutable {
+        [it, end_chuk_it, &f, &num_not_finished]() mutable {
           for (; it != end_chuk_it; ++it) {
             std::invoke(f, *it);
           }
+          num_not_finished.fetch_sub(1, std::memory_order_release);
         },
         _current_id++));
     it = end_chuk_it;
@@ -106,7 +121,8 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
   // do work in this thread
   while (!_tasks.empty()) {
     if (_tasks.front().second > wait_id) {
-      return;
+      lock.unlock();
+      break;
     }
 
     auto f = std::move(_tasks.front());
@@ -118,10 +134,17 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
     f.first = nullptr;  // destroy function with no lock
 
     if (f.second == wait_id) {
-      return;
+      break;
     }
 
     lock.lock();
+  }
+
+  // wait till all precesses finish
+  auto to_await = num_not_finished.load(std::memory_order_acquire);
+  while (to_await > 0) {
+    std::this_thread::yield();
+    to_await = num_not_finished.load(std::memory_order_acquire);
   }
 }
 }  // namespace async_coro
