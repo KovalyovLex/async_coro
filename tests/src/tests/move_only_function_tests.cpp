@@ -1,6 +1,8 @@
 #include <async_coro/move_only_function.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <iostream>
 #include <stdexcept>
 
 #include "memory_hooks.h"
@@ -463,4 +465,32 @@ TEST(move_only_function, val_arg) {
   };
 
   f(val);
+}
+
+TEST(move_only_function, speed_invoke_function) {
+  using namespace async_coro;
+
+  static int val = 0;
+
+  move_only_function<void(int)> f1 = [](auto&& i) mutable noexcept {
+    EXPECT_NE(&i, &val);
+  };
+
+  std::function<void(int)> f2 = [](auto&& i) mutable noexcept {
+    EXPECT_NE(&i, &val);
+  };
+
+  const auto t1 = std::chrono::steady_clock::now();
+  for (int i = 0; i < 100000; i++) {
+    f1(val);
+  }
+  const auto f1_time = std::chrono::steady_clock::now() - t1;
+
+  const auto t2 = std::chrono::steady_clock::now();
+  for (int i = 0; i < 100000; i++) {
+    f2(val);
+  }
+  const auto f2_time = std::chrono::steady_clock::now() - t2;
+
+  std::cout << "move_only_function time: " << f1_time << ", std::function time: " << f2_time << std::endl;
 }

@@ -10,25 +10,32 @@
 #include <mutex>
 #include <queue>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 namespace async_coro {
 class working_queue {
+  using task_id = size_t;
+
  public:
   // use function with Small Function Optimization buffer of 3 pointers
   using task_function = move_only_function<void(), sizeof(void*) * 3>;
-  using task_id = size_t;
 
   static inline constexpr uint32_t bucket_size_default =
       static_cast<uint32_t>(-1);
 
   working_queue() = default;
+  working_queue(const working_queue&) = delete;
+  working_queue(working_queue&&) = delete;
   ~working_queue();
+
+  working_queue& operator=(const working_queue&) = delete;
+  working_queue& operator=(working_queue&&) = delete;
 
   /// @brief Plan function for execution on worker thread
   /// @param f function to execute
   /// @return task id to monitor accomplishment
-  task_id execute(task_function f);
+  void execute(task_function f);
 
   /// @brief Execute Fx with values from range [begin, end). Execution will be performed on worker threads and in current thread
   /// @tparam Fx lambda with signature void(*It)
@@ -52,19 +59,14 @@ class working_queue {
 
   /// @brief Checks it current thread belogs to worker threads
   /// @return true if current thread is worker
-  bool is_current_thread_worker() noexcept;
-
-  /// @brief Plan function for execution on worker thread
-  /// @param f function to execute
-  /// @return task id to monitor accomplishment
-  bool is_finished(task_id id) noexcept;
+  bool is_current_thread_worker() const noexcept;
 
  private:
   void start_up_threads();
 
  private:
-  std::mutex _mutex;
-  std::mutex _threads_mutex;
+  mutable std::mutex _mutex;
+  mutable std::mutex _threads_mutex;
   std::condition_variable _condition;                    // guarded by _mutex
   std::queue<std::pair<task_function, task_id>> _tasks;  // guarded by _mutex
   std::vector<std::thread> _threads;                     // guarded by _threads_mutex

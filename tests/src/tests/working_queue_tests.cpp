@@ -165,13 +165,17 @@ TEST(working_queue, parallel_for_speed) {
   sum = 0;
   num_executions = 0;
 
-  is_executing = true;
-  const auto t2 = std::chrono::steady_clock::now();
-  for (int v : range) {
+  const async_coro::move_only_function<void(int)> f = [&](int v) {
     EXPECT_TRUE(is_executing);
 
     sum += v;
     num_executions++;
+  };
+
+  is_executing = true;
+  const auto t2 = std::chrono::steady_clock::now();
+  for (int v : range) {
+    f(v);
   }
 
   const auto seq_time = std::chrono::steady_clock::now() - t2;

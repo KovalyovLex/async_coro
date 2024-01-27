@@ -37,19 +37,17 @@ working_queue::~working_queue() {
   }
 }
 
-working_queue::task_id working_queue::execute(task_function f) {
+void working_queue::execute(task_function f) {
   ASYNC_CORO_ASSERT(_num_alive_threads.load(std::memory_order_acquire) > 0);
 
   std::unique_lock lock{_mutex};
 
-  const auto task_id = _current_id++;
-  _tasks.push(std::make_pair(std::move(f), task_id));
+  _tasks.push(std::make_pair(std::move(f), _current_id++));
 
   if (_num_sleeping_threads != 0) {
     lock.unlock();
     _condition.notify_one();
   }
-  return task_id;
 }
 
 void working_queue::set_num_threads(uint32_t num) {
@@ -78,7 +76,7 @@ void working_queue::set_num_threads(uint32_t num) {
   }
 }
 
-bool working_queue::is_current_thread_worker() noexcept {
+bool working_queue::is_current_thread_worker() const noexcept {
   if (_num_alive_threads.load(std::memory_order_acquire) == 0) {
     // no workers at all
     return false;
@@ -95,12 +93,6 @@ bool working_queue::is_current_thread_worker() noexcept {
   }
 
   return false;
-}
-
-bool working_queue::is_finished(task_id id) noexcept {
-  std::unique_lock lock{_mutex};
-
-  return _tasks.empty() || _tasks.front().second > id;
 }
 
 void working_queue::start_up_threads()  // guarded by _threads_mutex
@@ -144,7 +136,7 @@ void working_queue::start_up_threads()  // guarded by _threads_mutex
         // maybe it's time for retirement?
         while (to_destroy > 0) {
           if (_num_threads_to_destroy.compare_exchange_weak(
-                  to_destroy, to_destroy - 1, std::memory_order_release)) {
+                  to_destroy, to_destroy - 1, std::memory_order_release, std::memory_order_relaxed)) {
             // our work is done
             return;
           }
