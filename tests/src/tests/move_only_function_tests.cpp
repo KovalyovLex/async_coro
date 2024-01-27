@@ -391,3 +391,76 @@ TEST(move_only_function, mutable_f) {
     EXPECT_EQ(num_calls, 1);
   }
 }
+
+TEST(move_only_function, mutable_noexcept_f) {
+  using namespace async_coro;
+
+  {
+    int num_calls = 0;
+
+    move_only_function<void() noexcept> f = [called = false, &num_calls]() mutable noexcept {
+      if (!called) {
+        called = true;
+        num_calls++;
+      }
+    };
+
+    EXPECT_EQ(num_calls, 0);
+
+    f();
+
+    EXPECT_EQ(num_calls, 1);
+
+    f();
+
+    EXPECT_EQ(num_calls, 1);
+  }
+}
+
+TEST(move_only_function, lref_arg) {
+  using namespace async_coro;
+
+  static int val = 0;
+
+  move_only_function<void(int&)> f = [](auto& i) mutable noexcept {
+    EXPECT_EQ(&i, &val);
+  };
+
+  f(val);
+}
+
+TEST(move_only_function, const_lref_arg) {
+  using namespace async_coro;
+
+  static int val = 0;
+
+  move_only_function<void(const int&)> f = [](auto& i) mutable noexcept {
+    EXPECT_EQ(&i, &val);
+  };
+
+  f(val);
+}
+
+TEST(move_only_function, rref_arg) {
+  using namespace async_coro;
+
+  static int val = 0;
+
+  move_only_function<void(int&&)> f = [](auto&& i) mutable noexcept {
+    EXPECT_EQ(&i, &val);
+  };
+
+  f(std::move(val));
+}
+
+TEST(move_only_function, val_arg) {
+  using namespace async_coro;
+
+  static int val = 0;
+
+  move_only_function<void(int)> f = [](auto&& i) mutable noexcept {
+    EXPECT_NE(&i, &val);
+  };
+
+  f(val);
+}

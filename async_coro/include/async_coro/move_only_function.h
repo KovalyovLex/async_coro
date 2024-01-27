@@ -59,7 +59,7 @@ class function_impl_call<SFOBuffer, R(TArgs...)> {
   function_impl_call(function_impl_call&&) noexcept = default;
 
  public:
-  R operator()(TArgs&&... args) const {
+  R operator()(TArgs... args) const {
     if (_invoke == nullptr) [[unlikely]] {
       std::abort();
     }
@@ -93,7 +93,7 @@ class function_impl_call<SFOBuffer, R(TArgs...) noexcept> {
   function_impl_call(function_impl_call&&) noexcept = default;
 
  public:
-  R operator()(TArgs&&... args) const noexcept {
+  R operator()(TArgs... args) const noexcept {
     if (_invoke == nullptr) [[unlikely]] {
       std::abort();
     }
