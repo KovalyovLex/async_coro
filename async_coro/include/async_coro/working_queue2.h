@@ -1,10 +1,10 @@
 #pragma once
 
-#include <async_coro/atomic_queue.h>
 #include <async_coro/config.h>
 #include <async_coro/move_only_function.h>
 
 #include <concepts>
+#include <condition_variable>
 #include <cstddef>
 #include <iterator>
 #include <mutex>
@@ -14,7 +14,7 @@
 #include <vector>
 
 namespace async_coro {
-class working_queue {
+class working_queue2 {
   using task_id = size_t;
 
  public:
@@ -24,13 +24,13 @@ class working_queue {
   static inline constexpr uint32_t bucket_size_default =
       static_cast<uint32_t>(-1);
 
-  working_queue() = default;
-  working_queue(const working_queue&) = delete;
-  working_queue(working_queue&&) = delete;
-  ~working_queue();
+  working_queue2() = default;
+  working_queue2(const working_queue2&) = delete;
+  working_queue2(working_queue2&&) = delete;
+  ~working_queue2();
 
-  working_queue& operator=(const working_queue&) = delete;
-  working_queue& operator=(working_queue&&) = delete;
+  working_queue2& operator=(const working_queue2&) = delete;
+  working_queue2& operator=(working_queue2&&) = delete;
 
   /// @brief Plan function for execution on worker thread
   /// @param f function to execute
@@ -65,20 +65,22 @@ class working_queue {
   void start_up_threads();
 
  private:
+  mutable std::mutex _mutex;
   mutable std::mutex _threads_mutex;
-  atomic_queue<std::pair<task_function, task_id>> _tasks;
-  std::vector<std::thread> _threads;  // guarded by _threads_mutex
-  uint32_t _num_threads = 0;          // guarded by _threads_mutex
-  std::atomic<task_id> _current_id = 0;
+  std::condition_variable _condition;                    // guarded by _mutex
+  std::queue<std::pair<task_function, task_id>> _tasks;  // guarded by _mutex
+  std::vector<std::thread> _threads;                     // guarded by _threads_mutex
+  uint32_t _num_threads = 0;                             // guarded by _threads_mutex
+  uint32_t _num_sleeping_threads = 0;                    // guarded by _mutex
+  task_id _current_id = 0;                               // guarded by _mutex
   std::atomic<uint32_t> _num_alive_threads = 0;
   std::atomic<uint32_t> _num_threads_to_destroy = 0;
-  std::atomic<uint32_t> _num_sleeping_threads = 0;
 };
 
 template <typename Fx, std::random_access_iterator It>
   requires(std::invocable<Fx, decltype(*std::declval<It>())>)
-void working_queue::parallel_for(const Fx& f, It begin, It end,
-                                 uint32_t bucket_size) {
+void working_queue2::parallel_for(const Fx& f, It begin, It end,
+                                  uint32_t bucket_size) {
   const auto size = end - begin;
   ASYNC_CORO_ASSERT(size < bucket_size_default);
 
@@ -92,47 +94,52 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
   }
 
   std::atomic<uint32_t> num_not_finished = 0;
+  std::unique_lock lock{_mutex};
   uint32_t rest = static_cast<uint32_t>(size);
-  task_id wait_id = 0;
   for (auto it = begin; it != end;) {
     const auto step = std::min(rest, bucket_size);
     rest -= step;
     const auto end_chuk_it = it + static_cast<difference_t>(step);
-    num_not_finished.fetch_add(1, std::memory_order_relaxed);
-    wait_id = _current_id.fetch_add(1, std::memory_order_relaxed);
-    _tasks.push(
+    num_not_finished.fetch_add(1, std::memory_order_release);
+    _tasks.push(std::make_pair<task_function, task_id>(
         [it, end_chuk_it, &f, &num_not_finished]() mutable {
           for (; it != end_chuk_it; ++it) {
             std::invoke(f, *it);
           }
           num_not_finished.fetch_sub(1, std::memory_order_release);
         },
-        wait_id);
+        _current_id++));
     it = end_chuk_it;
   }
 
-  if (_num_sleeping_threads.load(std::memory_order_relaxed) != 0) {
-    _num_sleeping_threads.store(0, std::memory_order_relaxed);
-    _num_sleeping_threads.notify_all();
+  const auto wait_id = _current_id;
+
+  if (_num_sleeping_threads != 0) {
+    lock.unlock();
+    _condition.notify_all();
+    lock.lock();
   }
 
   // do work in this thread
-  std::pair<task_function, task_id> task_pair;
-  while (_tasks.try_pop(task_pair)) {
-    if (task_pair.second > wait_id) {
-      // push back this task and finish awaiting
-      _tasks.push(std::move(task_pair));
+  while (!_tasks.empty()) {
+    if (_tasks.front().second > wait_id) {
+      lock.unlock();
       break;
     }
 
-    auto f = std::move(task_pair.first);
+    auto f = std::move(_tasks.front());
+    _tasks.pop();
 
-    f();
-    f = nullptr;  // destroy function earlier
+    lock.unlock();
 
-    if (task_pair.second == wait_id) {
+    f.first();
+    f.first = nullptr;  // destroy function with no lock
+
+    if (f.second == wait_id) {
       break;
     }
+
+    lock.lock();
   }
 
   // wait till all precesses finish

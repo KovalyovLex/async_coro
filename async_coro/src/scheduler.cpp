@@ -10,9 +10,6 @@ scheduler::scheduler() noexcept {
 }
 
 scheduler::~scheduler() {
-  // ignore all update tasks ar it continue may lead to infinite loop
-  _queue.~working_queue();
-
   std::unique_lock lock{_mutex};
   auto coros = std::move(_managed_coroutines);
   _is_destroying = true;
