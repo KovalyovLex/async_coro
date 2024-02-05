@@ -67,11 +67,10 @@ TEST(working_queue, parallel_for_atomic) {
       [&max](int v) {
         auto cur_max = max.load(std::memory_order_acquire);
         while (v > cur_max) {
-          if (max.compare_exchange_weak(cur_max, v,
-                                        std::memory_order_release)) {
+          if (max.compare_exchange_strong(cur_max, v,
+                                          std::memory_order_release)) {
             break;
           }
-          cur_max = max.load(std::memory_order_acquire);
         }
       },
       range.begin(), range.end());
@@ -153,8 +152,8 @@ TEST(working_queue, parallel_for_speed) {
       [&](int v) {
         EXPECT_TRUE(is_executing);
 
-        sum += v;
-        num_executions++;
+        sum.fetch_add(v, std::memory_order_relaxed);
+        num_executions.fetch_add(1, std::memory_order_relaxed);
       },
       range.begin(), range.end());
   const auto parallel_time = std::chrono::steady_clock::now() - t1;
@@ -168,8 +167,8 @@ TEST(working_queue, parallel_for_speed) {
   const async_coro::move_only_function<void(int)> f = [&](int v) {
     EXPECT_TRUE(is_executing);
 
-    sum += v;
-    num_executions++;
+    sum.fetch_add(v, std::memory_order_relaxed);
+    num_executions.fetch_add(1, std::memory_order_relaxed);
   };
 
   is_executing = true;

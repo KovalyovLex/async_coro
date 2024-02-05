@@ -3,9 +3,13 @@
 
 namespace async_coro {
 working_queue::~working_queue() {
-  _num_threads_to_destroy.fetch_add(
-      _num_alive_threads.load(std::memory_order::acquire),
-      std::memory_order_release);
+  {
+    std::unique_lock lock{_mutex};
+    // mutex for guarantee that all sleeping threads will be awaken so do this increment inside lock
+    _num_threads_to_destroy.fetch_add(
+        _num_alive_threads.load(std::memory_order::acquire),
+        std::memory_order_release);
+  }
   _condition.notify_all();
 
   {
