@@ -39,7 +39,7 @@ class atomic_queue {
         do {
           if (protect < 0) {
             // this chunk was freed try next
-            next_created = q._head_push.load(std::memory_order::acquire);
+            next_created = q._head_push.load(std::memory_order::relaxed);
             ASYNC_CORO_ASSERT(next_created != nullptr);
             protect = next_created->free_protect.load(std::memory_order::relaxed);
           }
@@ -91,7 +91,7 @@ class atomic_queue {
   bool on_chunk_depleted(T& v, task_chunk* c, task_chunk* cur_next, bool& need_release) noexcept {
     // head will be next
     task_chunk* expected = c;
-    if (!_head_pop.compare_exchange_strong(expected, cur_next, std::memory_order::release, std::memory_order::relaxed)) {
+    if (!_head_pop.compare_exchange_strong(expected, cur_next, std::memory_order::relaxed)) {
       if (expected == cur_next) {
         // freed by someone else
         need_release = false;
@@ -112,13 +112,13 @@ class atomic_queue {
     }
 
     // push c to list of free chunks
-    expected = _free_chain.load(std::memory_order::acquire);
+    expected = _free_chain.load(std::memory_order::relaxed);
 
     ASYNC_CORO_ASSERT(c->next.load(std::memory_order::relaxed) == cur_next);
 
     c->next.store(expected, std::memory_order::relaxed);
 
-    while (!_free_chain.compare_exchange_strong(expected, c, std::memory_order::release, std::memory_order::relaxed)) {
+    while (!_free_chain.compare_exchange_strong(expected, c, std::memory_order::relaxed)) {
       c->next.store(expected, std::memory_order::relaxed);
     }
 
@@ -139,19 +139,19 @@ class atomic_queue {
 
       // this is crit zone only for current chunk but few threads can create different chunks at same time so _head_push and _free_chain need syncronization
 
-      next_created = c->next.load(std::memory_order::acquire);
+      next_created = c->next.load(std::memory_order::relaxed);
       if (next_created) {
         c->create_next_crit.store(false, std::memory_order::relaxed);
         return next_created;
       }
 
-      auto free = _free_chain.load(std::memory_order::acquire);
+      auto free = _free_chain.load(std::memory_order::relaxed);
       if (free == nullptr) {
         // create new one
         free = new task_chunk();
       } else {
         auto next = free->next.load(std::memory_order::relaxed);
-        while (!_free_chain.compare_exchange_strong(free, next, std::memory_order::release, std::memory_order::relaxed)) {
+        while (!_free_chain.compare_exchange_strong(free, next, std::memory_order::relaxed)) {
           ASYNC_CORO_ASSERT(free != nullptr);
           next = free->next.load(std::memory_order::relaxed);
         }
@@ -163,10 +163,10 @@ class atomic_queue {
         free->free_protect.store(0, std::memory_order::relaxed);
       }
 
-      c->next.store(free, std::memory_order::release);
+      c->next.store(free, std::memory_order::relaxed);
 
       task_chunk* expected = c;
-      while (!_head_push.compare_exchange_strong(expected, free, std::memory_order::release, std::memory_order::relaxed)) {
+      while (!_head_push.compare_exchange_weak(expected, free, std::memory_order::relaxed)) {
       }
 
       c->create_next_crit.store(false, std::memory_order::relaxed);
@@ -184,21 +184,21 @@ class atomic_queue {
   }
 
   ~atomic_queue() noexcept {
-    auto head1 = _head_pop.load(std::memory_order::acquire);
-    auto head2 = _free_chain.load(std::memory_order::acquire);
+    auto head1 = _head_pop.load(std::memory_order::relaxed);
+    auto head2 = _free_chain.load(std::memory_order::relaxed);
 
     ASYNC_CORO_ASSERT(head1 != nullptr);
     ASYNC_CORO_ASSERT(head2 != nullptr);
 
-    while (!_head_pop.compare_exchange_strong(head1, nullptr, std::memory_order::release, std::memory_order::relaxed)) {
+    while (!_head_pop.compare_exchange_weak(head1, nullptr, std::memory_order::relaxed)) {
     }
-    while (!_free_chain.compare_exchange_strong(head2, nullptr, std::memory_order::release, std::memory_order::relaxed)) {
+    while (!_free_chain.compare_exchange_weak(head2, nullptr, std::memory_order::relaxed)) {
     }
-    _head_push.store(nullptr, std::memory_order::release);
+    _head_push.store(nullptr, std::memory_order::relaxed);
 
     while (head1) {
-      auto* next = head1->next.load(std::memory_order::acquire);
-      head1->next.store(nullptr, std::memory_order::release);
+      auto* next = head1->next.load(std::memory_order::relaxed);
+      head1->next.store(nullptr, std::memory_order::relaxed);
 
       delete head1;
 
@@ -206,8 +206,8 @@ class atomic_queue {
     }
 
     while (head2) {
-      auto* next = head2->next.load(std::memory_order::acquire);
-      head2->next.store(nullptr, std::memory_order::release);
+      auto* next = head2->next.load(std::memory_order::relaxed);
+      head2->next.store(nullptr, std::memory_order::relaxed);
 
       delete head2;
 
@@ -217,13 +217,13 @@ class atomic_queue {
 
   template <typename... U>
   void push(U&&... v) noexcept(std::is_nothrow_constructible_v<T, U&&...>) {
-    auto head = _head_push.load(std::memory_order::acquire);
+    auto head = _head_push.load(std::memory_order::relaxed);
     ASYNC_CORO_ASSERT(head != nullptr);
     auto protect = head->free_protect.load(std::memory_order::relaxed);
     do {
-      if (protect < 0) {
+      if (protect < 0) [[unlikely]] {
         // this chunk was freed try next
-        head = _head_push.load(std::memory_order::acquire);
+        head = _head_push.load(std::memory_order::relaxed);
         ASYNC_CORO_ASSERT(head != nullptr);
         protect = head->free_protect.load(std::memory_order::relaxed);
       }
@@ -233,13 +233,13 @@ class atomic_queue {
   }
 
   bool try_pop(T& v) noexcept(std::is_nothrow_move_assignable_v<T>) {
-    auto head = _head_pop.load(std::memory_order::acquire);
+    auto head = _head_pop.load(std::memory_order::relaxed);
     ASYNC_CORO_ASSERT(head != nullptr);
     auto protect = head->free_protect.load(std::memory_order::relaxed);
     do {
       if (protect < 0) {
         // this chunk was freed try next
-        head = _head_pop.load(std::memory_order::acquire);
+        head = _head_pop.load(std::memory_order::relaxed);
         ASYNC_CORO_ASSERT(head != nullptr);
         protect = head->free_protect.load(std::memory_order::relaxed);
       }
