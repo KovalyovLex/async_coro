@@ -41,11 +41,11 @@ void scheduler::update() {
     _update_tasks.clear();
   }
 
-  if (_has_syncronized_tasks.load(std::memory_order_acquire)) {
+  if (_has_syncronized_tasks.load(std::memory_order::acquire)) {
     {
       std::unique_lock lock{_task_mutex};
       _update_tasks.swap(_update_tasks_syncronized);
-      _has_syncronized_tasks.store(false, std::memory_order_release);
+      _has_syncronized_tasks.store(false, std::memory_order::release);
     }
 
     for (size_t i = 0; i < _update_tasks.size(); i++) {
@@ -129,7 +129,7 @@ void scheduler::change_thread(base_handle& handle_impl,
           handle_base->_execution_thread = std::this_thread::get_id();
           thiz.continue_execution_impl(*handle_base);
         });
-    _has_syncronized_tasks.store(true, std::memory_order_release);
+    _has_syncronized_tasks.store(true, std::memory_order::release);
   } else {
     _queue.execute([this, handle_base = &handle_impl]() {
       handle_base->_execution_thread = std::this_thread::get_id();

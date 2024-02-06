@@ -55,7 +55,7 @@ class working_queue {
 
   /// @brief Returns current number or worker threads
   /// @return num_threads
-  uint32_t get_num_threads() const noexcept { return _num_alive_threads.load(std::memory_order_acquire); }
+  uint32_t get_num_threads() const noexcept { return _num_alive_threads.load(std::memory_order::acquire); }
 
   /// @brief Checks it current thread belogs to worker threads
   /// @return true if current thread is worker
@@ -66,6 +66,7 @@ class working_queue {
 
  private:
   mutable std::mutex _threads_mutex;
+  std::condition_variable _sleep_variable;
   atomic_queue<std::pair<task_function, task_id>> _tasks;
   std::vector<std::thread> _threads;  // guarded by _threads_mutex
   uint32_t _num_threads = 0;          // guarded by _threads_mutex
@@ -87,7 +88,7 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
   if (bucket_size = bucket_size_default) {
     // equal destribution, plan work for num threads + 1
     const auto num_workers =
-        _num_alive_threads.load(std::memory_order_acquire) + 1;
+        _num_alive_threads.load(std::memory_order::acquire) + 1;
     bucket_size = static_cast<uint32_t>(size) / num_workers;
   }
 
@@ -98,22 +99,21 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
     const auto step = std::min(rest, bucket_size);
     rest -= step;
     const auto end_chuk_it = it + static_cast<difference_t>(step);
-    num_not_finished.fetch_add(1, std::memory_order_relaxed);
-    wait_id = _current_id.fetch_add(1, std::memory_order_relaxed);
+    num_not_finished.fetch_add(1, std::memory_order::relaxed);
+    wait_id = _current_id.fetch_add(1, std::memory_order::relaxed);
     _tasks.push(
         [it, end_chuk_it, &f, &num_not_finished]() mutable {
           for (; it != end_chuk_it; ++it) {
             std::invoke(f, *it);
           }
-          num_not_finished.fetch_sub(1, std::memory_order_release);
+          num_not_finished.fetch_sub(1, std::memory_order::release);
         },
         wait_id);
     it = end_chuk_it;
   }
 
-  if (_num_sleeping_threads.load(std::memory_order_relaxed) != 0) {
-    _num_sleeping_threads.store(0, std::memory_order_relaxed);
-    _num_sleeping_threads.notify_all();
+  if (_num_sleeping_threads.load(std::memory_order::relaxed) != 0) {
+    _sleep_variable.notify_all();
   }
 
   // do work in this thread
@@ -136,10 +136,10 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
   }
 
   // wait till all precesses finish
-  auto to_await = num_not_finished.load(std::memory_order_acquire);
+  auto to_await = num_not_finished.load(std::memory_order::acquire);
   while (to_await > 0) {
     std::this_thread::yield();
-    to_await = num_not_finished.load(std::memory_order_acquire);
+    to_await = num_not_finished.load(std::memory_order::acquire);
   }
 }
 }  // namespace async_coro

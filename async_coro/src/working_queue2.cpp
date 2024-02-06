@@ -8,7 +8,7 @@ working_queue2::~working_queue2() {
     // mutex for guarantee that all sleeping threads will be awaken so do this increment inside lock
     _num_threads_to_destroy.fetch_add(
         _num_alive_threads.load(std::memory_order::acquire),
-        std::memory_order_release);
+        std::memory_order::release);
   }
   _condition.notify_all();
 
@@ -20,7 +20,7 @@ working_queue2::~working_queue2() {
       }
     }
     _threads.clear();
-    _num_alive_threads.store(0, std::memory_order_release);
+    _num_alive_threads.store(0, std::memory_order::release);
   }
 
   {
@@ -42,7 +42,7 @@ working_queue2::~working_queue2() {
 }
 
 void working_queue2::execute(task_function f) {
-  ASYNC_CORO_ASSERT(_num_alive_threads.load(std::memory_order_acquire) > 0);
+  ASYNC_CORO_ASSERT(_num_alive_threads.load(std::memory_order::acquire) > 0);
 
   std::unique_lock lock{_mutex};
 
@@ -72,8 +72,8 @@ void working_queue2::set_num_threads(uint32_t num) {
 
   if (num_alive_threads > _num_threads) {
     _num_threads_to_destroy.fetch_add((int)(num_alive_threads - _num_threads),
-                                      std::memory_order_release);
-    _num_alive_threads.store(_num_threads, std::memory_order_release);
+                                      std::memory_order::release);
+    _num_alive_threads.store(_num_threads, std::memory_order::release);
     _condition.notify_all();
   } else {
     start_up_threads();
@@ -81,7 +81,7 @@ void working_queue2::set_num_threads(uint32_t num) {
 }
 
 bool working_queue2::is_current_thread_worker() const noexcept {
-  if (_num_alive_threads.load(std::memory_order_acquire) == 0) {
+  if (_num_alive_threads.load(std::memory_order::acquire) == 0) {
     // no workers at all
     return false;
   }
@@ -109,13 +109,13 @@ void working_queue2::start_up_threads()  // guarded by _threads_mutex
     _threads.erase(it);
   }
 
-  auto num_alive_threads = _num_alive_threads.load(std::memory_order_acquire);
+  auto num_alive_threads = _num_alive_threads.load(std::memory_order::acquire);
 
   while (_num_threads > num_alive_threads) {
     _threads.emplace_back([this]() {
       while (true) {
         auto to_destroy =
-            _num_threads_to_destroy.load(std::memory_order_acquire);
+            _num_threads_to_destroy.load(std::memory_order::acquire);
 
         // if there is no work to do - go to sleep
         if (to_destroy == 0) {
@@ -125,7 +125,7 @@ void working_queue2::start_up_threads()  // guarded by _threads_mutex
             _num_sleeping_threads++;
 
             _condition.wait(lock, [this]() {
-              return _num_threads_to_destroy.load(std::memory_order_acquire) >
+              return _num_threads_to_destroy.load(std::memory_order::acquire) >
                          0 ||
                      !_tasks.empty();
             });
@@ -133,18 +133,18 @@ void working_queue2::start_up_threads()  // guarded by _threads_mutex
             _num_sleeping_threads--;
 
             to_destroy =
-                _num_threads_to_destroy.load(std::memory_order_acquire);
+                _num_threads_to_destroy.load(std::memory_order::acquire);
           }
         }
 
         // maybe it's time for retirement?
         while (to_destroy > 0) {
           if (_num_threads_to_destroy.compare_exchange_weak(
-                  to_destroy, to_destroy - 1, std::memory_order_release, std::memory_order_relaxed)) {
+                  to_destroy, to_destroy - 1, std::memory_order::release, std::memory_order::relaxed)) {
             // our work is done
             return;
           }
-          to_destroy = _num_threads_to_destroy.load(std::memory_order_acquire);
+          to_destroy = _num_threads_to_destroy.load(std::memory_order::acquire);
         }
 
         // do some work
@@ -163,6 +163,6 @@ void working_queue2::start_up_threads()  // guarded by _threads_mutex
     num_alive_threads++;
   }
 
-  _num_alive_threads.store(num_alive_threads, std::memory_order_release);
+  _num_alive_threads.store(num_alive_threads, std::memory_order::release);
 }
 }  // namespace async_coro
