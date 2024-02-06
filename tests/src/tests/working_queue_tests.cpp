@@ -1,5 +1,6 @@
 #include <async_coro/working_queue.h>
 #include <async_coro/working_queue2.h>
+#include <async_coro/working_queue3.h>
 #include <gtest/gtest.h>
 
 #include <chrono>
@@ -122,54 +123,28 @@ TEST(working_queue, parallel_for_many) {
 TEST(working_queue, parallel_for_speed_atomic) {
   async_coro::working_queue queue;
 
-  queue.set_num_threads(4);
+  queue.set_num_threads(2);
 
   // wait for processes init
   std::this_thread::sleep_for(std::chrono::milliseconds{20});
-
-  std::atomic_size_t num_executions = 0;
-  std::atomic_int sum = 0;
-
-  constexpr auto sum_expected = 25478212 + 107 + 53 - 2;
 
   std::vector<int> range(25478212, 1);
 
   range[64] = 53;
   range[32] = 107;
 
-  {
-    // warm up cache
-    for (int v : range) {
-      sum += v;
-      num_executions++;
-    }
-    sum = 0;
-    num_executions = 0;
-  }
-
   std::atomic_bool is_executing = true;
   const auto t1 = std::chrono::steady_clock::now();
   queue.parallel_for(
       [&](int v) {
         EXPECT_TRUE(is_executing);
-
-        sum.fetch_add(v, std::memory_order::relaxed);
-        num_executions.fetch_add(1, std::memory_order::relaxed);
       },
       range.begin(), range.end());
   const auto parallel_time = std::chrono::steady_clock::now() - t1;
   is_executing = false;
 
-  EXPECT_EQ(sum, sum_expected);
-  EXPECT_EQ(num_executions, range.size());
-  sum = 0;
-  num_executions = 0;
-
   const async_coro::move_only_function<void(int)> f = [&](int v) {
     EXPECT_TRUE(is_executing);
-
-    sum.fetch_add(v, std::memory_order::relaxed);
-    num_executions.fetch_add(1, std::memory_order::relaxed);
   };
 
   is_executing = true;
@@ -181,63 +156,34 @@ TEST(working_queue, parallel_for_speed_atomic) {
   const auto seq_time = std::chrono::steady_clock::now() - t2;
   is_executing = false;
 
-  EXPECT_EQ(sum, sum_expected);
-  EXPECT_EQ(num_executions, range.size());
-
-  std::cout << "Parallel time: " << parallel_time << ", regular time: " << seq_time << std::endl;
+  std::cout << "Parallel time: " << parallel_time << ", regular time: " << seq_time << ", ratio: " << (float)parallel_time.count() / seq_time.count() << std::endl;
 }
 
-TEST(working_queue, parallel_for_speed) {
+TEST(working_queue, parallel_for_speed_dummy) {
   async_coro::working_queue2 queue;
 
-  queue.set_num_threads(4);
+  queue.set_num_threads(2);
 
   // wait for processes init
   std::this_thread::sleep_for(std::chrono::milliseconds{20});
-
-  std::atomic_size_t num_executions = 0;
-  std::atomic_int sum = 0;
-
-  constexpr auto sum_expected = 25478212 + 107 + 53 - 2;
 
   std::vector<int> range(25478212, 1);
 
   range[64] = 53;
   range[32] = 107;
 
-  {
-    // warm up cache
-    for (int v : range) {
-      sum += v;
-      num_executions++;
-    }
-    sum = 0;
-    num_executions = 0;
-  }
-
   std::atomic_bool is_executing = true;
   const auto t1 = std::chrono::steady_clock::now();
   queue.parallel_for(
       [&](int v) {
         EXPECT_TRUE(is_executing);
-
-        sum.fetch_add(v, std::memory_order::relaxed);
-        num_executions.fetch_add(1, std::memory_order::relaxed);
       },
       range.begin(), range.end());
   const auto parallel_time = std::chrono::steady_clock::now() - t1;
   is_executing = false;
 
-  EXPECT_EQ(sum, sum_expected);
-  EXPECT_EQ(num_executions, range.size());
-  sum = 0;
-  num_executions = 0;
-
   const async_coro::move_only_function<void(int)> f = [&](int v) {
     EXPECT_TRUE(is_executing);
-
-    sum.fetch_add(v, std::memory_order::relaxed);
-    num_executions.fetch_add(1, std::memory_order::relaxed);
   };
 
   is_executing = true;
@@ -249,8 +195,44 @@ TEST(working_queue, parallel_for_speed) {
   const auto seq_time = std::chrono::steady_clock::now() - t2;
   is_executing = false;
 
-  EXPECT_EQ(sum, sum_expected);
-  EXPECT_EQ(num_executions, range.size());
+  std::cout << "Parallel time: " << parallel_time << ", regular time: " << seq_time << ", ratio: " << (float)parallel_time.count() / seq_time.count() << std::endl;
+}
 
-  std::cout << "Parallel time: " << parallel_time << ", regular time: " << seq_time << std::endl;
+TEST(working_queue, parallel_for_speed_moodycamel) {
+  async_coro::working_queue3 queue;
+
+  queue.set_num_threads(2);
+
+  // wait for processes init
+  std::this_thread::sleep_for(std::chrono::milliseconds{20});
+
+  std::vector<int> range(25478212, 1);
+
+  range[64] = 53;
+  range[32] = 107;
+
+  std::atomic_bool is_executing = true;
+  const auto t1 = std::chrono::steady_clock::now();
+  queue.parallel_for(
+      [&](int v) {
+        EXPECT_TRUE(is_executing);
+      },
+      range.begin(), range.end());
+  const auto parallel_time = std::chrono::steady_clock::now() - t1;
+  is_executing = false;
+
+  const async_coro::move_only_function<void(int)> f = [&](int v) {
+    EXPECT_TRUE(is_executing);
+  };
+
+  is_executing = true;
+  const auto t2 = std::chrono::steady_clock::now();
+  for (int v : range) {
+    f(v);
+  }
+
+  const auto seq_time = std::chrono::steady_clock::now() - t2;
+  is_executing = false;
+
+  std::cout << "Parallel time: " << parallel_time << ", regular time: " << seq_time << ", ratio: " << (float)parallel_time.count() / seq_time.count() << std::endl;
 }

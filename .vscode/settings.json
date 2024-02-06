@@ -80,7 +80,13 @@
     "xtree": "cpp",
     "queue": "cpp",
     "ranges": "cpp",
-    "numeric": "cpp"
+    "numeric": "cpp",
+    "stack": "cpp",
+    "complex": "cpp",
+    "cstdarg": "cpp",
+    "future": "cpp",
+    "random": "cpp",
+    "shared_mutex": "cpp"
   },
   "editor.formatOnSave": true
 }
