@@ -83,6 +83,10 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
   const auto size = end - begin;
   ASYNC_CORO_ASSERT(size < bucket_size_default);
 
+  if (size == 0) {
+    return;
+  }
+
   using difference_t = std::iterator_traits<It>::difference_type;
 
   if (bucket_size = bucket_size_default) {
@@ -92,24 +96,25 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
     bucket_size = static_cast<uint32_t>(size) / num_workers;
   }
 
-  std::atomic<uint32_t> num_not_finished = 0;
+  std::atomic<uint32_t> num_finished = 0;
+  uint32_t num_schedulled = 0;
   uint32_t rest = static_cast<uint32_t>(size);
   task_id wait_id = 0;
   for (auto it = begin; it != end;) {
     const auto step = std::min(rest, bucket_size);
     rest -= step;
     const auto end_chuk_it = it + static_cast<difference_t>(step);
-    num_not_finished.fetch_add(1, std::memory_order::relaxed);
     wait_id = _current_id.fetch_add(1, std::memory_order::relaxed);
     _tasks.push(
-        [it, end_chuk_it, &f, &num_not_finished]() mutable {
+        [it, end_chuk_it, &f, &num_finished]() mutable {
           for (; it != end_chuk_it; ++it) {
             std::invoke(f, *it);
           }
-          num_not_finished.fetch_sub(1, std::memory_order::release);
+          num_finished.fetch_add(1, std::memory_order::release);
         },
         wait_id);
     it = end_chuk_it;
+    num_schedulled++;
   }
 
   if (_num_sleeping_threads.load(std::memory_order::relaxed) != 0) {
@@ -136,10 +141,10 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
   }
 
   // wait till all precesses finish
-  auto to_await = num_not_finished.load(std::memory_order::acquire);
-  while (to_await > 0) {
+  auto to_await = num_finished.load(std::memory_order::acquire);
+  while (to_await < num_schedulled) {
     std::this_thread::yield();
-    to_await = num_not_finished.load(std::memory_order::acquire);
+    to_await = num_finished.load(std::memory_order::acquire);
   }
 }
 }  // namespace async_coro
