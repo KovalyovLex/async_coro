@@ -1,5 +1,6 @@
+#include "working_queue2.h"
+
 #include <async_coro/config.h>
-#include <async_coro/working_queue2.h>
 
 namespace async_coro {
 working_queue2::~working_queue2() {

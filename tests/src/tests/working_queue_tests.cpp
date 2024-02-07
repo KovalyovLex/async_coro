@@ -1,11 +1,12 @@
 #include <async_coro/working_queue.h>
-#include <async_coro/working_queue2.h>
-#include <async_coro/working_queue3.h>
 #include <gtest/gtest.h>
 
 #include <chrono>
 #include <initializer_list>
 #include <iostream>
+
+#include "working_queue2.h"
+#include "working_queue3.h"
 
 TEST(working_queue, create_many_threads_one_by_one) {
   async_coro::working_queue queue;
@@ -120,13 +121,16 @@ TEST(working_queue, parallel_for_many) {
   EXPECT_GT(executed_at.size(), 1);
 }
 
-TEST(working_queue, parallel_for_speed_atomic) {
+class working_queue_speed_tests : public ::testing::TestWithParam<std::tuple<int>> {
+};
+
+TEST_P(working_queue_speed_tests, atomic) {
   async_coro::working_queue queue;
 
-  queue.set_num_threads(2);
+  queue.set_num_threads(std::get<0>(GetParam()));
 
   // wait for processes init
-  std::this_thread::sleep_for(std::chrono::milliseconds{20});
+  std::this_thread::sleep_for(std::chrono::milliseconds{30});
 
   std::vector<int> range(25478212, 1);
 
@@ -140,7 +144,7 @@ TEST(working_queue, parallel_for_speed_atomic) {
         EXPECT_TRUE(is_executing);
       },
       range.begin(), range.end());
-  const auto parallel_time = std::chrono::steady_clock::now() - t1;
+  const auto parallel_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t1);
   is_executing = false;
 
   const async_coro::move_only_function<void(int)> f = [&](int v) {
@@ -153,19 +157,19 @@ TEST(working_queue, parallel_for_speed_atomic) {
     f(v);
   }
 
-  const auto seq_time = std::chrono::steady_clock::now() - t2;
+  const auto seq_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t2);
   is_executing = false;
 
   std::cout << "Parallel time: " << parallel_time << ", regular time: " << seq_time << ", ratio: " << (float)parallel_time.count() / seq_time.count() << std::endl;
 }
 
-TEST(working_queue, parallel_for_speed_dummy) {
+TEST_P(working_queue_speed_tests, dummy) {
   async_coro::working_queue2 queue;
 
-  queue.set_num_threads(2);
+  queue.set_num_threads(std::get<0>(GetParam()));
 
   // wait for processes init
-  std::this_thread::sleep_for(std::chrono::milliseconds{20});
+  std::this_thread::sleep_for(std::chrono::milliseconds{30});
 
   std::vector<int> range(25478212, 1);
 
@@ -179,7 +183,7 @@ TEST(working_queue, parallel_for_speed_dummy) {
         EXPECT_TRUE(is_executing);
       },
       range.begin(), range.end());
-  const auto parallel_time = std::chrono::steady_clock::now() - t1;
+  const auto parallel_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t1);
   is_executing = false;
 
   const async_coro::move_only_function<void(int)> f = [&](int v) {
@@ -192,19 +196,19 @@ TEST(working_queue, parallel_for_speed_dummy) {
     f(v);
   }
 
-  const auto seq_time = std::chrono::steady_clock::now() - t2;
+  const auto seq_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t2);
   is_executing = false;
 
   std::cout << "Parallel time: " << parallel_time << ", regular time: " << seq_time << ", ratio: " << (float)parallel_time.count() / seq_time.count() << std::endl;
 }
 
-TEST(working_queue, parallel_for_speed_moodycamel) {
+TEST_P(working_queue_speed_tests, moodycamel) {
   async_coro::working_queue3 queue;
 
-  queue.set_num_threads(2);
+  queue.set_num_threads(std::get<0>(GetParam()));
 
   // wait for processes init
-  std::this_thread::sleep_for(std::chrono::milliseconds{20});
+  std::this_thread::sleep_for(std::chrono::milliseconds{30});
 
   std::vector<int> range(25478212, 1);
 
@@ -218,7 +222,7 @@ TEST(working_queue, parallel_for_speed_moodycamel) {
         EXPECT_TRUE(is_executing);
       },
       range.begin(), range.end());
-  const auto parallel_time = std::chrono::steady_clock::now() - t1;
+  const auto parallel_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t1);
   is_executing = false;
 
   const async_coro::move_only_function<void(int)> f = [&](int v) {
@@ -231,8 +235,32 @@ TEST(working_queue, parallel_for_speed_moodycamel) {
     f(v);
   }
 
-  const auto seq_time = std::chrono::steady_clock::now() - t2;
+  const auto seq_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t2);
   is_executing = false;
 
   std::cout << "Parallel time: " << parallel_time << ", regular time: " << seq_time << ", ratio: " << (float)parallel_time.count() / seq_time.count() << std::endl;
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    working_queue_speed,
+    working_queue_speed_tests,
+    ::testing::Values(
+        std::make_tuple(1),
+        std::make_tuple(2),
+        std::make_tuple(3),
+        std::make_tuple(4),
+        std::make_tuple(5),
+        std::make_tuple(6),
+        std::make_tuple(7),
+        std::make_tuple(8),
+        std::make_tuple(9),
+        std::make_tuple(10),
+        std::make_tuple(11),
+        std::make_tuple(12),
+        std::make_tuple(13),
+        std::make_tuple(14),
+        std::make_tuple(15),
+        std::make_tuple(16)),
+    [](const testing::TestParamInfo<working_queue_speed_tests::ParamType>& info) {
+      return std::format("num_workers_{}", std::get<0>(info.param));
+    });
