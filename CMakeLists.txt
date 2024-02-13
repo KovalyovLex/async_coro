@@ -16,7 +16,11 @@ add_executable(async_coro_tests ${tests_src})
 set_property(TARGET async_coro_tests PROPERTY CXX_STANDARD 20)
 target_link_libraries(async_coro_tests gtest async_coro)
 target_compile_options(async_coro PRIVATE
-    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /permissive->
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror>
+)
+target_compile_options(async_coro_tests PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /permissive->
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror>
 )
 

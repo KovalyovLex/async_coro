@@ -141,14 +141,14 @@ TEST_P(working_queue_speed_tests, atomic) {
   std::atomic_bool is_executing = true;
   const auto t1 = std::chrono::steady_clock::now();
   queue.parallel_for(
-      [&](int v) {
+      [&](int) {
         EXPECT_TRUE(is_executing);
       },
       range.begin(), range.end());
   const auto parallel_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t1);
   is_executing = false;
 
-  const async_coro::move_only_function<void(int)> f = [&](int v) {
+  const async_coro::move_only_function<void(int)> f = [&](int) {
     EXPECT_TRUE(is_executing);
   };
 
@@ -180,14 +180,14 @@ TEST_P(working_queue_speed_tests, dummy) {
   std::atomic_bool is_executing = true;
   const auto t1 = std::chrono::steady_clock::now();
   queue.parallel_for(
-      [&](int v) {
+      [&](int) {
         EXPECT_TRUE(is_executing);
       },
       range.begin(), range.end());
   const auto parallel_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t1);
   is_executing = false;
 
-  const async_coro::move_only_function<void(int)> f = [&](int v) {
+  const async_coro::move_only_function<void(int)> f = [&](int) {
     EXPECT_TRUE(is_executing);
   };
 
@@ -219,14 +219,14 @@ TEST_P(working_queue_speed_tests, moodycamel) {
   std::atomic_bool is_executing = true;
   const auto t1 = std::chrono::steady_clock::now();
   queue.parallel_for(
-      [&](int v) {
+      [&](int) {
         EXPECT_TRUE(is_executing);
       },
       range.begin(), range.end());
   const auto parallel_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t1);
   is_executing = false;
 
-  const async_coro::move_only_function<void(int)> f = [&](int v) {
+  const async_coro::move_only_function<void(int)> f = [&](int) {
     EXPECT_TRUE(is_executing);
   };
 

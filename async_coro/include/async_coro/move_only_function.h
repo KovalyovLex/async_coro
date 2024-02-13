@@ -149,7 +149,7 @@ class move_only_function : public internal::function_impl_call<SFOBuffer, FTy> {
   }
 
   template <typename Fx,
-            typename = std::enable_if_t<super::is_invocable<Fx>::value>>
+            typename = std::enable_if_t<super::template is_invocable<Fx>::value>>
   move_only_function(Fx&& func) noexcept(is_noexecept_init<Fx>)
       : move_only_function(no_init{}) {
     init(std::forward<Fx>(func));
@@ -188,7 +188,7 @@ class move_only_function : public internal::function_impl_call<SFOBuffer, FTy> {
   }
 
   template <typename Fx, typename = std::enable_if_t<
-                             super::is_invocable<Fx>::value &&
+                             super::template is_invocable<Fx>::value &&
                              !std::is_same_v<Fx, move_only_function>>>
   move_only_function& operator=(Fx&& func) noexcept(is_noexecept_init<Fx>) {
     clear();
@@ -331,7 +331,7 @@ struct deduce_signature_impl<R (*)(TArgs...) noexcept> {
 
 template <typename Fx>
 struct deduce_signature<Fx, std::void_t<decltype(&Fx::operator())>> {
-  using type = deduce_signature_impl<decltype(&Fx::operator())>::type;
+  using type = typename deduce_signature_impl<decltype(&Fx::operator())>::type;
 };
 
 }  // namespace internal

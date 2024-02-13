@@ -127,15 +127,15 @@ void working_queue2::parallel_for(const Fx& f, It begin, It end,
       break;
     }
 
-    auto f = std::move(_tasks.front());
+    auto to_execute = std::move(_tasks.front());
     _tasks.pop();
 
     lock.unlock();
 
-    f.first();
-    f.first = nullptr;  // destroy function with no lock
+    to_execute.first();
+    to_execute.first = nullptr;  // destroy function with no lock
 
-    if (f.second == wait_id) {
+    if (to_execute.second == wait_id) {
       break;
     }
 

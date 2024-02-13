@@ -126,10 +126,10 @@ void working_queue3::parallel_for(const Fx& f, It begin, It end,
       break;
     }
 
-    auto f = std::move(task_pair.first);
+    auto to_execute = std::move(task_pair.first);
 
-    f();
-    f = nullptr;  // destroy function earlier
+    to_execute();
+    to_execute = nullptr;  // destroy function earlier
 
     if (task_pair.second == wait_id) {
       break;

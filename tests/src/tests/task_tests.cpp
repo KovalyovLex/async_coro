@@ -21,9 +21,9 @@ TEST(task, await_no_wait) {
   auto routine_2 = []() -> async_coro::task<int> { co_return 2; };
 
   auto routine = [](auto start1, auto start2) -> async_coro::task<int> {
-    const auto res1 = co_await start1();
+    [[maybe_unused]] const auto res1 = co_await start1();
     auto routine1 = start1();
-    auto res2 = co_await std::move(routine1);
+    [[maybe_unused]] auto res2 = co_await std::move(routine1);
     const auto res = co_await start2();
     co_return res;
   }(routine_1, routine_2);
