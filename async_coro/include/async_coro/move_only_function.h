@@ -36,6 +36,11 @@ union small_buffer {
     std::memset(&mem[0], 0, Size);
     return *this;
   }
+
+  void swap_and_reset(small_buffer& other) noexcept {
+    std::memcpy(&mem[0], &other.mem[0], Size);
+    std::memset(&other.mem[0], 0, Size);
+  }
 };
 
 template <size_t SFOBuffer, typename R, typename... TArgs>
@@ -173,7 +178,7 @@ class move_only_function : public internal::function_impl_call<SFOBuffer, FTy> {
     if (other._move_or_destroy) {
       other._move_or_destroy(*this, &other, action_move);
     } else {
-      this->_buffer = std::exchange(other._buffer, nullptr);
+      this->_buffer.swap_and_reset(other._buffer);
     }
 
     this->_invoke = std::exchange(other._invoke, nullptr);

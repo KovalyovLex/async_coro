@@ -1,6 +1,7 @@
 #include "memory_hooks.h"
 
 #include <cassert>
+#include <cstdlib>
 
 void* operator new(std::size_t count) {
   mem_hook::num_allocated += count + sizeof(std::size_t);
