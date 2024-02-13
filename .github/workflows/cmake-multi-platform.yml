@@ -30,12 +30,15 @@ jobs:
           - os: windows-latest
             c_compiler: cl
             cpp_compiler: cl
+            update_clang: false
           - os: ubuntu-latest
             c_compiler: gcc
             cpp_compiler: g++
+            update_clang: false
           - os: ubuntu-latest
             c_compiler: clang
             cpp_compiler: clang++
+            update_clang: true
         exclude:
           - os: windows-latest
             c_compiler: gcc
@@ -57,7 +60,7 @@ jobs:
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
     - name: Install newer Clang
-      if: ${{ matrix.c_compiler == "clang" }}
+      if: ${{ matrix.update_clang }}
       run: |
        wget https://apt.llvm.org/llvm.sh
        chmod +x ./llvm.sh
