@@ -2,6 +2,7 @@
 
 #include <async_coro/internal/always_false.h>
 
+#include <cstring>
 #include <functional>
 #include <type_traits>
 #include <utility>
@@ -40,9 +41,9 @@ union small_buffer {
 template <size_t SFOBuffer, typename R, typename... TArgs>
 class function_impl_call<SFOBuffer, R(TArgs...)> {
  protected:
-  using small_buffer = small_buffer<SFOBuffer>;
+  using t_small_buffer = small_buffer<SFOBuffer>;
 
-  using t_invoke_f = R (*)(small_buffer&, TArgs&&...);
+  using t_invoke_f = R (*)(t_small_buffer&, TArgs&&...);
 
   inline static constexpr bool is_noexcept_invoke = false;
 
@@ -68,15 +69,15 @@ class function_impl_call<SFOBuffer, R(TArgs...)> {
 
  protected:
   t_invoke_f _invoke;
-  mutable small_buffer _buffer;
+  mutable t_small_buffer _buffer;
 };
 
 template <size_t SFOBuffer, typename R, typename... TArgs>
 class function_impl_call<SFOBuffer, R(TArgs...) noexcept> {
  protected:
-  using small_buffer = small_buffer<SFOBuffer>;
+  using t_small_buffer = small_buffer<SFOBuffer>;
 
-  using t_invoke_f = R (*)(small_buffer&, TArgs&&...) noexcept;
+  using t_invoke_f = R (*)(t_small_buffer&, TArgs&&...) noexcept;
 
   inline static constexpr bool is_noexcept_invoke = true;
 
@@ -102,7 +103,7 @@ class function_impl_call<SFOBuffer, R(TArgs...) noexcept> {
 
  protected:
   t_invoke_f _invoke;
-  mutable small_buffer _buffer;
+  mutable t_small_buffer _buffer;
 };
 }  // namespace internal
 
@@ -207,7 +208,7 @@ class move_only_function : public internal::function_impl_call<SFOBuffer, FTy> {
     using TFunc = std::remove_cvref_t<Fx>;
     constexpr bool is_small_function = is_small_f<TFunc>;
 
-    this->_invoke = make_invoke<TFunc>(static_cast<super::t_invoke_f>(nullptr));
+    this->_invoke = make_invoke<TFunc>(static_cast<typename super::t_invoke_f>(nullptr));
 
     if constexpr (is_small_function) {
       // small object
@@ -267,9 +268,9 @@ class move_only_function : public internal::function_impl_call<SFOBuffer, FTy> {
   }
 
   template <typename TFunc, typename R, typename... TArgs>
-  static auto make_invoke(R (*)(typename super::small_buffer&, TArgs...)) noexcept {
-    return static_cast<super::t_invoke_f>(
-        [](super::small_buffer& buffer, TArgs&&... args) noexcept(super::is_noexcept_invoke) {
+  static auto make_invoke(R (*)(typename super::t_small_buffer&, TArgs...)) noexcept {
+    return static_cast<typename super::t_invoke_f>(
+        [](typename super::t_small_buffer& buffer, TArgs&&... args) noexcept(super::is_noexcept_invoke) {
           if constexpr (is_small_f<TFunc>) {
             auto& fx_t = reinterpret_cast<TFunc&>(buffer.mem[0]);
             return std::invoke(fx_t, std::forward<TArgs>(args)...);

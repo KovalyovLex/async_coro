@@ -96,7 +96,7 @@ struct task final {
   bool done() const { return _handle.done(); }
 
   void embed_task(base_handle& parent) {
-    parent.get_scheduler().on_child_coro_added(parent, _handle.promise());
+    parent.on_child_coro_added(_handle.promise());
   }
 
   handle_type release_handle(internal::passkey_successors<scheduler>) {

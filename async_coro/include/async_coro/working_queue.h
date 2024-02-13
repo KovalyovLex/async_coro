@@ -5,6 +5,7 @@
 #include <async_coro/move_only_function.h>
 
 #include <concepts>
+#include <condition_variable>
 #include <cstddef>
 #include <iterator>
 #include <mutex>
@@ -87,9 +88,9 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
     return;
   }
 
-  using difference_t = std::iterator_traits<It>::difference_type;
+  using difference_t = typename std::iterator_traits<It>::difference_type;
 
-  if (bucket_size = bucket_size_default) {
+  if (bucket_size == bucket_size_default) {
     // equal destribution, plan work for num threads + 1
     const auto num_workers =
         _num_alive_threads.load(std::memory_order::acquire) + 1;

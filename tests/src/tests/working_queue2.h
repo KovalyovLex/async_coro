@@ -84,9 +84,9 @@ void working_queue2::parallel_for(const Fx& f, It begin, It end,
   const auto size = end - begin;
   ASYNC_CORO_ASSERT(size < bucket_size_default);
 
-  using difference_t = std::iterator_traits<It>::difference_type;
+  using difference_t = typename std::iterator_traits<It>::difference_type;
 
-  if (bucket_size = bucket_size_default) {
+  if (bucket_size == bucket_size_default) {
     // equal destribution, plan work for num threads + 1
     const auto num_workers =
         _num_alive_threads.load(std::memory_order::acquire) + 1;

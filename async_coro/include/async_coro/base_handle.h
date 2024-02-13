@@ -34,6 +34,8 @@ class base_handle {
     return _execution_thread == std::this_thread::get_id();
   }
 
+  void on_child_coro_added(base_handle& child) noexcept;
+
  protected:
   void init_promise(std::coroutine_handle<> h) noexcept { _handle = h; }
 
