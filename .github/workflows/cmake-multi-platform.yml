@@ -37,7 +37,7 @@ jobs:
             update_clang: false
           - os: ubuntu-latest
             c_compiler: clang-17
-            cpp_compiler: clang-17++
+            cpp_compiler: clang++-17
             update_clang: true
         exclude:
           - os: windows-latest
