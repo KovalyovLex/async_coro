@@ -283,4 +283,59 @@ class move_only_function : public internal::function_impl_call<SFOBuffer, FTy> {
  private:
   t_move_or_destroy_f _move_or_destroy;
 };
+
+template <typename R, class... TArgs>
+move_only_function(R(TArgs...)) -> move_only_function<R(TArgs...)>;
+
+namespace internal {
+template <typename Fx, typename = void>
+struct deduce_signature {};  // can't deduce signature when &_Fx::operator() is missing, inaccessible, or ambiguous
+
+template <typename T>
+struct deduce_signature_impl {
+  static_assert(
+      always_false<T>::value,
+      "move_only_function cant deduce signature.");
+};
+
+template <typename R, typename T, typename... TArgs>
+struct deduce_signature_impl<R (T::*)(TArgs...) const> {
+  using type = R(TArgs...);
+};
+
+template <typename R, typename T, typename... TArgs>
+struct deduce_signature_impl<R (T::*)(TArgs...)> {
+  using type = R(TArgs...);
+};
+
+template <typename R, typename... TArgs>
+struct deduce_signature_impl<R (*)(TArgs...)> {
+  using type = R(TArgs...);
+};
+
+template <typename R, typename T, typename... TArgs>
+struct deduce_signature_impl<R (T::*)(TArgs...) const noexcept> {
+  using type = R(TArgs...) noexcept;
+};
+
+template <typename R, typename T, typename... TArgs>
+struct deduce_signature_impl<R (T::*)(TArgs...) noexcept> {
+  using type = R(TArgs...) noexcept;
+};
+
+template <typename R, typename... TArgs>
+struct deduce_signature_impl<R (*)(TArgs...) noexcept> {
+  using type = R(TArgs...) noexcept;
+};
+
+template <typename Fx>
+struct deduce_signature<Fx, std::void_t<decltype(&Fx::operator())>> {
+  using type = deduce_signature_impl<decltype(&Fx::operator())>::type;
+};
+
+}  // namespace internal
+
+template <typename Fx>
+move_only_function(Fx) -> move_only_function<typename internal::deduce_signature<Fx>::type>;
+
 }  // namespace async_coro
