@@ -18,7 +18,6 @@ class atomic_queue {
     std::atomic<uint32_t> end = 0;
     std::atomic<uint32_t> num_used = 0;
     std::atomic<int32_t> free_protect = 0;
-    std::array<std::atomic_bool, BlockSize> values_sync;
     std::atomic_bool create_next_crit = false;
 
     template <typename... U>
@@ -26,9 +25,14 @@ class atomic_queue {
       auto cur_index = num_used.fetch_add(1, std::memory_order::relaxed);
       if (cur_index < values.size()) {
         new (&values[cur_index]) T(std::forward<U>(v)...);
-        end.fetch_add(1, std::memory_order::relaxed);
+
+        // wait other threads finish write
+        auto expected = cur_index;
+        while (!end.compare_exchange_strong(expected, cur_index + 1, std::memory_order::release, std::memory_order::relaxed)) {
+          std::this_thread::yield();
+          expected = cur_index;
+        }
         free_protect.fetch_sub(1, std::memory_order::relaxed);
-        values_sync[cur_index].store(true, std::memory_order::release);
       } else {
         // need to use next chunk
         num_used.fetch_sub(1, std::memory_order::relaxed);
@@ -52,7 +56,7 @@ class atomic_queue {
     bool try_pop(T& v, atomic_queue& q, bool& need_release) noexcept(std::is_nothrow_move_assignable_v<T>) {
       auto cur_begin = begin.load(std::memory_order::relaxed);
       if (cur_begin < values.size()) {
-        const auto cur_end = end.load(std::memory_order::relaxed);
+        const auto cur_end = end.load(std::memory_order::acquire);
         do {
           if (cur_begin >= cur_end) {
             // no values
@@ -60,11 +64,8 @@ class atomic_queue {
           }
         } while (!begin.compare_exchange_weak(cur_begin, cur_begin + 1, std::memory_order::relaxed));
 
-        while (!values_sync[cur_begin].load(std::memory_order::acquire)) {
-        }
-        // syncronization here guaranteed by related values_sync variable in release-acquire ordering
+        // syncronization here guaranteed by end in release-acquire ordering
         v = std::move(reinterpret_cast<T&>(values[cur_begin]));
-        values_sync[cur_begin].store(false, std::memory_order::relaxed);
         return true;
       } else {
         auto* cur_next = next.load(std::memory_order::relaxed);
