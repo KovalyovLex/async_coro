@@ -219,8 +219,8 @@ class move_only_function : public internal::function_impl_call<SFOBuffer, FTy> {
       // small object
       if constexpr (!std::is_trivially_destructible_v<TFunc> ||
                     !std::is_trivially_move_constructible_v<TFunc>) {
-        this->_move_or_destroy =
-            +[](move_only_function& self, move_only_function* other, deinit_op op) noexcept {
+        this->_move_or_destroy = static_cast<t_move_or_destroy_f>(
+            [](move_only_function& self, move_only_function* other, deinit_op op) noexcept {
               if (op == action_destroy) {
                 if constexpr (!std::is_trivially_destructible_v<TFunc>) {
                   auto* fx = reinterpret_cast<TFunc*>(&self._buffer.mem[0]);
@@ -238,7 +238,7 @@ class move_only_function : public internal::function_impl_call<SFOBuffer, FTy> {
                   other->_buffer = nullptr;
                 }
               }
-            };
+            });
       } else {
         this->_move_or_destroy = nullptr;
       }
@@ -246,18 +246,19 @@ class move_only_function : public internal::function_impl_call<SFOBuffer, FTy> {
       new (&this->_buffer.mem[0]) Fx(std::forward<Fx>(func));
     } else {
       // large function
-      _move_or_destroy = +[](move_only_function& self, move_only_function* other, auto op) noexcept {
-        if (op == action_destroy) {
-          if (self._buffer.fx) {
-            auto* fx = static_cast<TFunc*>(self._buffer.fx);
-            delete fx;
-            self._buffer.fx = nullptr;
-          }
-        } else {
-          // action_move
-          self._buffer.fx = std::exchange(other->_buffer.fx, nullptr);
-        }
-      };
+      _move_or_destroy = static_cast<t_move_or_destroy_f>(
+          [](move_only_function& self, move_only_function* other, auto op) noexcept {
+            if (op == action_destroy) {
+              if (self._buffer.fx) {
+                auto* fx = static_cast<TFunc*>(self._buffer.fx);
+                delete fx;
+                self._buffer.fx = nullptr;
+              }
+            } else {
+              // action_move
+              self._buffer.fx = std::exchange(other->_buffer.fx, nullptr);
+            }
+          });
       this->_buffer.fx = new TFunc(std::forward<Fx>(func));
     }
   }

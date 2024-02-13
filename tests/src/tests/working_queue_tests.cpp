@@ -5,6 +5,7 @@
 #include <chrono>
 #include <initializer_list>
 #include <iostream>
+#include <string>
 
 #include "working_queue2.h"
 #include "working_queue3.h"
@@ -315,7 +316,7 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(15),
         std::make_tuple(16)),
     [](const testing::TestParamInfo<working_queue_speed_tests::ParamType>& info) {
-      return std::format("num_workers_{}", std::get<0>(info.param));
+      return "num_workers_" + std::to_string(std::get<0>(info.param));
     });
 
 //
@@ -357,5 +358,5 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(8, (uint32_t)128),
         std::make_tuple(8, (uint32_t)515)),
     [](const testing::TestParamInfo<working_queue_tests::ParamType>& info) {
-      return std::format("num_workers_{}_n_bucket_{}", std::get<0>(info.param), std::get<1>(info.param));
+      return "num_workers_" + std::to_string(std::get<0>(info.param)) + "_n_bucket_" + std::to_string(std::get<1>(info.param));
     });

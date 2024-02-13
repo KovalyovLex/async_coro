@@ -1,7 +1,7 @@
 #include <async_coro/atomic_queue.h>
 #include <gtest/gtest.h>
 
-#include <format>
+#include <string>
 
 #include "memory_hooks.h"
 
@@ -125,5 +125,5 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(16, 8),
         std::make_tuple(16, 16)),
     [](const testing::TestParamInfo<atomic_queue_tests::ParamType>& info) {
-      return std::format("consumers_{}_produsers_{}", std::get<0>(info.param), std::get<1>(info.param));
+      return "consumers_" + std::to_string(std::get<0>(info.param)) + "_produsers_" + std::to_string(std::get<1>(info.param));
     });
