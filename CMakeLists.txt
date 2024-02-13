@@ -20,11 +20,11 @@ target_link_libraries(async_coro_tests gtest async_coro)
 # enable full warnings checks in our targets
 target_compile_options(async_coro PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /permissive->
-    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror -stdlib=libc++>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror -stdlib=libc++ -std=c++20>
 )
 target_compile_options(async_coro_tests PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /permissive->
-    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror -stdlib=libc++>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror -stdlib=libc++ -std=c++20>
 )
 
 # configure tests by different lists
