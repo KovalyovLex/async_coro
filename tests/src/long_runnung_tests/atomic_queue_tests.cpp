@@ -1,7 +1,10 @@
 #include <async_coro/atomic_queue.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "memory_hooks.h"
 
