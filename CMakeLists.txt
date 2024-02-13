@@ -13,8 +13,11 @@ add_subdirectory(async_coro)
 file(GLOB_RECURSE tests_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "tests/src/**.h" "tests/src/**.cpp")
 
 add_executable(async_coro_tests ${tests_src})
+target_include_directories(async_coro_tests PRIVATE "tests/src")
 set_property(TARGET async_coro_tests PROPERTY CXX_STANDARD 20)
 target_link_libraries(async_coro_tests gtest async_coro)
+
+# enable full warnings checks in our targets
 target_compile_options(async_coro PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /permissive->
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror>
@@ -24,9 +27,16 @@ target_compile_options(async_coro_tests PRIVATE
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror>
 )
 
+# configure tests by different lists
+file(GLOB_RECURSE simple_tests_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "tests/src/simple_tests/**.cpp")
+file(GLOB_RECURSE long_tests_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "tests/src/long_runnung_tests/**.cpp")
 
 gtest_add_tests(TARGET      async_coro_tests
-                TEST_SUFFIX .noArgs
-                TEST_LIST   noArgsTests
+                SOURCES     ${simple_tests_src}
+                TEST_LIST   simple_tests_list
 )
-set_tests_properties(${noArgsTests}   PROPERTIES TIMEOUT 10)
+gtest_add_tests(TARGET      async_coro_tests
+                SOURCES     ${long_tests_src}
+                TEST_LIST   long_tests_list
+)
+set_tests_properties(${long_tests_list} PROPERTIES TIMEOUT 20)
