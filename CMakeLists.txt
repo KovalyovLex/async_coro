@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 3.12)
  
-project(async_coro)
-
-add_subdirectory(async_coro)
+project(async_coro_tests)
 
 set(gtest_force_shared_crt ON CACHE BOOL "Force use dynamic libs in tests" FORCE)
 add_subdirectory(googletest)
 
 include(CTest)
 include(GoogleTest)
+
+add_subdirectory(async_coro)
 
 file(GLOB_RECURSE tests_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "tests/src/**.h" "tests/src/**.cpp")
 
