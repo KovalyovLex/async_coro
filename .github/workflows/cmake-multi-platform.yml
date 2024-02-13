@@ -57,7 +57,7 @@ jobs:
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
     - name: Install newer Clang
-    - if: ${{ matrix.c_compiler == clang }}
+      if: ${{ matrix.c_compiler == clang }}
       run: |
        wget https://apt.llvm.org/llvm.sh
        chmod +x ./llvm.sh
