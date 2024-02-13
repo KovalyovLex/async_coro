@@ -1,6 +1,7 @@
 #include <async_coro/working_queue.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <initializer_list>
 #include <iostream>
@@ -241,8 +242,60 @@ TEST_P(working_queue_speed_tests, moodycamel) {
   std::cout << "Parallel time: " << parallel_time << ", regular time: " << seq_time << ", ratio: " << (float)parallel_time.count() / seq_time.count() << std::endl;
 }
 
+class working_queue_tests : public ::testing::TestWithParam<std::tuple<int, uint32_t>> {
+};
+
+TEST_P(working_queue_tests, sync_results) {
+  async_coro::working_queue queue;
+
+  queue.set_num_threads(std::get<0>(GetParam()));
+
+  // wait for processes init
+  std::this_thread::sleep_for(std::chrono::milliseconds{30});
+
+  std::vector<int> range(2039465, 0);
+
+  std::srand(643);
+  for (size_t i = 0; i < range.size(); i++) {
+    range[i] = std::rand();
+  }
+
+  std::vector<int> range_copy;
+  range_copy.resize(range.size());
+
+  EXPECT_NE(range_copy, range);
+
+  const auto t1 = std::chrono::steady_clock::now();
+  queue.parallel_for(
+      [&](const int& v) {
+        const auto idx = &v - range.data();
+        range_copy[idx] = v;
+      },
+      range.begin(), range.end(), std::get<1>(GetParam()));
+  const auto parallel_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t1);
+
+  EXPECT_EQ(range_copy, range);
+
+  std::fill(range_copy.begin(), range_copy.end(), 0);
+
+  EXPECT_NE(range_copy, range);
+
+  const async_coro::move_only_function f = [&](const int& v) {
+    const auto idx = &v - range.data();
+    range_copy[idx] = v;
+  };
+
+  const auto t2 = std::chrono::steady_clock::now();
+  for (auto& v : range) {
+    f(v);
+  }
+  const auto seq_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t2);
+
+  std::cout << "Parallel time: " << parallel_time << ", regular time: " << seq_time << ", ratio: " << (float)parallel_time.count() / seq_time.count() << std::endl;
+}
+
 INSTANTIATE_TEST_SUITE_P(
-    working_queue_speed,
+    mt,
     working_queue_speed_tests,
     ::testing::Values(
         std::make_tuple(1),
@@ -263,4 +316,46 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(16)),
     [](const testing::TestParamInfo<working_queue_speed_tests::ParamType>& info) {
       return std::format("num_workers_{}", std::get<0>(info.param));
+    });
+
+//
+
+INSTANTIATE_TEST_SUITE_P(
+    mt,
+    working_queue_tests,
+    ::testing::Values(
+        std::make_tuple(1, (uint32_t)-1),
+        std::make_tuple(1, (uint32_t)10),
+        std::make_tuple(1, (uint32_t)128),
+        std::make_tuple(1, (uint32_t)512),
+        std::make_tuple(2, (uint32_t)-1),
+        std::make_tuple(2, (uint32_t)10),
+        std::make_tuple(2, (uint32_t)128),
+        std::make_tuple(2, (uint32_t)515),
+        std::make_tuple(3, (uint32_t)-1),
+        std::make_tuple(3, (uint32_t)10),
+        std::make_tuple(3, (uint32_t)128),
+        std::make_tuple(3, (uint32_t)515),
+        std::make_tuple(4, (uint32_t)-1),
+        std::make_tuple(4, (uint32_t)10),
+        std::make_tuple(4, (uint32_t)128),
+        std::make_tuple(4, (uint32_t)515),
+        std::make_tuple(5, (uint32_t)-1),
+        std::make_tuple(5, (uint32_t)10),
+        std::make_tuple(5, (uint32_t)128),
+        std::make_tuple(5, (uint32_t)515),
+        std::make_tuple(6, (uint32_t)-1),
+        std::make_tuple(6, (uint32_t)10),
+        std::make_tuple(6, (uint32_t)128),
+        std::make_tuple(6, (uint32_t)515),
+        std::make_tuple(7, (uint32_t)-1),
+        std::make_tuple(7, (uint32_t)10),
+        std::make_tuple(7, (uint32_t)128),
+        std::make_tuple(7, (uint32_t)515),
+        std::make_tuple(8, (uint32_t)-1),
+        std::make_tuple(8, (uint32_t)10),
+        std::make_tuple(8, (uint32_t)128),
+        std::make_tuple(8, (uint32_t)515)),
+    [](const testing::TestParamInfo<working_queue_tests::ParamType>& info) {
+      return std::format("num_workers_{}_n_bucket_{}", std::get<0>(info.param), std::get<1>(info.param));
     });
