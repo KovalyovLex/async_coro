@@ -73,6 +73,7 @@ TEST_P(atomic_queue_tests, multi) {
       }
 
       std::this_thread::sleep_for(std::chrono::milliseconds{20});
+      prods.clear();
 
       int num_failes = 0;
       while (q.has_value() || num_failes++ < 5) {
