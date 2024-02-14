@@ -145,4 +145,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: msvc-run-logs
-        path: ${{ steps.strings.outputs.build-output-dir }}/Release/Testing/Temporary/LastTest.log
+        path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
