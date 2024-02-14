@@ -20,3 +20,7 @@ void operator delete(void* ptr) noexcept {
   mem_hook::num_allocated -= *mem + sizeof(std::size_t);
   std::free(mem);
 }
+
+void operator delete(void* ptr, std::size_t) noexcept {
+  return operator delete(ptr);
+}
