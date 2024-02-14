@@ -48,10 +48,11 @@ jobs:
       run: ctest --output-on-failure
   
     - name: Archive run logs
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: gcc-run-logs
-        path: ${{ steps.strings.outputs.build-output-dir }}/Release/Testing/Temporary/LastTest.log
+        path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
 
   build-clang:
     runs-on: ubuntu-latest
@@ -95,10 +96,11 @@ jobs:
       run: ctest --output-on-failure
     
     - name: Archive run logs
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: clang-run-logs
-        path: ${{ steps.strings.outputs.build-output-dir }}/Release/Testing/Temporary/LastTest.log
+        path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
     
   build-msvc:
     runs-on: windows-latest
@@ -139,6 +141,7 @@ jobs:
       run: ctest --build-config Release --output-on-failure
     
     - name: Archive run logs
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: msvc-run-logs
