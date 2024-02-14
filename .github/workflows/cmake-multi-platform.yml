@@ -9,7 +9,6 @@ on:
 jobs:
   build-gcc:
     runs-on: ubuntu-latest
-    container: gcc:13
 
     strategy:
       fail-fast: true
@@ -19,11 +18,10 @@ jobs:
       with:
         submodules: recursive
         
-    - name: Install CMake
-      run: |
-        apt update -y
-        apt install -y cmake
-      shell: bash
+    - name: Setup GCC
+      uses: Dup4/actions-setup-gcc@v1
+      with:
+        version: latest
       
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
