@@ -8,16 +8,16 @@
 
 namespace async_coro::internal {
 template <typename T>
-struct await_callback_awaitable {
+struct await_callback {
   T _on_await;
 
-  explicit await_callback_awaitable(T&& on_await)
+  explicit await_callback(T&& on_await)
       : _on_await(std::move(on_await)) {}
-  await_callback_awaitable(const await_callback_awaitable&) = delete;
-  await_callback_awaitable(await_callback_awaitable&&) = delete;
+  await_callback(const await_callback&) = delete;
+  await_callback(await_callback&&) = delete;
 
-  await_callback_awaitable& operator=(await_callback_awaitable&&) = delete;
-  await_callback_awaitable& operator=(const await_callback_awaitable&) = delete;
+  await_callback& operator=(await_callback&&) = delete;
+  await_callback& operator=(const await_callback&) = delete;
 
   bool await_ready() const noexcept { return false; }
 
@@ -38,5 +38,5 @@ struct await_callback_awaitable {
 };
 
 template <typename T>
-await_callback_awaitable(T&&) -> await_callback_awaitable<T>;
+await_callback(T&&) -> await_callback<T>;
 }  // namespace async_coro::internal

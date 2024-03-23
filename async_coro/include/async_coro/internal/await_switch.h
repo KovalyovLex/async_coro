@@ -7,13 +7,13 @@
 #include <coroutine>
 
 namespace async_coro::internal {
-struct await_switch_awaitable {
-  explicit await_switch_awaitable(execution_thread t) noexcept : thread(t) {}
-  await_switch_awaitable(const await_switch_awaitable&) = delete;
-  await_switch_awaitable(await_switch_awaitable&&) = delete;
+struct await_switch {
+  explicit await_switch(execution_thread t) noexcept : thread(t) {}
+  await_switch(const await_switch&) = delete;
+  await_switch(await_switch&&) = delete;
 
-  await_switch_awaitable& operator=(await_switch_awaitable&&) = delete;
-  await_switch_awaitable& operator=(const await_switch_awaitable&) = delete;
+  await_switch& operator=(await_switch&&) = delete;
+  await_switch& operator=(const await_switch&) = delete;
 
   bool await_ready() const noexcept { return !need_switch; }
 

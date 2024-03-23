@@ -60,12 +60,42 @@ void scheduler::continue_execution_impl(base_handle& handle_impl) {
 
   handle_impl._state = coroutine_state::running;
   handle_impl._handle.resume();
-  handle_impl._state = handle_impl._handle.done() ? coroutine_state::finished
-                                                  : coroutine_state::suspended;
+  if (handle_impl._state == coroutine_state::running) [[likely]] {
+    handle_impl._state = handle_impl._handle.done() ? coroutine_state::finished
+                                                    : coroutine_state::suspended;
+  }
+
   if (handle_impl._state == coroutine_state::finished && handle_impl._parent &&
       handle_impl._parent->_state == coroutine_state::suspended) {
     // wake up parent coroutine
     continue_execution(*handle_impl._parent);
+  }
+}
+
+void scheduler::plan_continue_on_thread(base_handle& handle_impl, execution_thread thread) {
+  ASYNC_CORO_ASSERT(handle_impl._scheduler == this);
+
+  if (thread == execution_thread::main_thread) {
+    if (std::this_thread::get_id() == _main_thread) {
+      _update_tasks.emplace_back(
+          [handle_base = &handle_impl](auto& thiz) {
+            handle_base->_execution_thread = std::this_thread::get_id();
+            thiz.continue_execution_impl(*handle_base);
+          });
+    } else {
+      std::unique_lock lock{_task_mutex};
+      _update_tasks_syncronized.emplace_back(
+          [handle_base = &handle_impl](auto& thiz) {
+            handle_base->_execution_thread = std::this_thread::get_id();
+            thiz.continue_execution_impl(*handle_base);
+          });
+      _has_syncronized_tasks.store(true, std::memory_order::release);
+    }
+  } else {
+    _queue.execute([this, handle_base = &handle_impl]() {
+      handle_base->_execution_thread = std::this_thread::get_id();
+      this->continue_execution_impl(*handle_base);
+    });
   }
 }
 
@@ -110,32 +140,28 @@ void scheduler::continue_execution(base_handle& handle_impl) {
     continue_execution_impl(handle_impl);
   } else {
     if (handle_impl._execution_thread == _main_thread) {
-      change_thread(handle_impl, execution_thread::main_thread);
+      plan_continue_on_thread(handle_impl, execution_thread::main_thread);
     } else {
-      change_thread(handle_impl, execution_thread::worker_thread);
+      plan_continue_on_thread(handle_impl, execution_thread::worker_thread);
     }
   }
 }
 
+void scheduler::plan_continue_execution(base_handle& handle_impl) noexcept {
+  ASYNC_CORO_ASSERT(handle_impl._execution_thread != std::thread::id{});
+  ASYNC_CORO_ASSERT(handle_impl._state == coroutine_state::suspended);
+
+  if (handle_impl._execution_thread == _main_thread) {
+    plan_continue_on_thread(handle_impl, execution_thread::main_thread);
+  } else {
+    plan_continue_on_thread(handle_impl, execution_thread::worker_thread);
+  }
+}
 void scheduler::change_thread(base_handle& handle_impl,
                               execution_thread thread) {
-  ASYNC_CORO_ASSERT(handle_impl._scheduler == this);
   ASYNC_CORO_ASSERT(!is_current_thread_fits(thread));
 
-  if (thread == execution_thread::main_thread) {
-    std::unique_lock lock{_task_mutex};
-    _update_tasks_syncronized.push_back(
-        [handle_base = &handle_impl](auto& thiz) {
-          handle_base->_execution_thread = std::this_thread::get_id();
-          thiz.continue_execution_impl(*handle_base);
-        });
-    _has_syncronized_tasks.store(true, std::memory_order::release);
-  } else {
-    _queue.execute([this, handle_base = &handle_impl]() {
-      handle_base->_execution_thread = std::this_thread::get_id();
-      this->continue_execution_impl(*handle_base);
-    });
-  }
+  plan_continue_on_thread(handle_impl, thread);
 }
 
 void scheduler::on_child_coro_added(base_handle& parent, base_handle& child) {

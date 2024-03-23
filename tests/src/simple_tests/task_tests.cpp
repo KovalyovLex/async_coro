@@ -1,8 +1,12 @@
 #include <async_coro/await_callback.h>
 #include <async_coro/scheduler.h>
+#include <async_coro/start_task.h>
 #include <async_coro/switch_thread.h>
 #include <async_coro/task.h>
+#include <async_coro/when_all.h>
 #include <gtest/gtest.h>
+
+#include <semaphore>
 
 namespace task_tests {
 struct coro_runner {
@@ -229,4 +233,86 @@ TEST(task, async_no_switch) {
   ASSERT_TRUE(handle.done());
 
   EXPECT_EQ(handle.get(), 7);
+}
+
+TEST(task, when_all) {
+  std::binary_semaphore sema{0};
+
+  auto routine1 = []() -> async_coro::task<int> {
+    co_return 1;
+  };
+
+  auto routine2 = []() -> async_coro::task<float> {
+    co_return 3.14f;
+  };
+
+  auto routine3 = [&]() -> async_coro::task<double> {
+    std::this_thread::sleep_for(std::chrono::milliseconds{10});
+
+    sema.release();
+
+    co_return 2.72;
+  };
+
+  auto routine = [&]() -> async_coro::task<int> {
+    auto results = co_await async_coro::when_all(
+        co_await async_coro::start_task(routine1()),
+        co_await async_coro::start_task(routine2()),
+        co_await async_coro::start_task(routine3(), async_coro::execution_thread::worker_thread));
+
+    const auto sum = std::apply(
+        [&](auto... num) {
+          return (int(num) + ...);
+        },
+        results);
+    co_return sum;
+  };
+
+  async_coro::scheduler scheduler;
+  scheduler.get_working_queue().set_num_threads(1);
+
+  auto handle = scheduler.start_task(routine());
+  EXPECT_FALSE(handle.done());
+
+  // wait for worker thread finish coro
+  sema.acquire();
+
+  std::this_thread::sleep_for(std::chrono::milliseconds{1});
+
+  EXPECT_FALSE(handle.done());
+  scheduler.update();
+
+  ASSERT_TRUE(handle.done());
+  EXPECT_EQ(handle.get(), 6);
+}
+
+TEST(task, when_all_no_wait) {
+  auto routine1 = []() -> async_coro::task<int> {
+    co_return 2;
+  };
+
+  auto routine2 = []() -> async_coro::task<float> {
+    co_return 3.14f;
+  };
+
+  auto routine = [&]() -> async_coro::task<int> {
+    auto results = co_await async_coro::when_all(
+        co_await async_coro::start_task(routine1()),
+        co_await async_coro::start_task(routine2()));
+
+    const auto sum = std::apply(
+        [&](auto... num) {
+          return (int(num) + ...);
+        },
+        results);
+    co_return sum;
+  };
+
+  async_coro::scheduler scheduler;
+  scheduler.get_working_queue().set_num_threads(1);
+
+  auto handle = scheduler.start_task(routine());
+
+  ASSERT_TRUE(handle.done());
+  EXPECT_EQ(handle.get(), 5);
 }

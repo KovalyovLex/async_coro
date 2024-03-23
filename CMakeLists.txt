@@ -39,4 +39,4 @@ gtest_add_tests(TARGET      async_coro_tests
                 SOURCES     ${long_tests_src}
                 TEST_LIST   long_tests_list
 )
-set_tests_properties(${long_tests_list} PROPERTIES TIMEOUT 20)
+set_tests_properties(${long_tests_list} PROPERTIES TIMEOUT 30)

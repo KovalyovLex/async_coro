@@ -34,10 +34,16 @@ class base_handle {
     return _execution_thread == std::this_thread::get_id();
   }
 
-  void on_child_coro_added(base_handle& child) noexcept;
+  void on_child_coro_added(base_handle& child);
+
+  bool is_coro_embedded() const noexcept { return _parent != nullptr; }
 
  protected:
   void init_promise(std::coroutine_handle<> h) noexcept { _handle = h; }
+
+  void on_final_suspend() noexcept {
+    _state = coroutine_state::finished;
+  }
 
  private:
   base_handle* _parent = nullptr;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <async_coro/internal/await_callback_awaitable.h>
+#include <async_coro/internal/await_callback.h>
 
 #include <utility>
 
@@ -10,6 +10,6 @@ namespace async_coro {
 // resumes the coroutine.
 template <typename T>
 auto await_callback(T continuation) {
-  return internal::await_callback_awaitable{std::move(continuation)};
+  return internal::await_callback{std::move(continuation)};
 }
 }  // namespace async_coro
