@@ -13,14 +13,22 @@ add_subdirectory(async_coro)
 file(GLOB_RECURSE tests_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "tests/src/**.h" "tests/src/**.cpp")
 
 if (ANDROID)
+  find_package(googletest REQUIRED CONFIG)
   find_package(junit-gtest REQUIRED CONFIG)
+  find_library(
+        # Sets the name of the path variable.
+        log-lib
+
+        # Specifies the name of the NDK library that
+        # you want CMake to locate.
+        log)
 
   add_library(async_coro_tests SHARED ${tests_src})
 
-  target_link_libraries(async_coro_tests gtest async_coro junit-gtest::junit-gtest)
+  target_link_libraries(async_coro_tests async_coro googletest::gtest junit-gtest::junit-gtest ${log-lib})
 else()
   add_executable(async_coro_tests ${tests_src})
-  target_link_libraries(async_coro_tests gtest async_coro)
+  target_link_libraries(async_coro_tests async_coro gtest)
 endif()
 
 target_include_directories(async_coro_tests PRIVATE "tests/src")
