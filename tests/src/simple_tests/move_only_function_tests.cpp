@@ -492,5 +492,5 @@ TEST(move_only_function, speed_invoke_function) {
   }
   const auto f2_time = std::chrono::steady_clock::now() - t2;
 
-  std::cout << "move_only_function time: " << f1_time << ", std::function time: " << f2_time << std::endl;
+  std::cout << "move_only_function time: " << f1_time.count() << ", std::function time: " << f2_time.count() << std::endl;
 }

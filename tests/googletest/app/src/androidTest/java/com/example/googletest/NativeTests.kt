@@ -5,5 +5,5 @@ import androidx.test.ext.junitgtest.TargetLibrary
 import org.junit.runner.RunWith
 
 @RunWith(GtestRunner::class)
-@TargetLibrary(libraryName = "app_tests")
+@TargetLibrary(libraryName = "async_coro_tests")
 class NativeTests

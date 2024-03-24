@@ -12,10 +12,19 @@ add_subdirectory(async_coro)
 
 file(GLOB_RECURSE tests_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "tests/src/**.h" "tests/src/**.cpp")
 
-add_executable(async_coro_tests ${tests_src})
+if (ANDROID)
+  find_package(junit-gtest REQUIRED CONFIG)
+
+  add_library(async_coro_tests SHARED ${tests_src})
+
+  target_link_libraries(async_coro_tests gtest async_coro junit-gtest::junit-gtest)
+else()
+  add_executable(async_coro_tests ${tests_src})
+  target_link_libraries(async_coro_tests gtest async_coro)
+endif()
+
 target_include_directories(async_coro_tests PRIVATE "tests/src")
 set_property(TARGET async_coro_tests PROPERTY CXX_STANDARD 20)
-target_link_libraries(async_coro_tests gtest async_coro)
 
 # enable full warnings checks in our targets
 target_compile_options(async_coro PRIVATE

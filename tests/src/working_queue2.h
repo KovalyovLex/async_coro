@@ -82,7 +82,7 @@ template <typename Fx, std::random_access_iterator It>
 void working_queue2::parallel_for(const Fx& f, It begin, It end,
                                   uint32_t bucket_size) {
   const auto size = end - begin;
-  ASYNC_CORO_ASSERT(size < bucket_size_default);
+  ASYNC_CORO_ASSERT((long long)size < (long long)bucket_size_default);
 
   using difference_t = typename std::iterator_traits<It>::difference_type;
 

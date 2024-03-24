@@ -5,6 +5,7 @@ plugins {
 
 android {
     compileSdk 34
+    ndkVersion "26.2.11394342"
 
     defaultConfig {
         applicationId "com.example.googletest"
@@ -17,6 +18,7 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags ''
+                arguments '-DCMAKE_BUILD_TYPE=Release'
             }
         }
     }
@@ -36,18 +38,13 @@ android {
     }
     externalNativeBuild {
         cmake {
-            path file('src/main/cpp/CMakeLists.txt')
-            version '3.18.1'
+            path file('../../../CMakeLists.txt')
+            version '3.22.1'
         }
     }
     buildFeatures {
         prefab true
         viewBinding true
-    }
-    packagingOptions {
-        jniLibs {
-            excludes += ['**/libadder.so', '**/libapptest.so', '**/libc++_shared.so']
-        }
     }
     namespace 'com.example.googletest'
 }

@@ -49,7 +49,7 @@ TEST_P(working_queue_speed_tests, atomic) {
   const auto seq_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t2);
   is_executing = false;
 
-  std::cout << "Parallel time: " << parallel_time << ", regular time: " << seq_time << ", ratio: " << ((float)parallel_time.count() / seq_time.count()) << std::endl;
+  std::cout << "Parallel time: " << parallel_time.count() << ", regular time: " << seq_time.count() << ", ratio: " << ((float)parallel_time.count() / seq_time.count()) << std::endl;
 }
 
 TEST_P(working_queue_speed_tests, dummy) {
@@ -88,7 +88,7 @@ TEST_P(working_queue_speed_tests, dummy) {
   const auto seq_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t2);
   is_executing = false;
 
-  std::cout << "Parallel time: " << parallel_time << ", regular time: " << seq_time << ", ratio: " << ((float)parallel_time.count() / seq_time.count()) << std::endl;
+  std::cout << "Parallel time: " << parallel_time.count() << ", regular time: " << seq_time.count() << ", ratio: " << ((float)parallel_time.count() / seq_time.count()) << std::endl;
 }
 
 TEST_P(working_queue_speed_tests, moodycamel) {
@@ -127,7 +127,7 @@ TEST_P(working_queue_speed_tests, moodycamel) {
   const auto seq_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t2);
   is_executing = false;
 
-  std::cout << "Parallel time: " << parallel_time << ", regular time: " << seq_time << ", ratio: " << ((float)parallel_time.count() / seq_time.count()) << std::endl;
+  std::cout << "Parallel time: " << parallel_time.count() << ", regular time: " << seq_time.count() << ", ratio: " << ((float)parallel_time.count() / seq_time.count()) << std::endl;
 }
 
 class working_queue_tests : public ::testing::TestWithParam<std::tuple<int, uint32_t>> {
@@ -179,7 +179,7 @@ TEST_P(working_queue_tests, sync_results) {
   }
   const auto seq_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t2);
 
-  std::cout << "Parallel time: " << parallel_time << ", regular time: " << seq_time << ", ratio: " << ((float)parallel_time.count() / seq_time.count()) << std::endl;
+  std::cout << "Parallel time: " << parallel_time.count() << ", regular time: " << seq_time.count() << ", ratio: " << ((float)parallel_time.count() / seq_time.count()) << std::endl;
 }
 
 INSTANTIATE_TEST_SUITE_P(
