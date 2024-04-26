@@ -148,7 +148,7 @@ jobs:
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
 
   build-android:
-    runs-on: macos-latest
+    runs-on: macos-13
     
     steps:
       - name: Checkout
