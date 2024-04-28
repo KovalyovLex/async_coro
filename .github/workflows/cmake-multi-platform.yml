@@ -13,7 +13,17 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        cmake_param: [-DASYNC_CORO_NO_EXCEPTIONS=TRUE, -DASYNC_CORO_NO_EXCEPTIONS=FALSE]
+        value: [
+          {
+            name: "",
+            cmake: -DASYNC_CORO_NO_EXCEPTIONS=FALSE
+          },
+          {
+            name: "NoExept",
+            cmake: -DASYNC_CORO_NO_EXCEPTIONS=TRUE
+          }
+        ]
+
 
     steps:
     - uses: actions/checkout@v4
@@ -41,7 +51,7 @@ jobs:
         -DCMAKE_C_COMPILER=gcc
         -DCMAKE_BUILD_TYPE=RelWithDebInfo
         -DASAN_ENABLED=TRUE
-        ${{ matrix.cmake_param }}
+        ${{ matrix.value.cmake }}
         -S ${{ github.workspace }}
 
     - name: Build
@@ -55,7 +65,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: gcc-run-logs
+        name: gcc-run-logs-${{ matrix.value.name }}
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
 
   build-clang:
