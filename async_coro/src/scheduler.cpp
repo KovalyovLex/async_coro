@@ -23,9 +23,9 @@ scheduler::~scheduler() {
 }
 
 bool scheduler::is_current_thread_fits(execution_thread thread) noexcept {
-  if (thread == execution_thread::main_thread) {
+  if (thread == execution_thread::main) {
     return _main_thread == std::this_thread::get_id();
-  } else if (thread == execution_thread::worker_thread) {
+  } else if (thread == execution_thread::worker) {
     return _queue.is_current_thread_worker();
   }
   return false;
@@ -91,7 +91,7 @@ void scheduler::continue_execution_impl(base_handle& handle_impl) {
 void scheduler::plan_continue_on_thread(base_handle& handle_impl, execution_thread thread) {
   ASYNC_CORO_ASSERT(handle_impl._scheduler == this);
 
-  if (thread == execution_thread::main_thread) {
+  if (thread == execution_thread::main) {
     if (std::this_thread::get_id() == _main_thread) {
       _update_tasks.emplace_back(
           [handle_base = &handle_impl](auto& thiz) {
@@ -154,9 +154,9 @@ void scheduler::continue_execution(base_handle& handle_impl) {
     continue_execution_impl(handle_impl);
   } else {
     if (handle_impl._execution_thread == _main_thread) {
-      plan_continue_on_thread(handle_impl, execution_thread::main_thread);
+      plan_continue_on_thread(handle_impl, execution_thread::main);
     } else {
-      plan_continue_on_thread(handle_impl, execution_thread::worker_thread);
+      plan_continue_on_thread(handle_impl, execution_thread::worker);
     }
   }
 }
@@ -166,9 +166,9 @@ void scheduler::plan_continue_execution(base_handle& handle_impl) noexcept {
   ASYNC_CORO_ASSERT(handle_impl._state == coroutine_state::suspended);
 
   if (handle_impl._execution_thread == _main_thread) {
-    plan_continue_on_thread(handle_impl, execution_thread::main_thread);
+    plan_continue_on_thread(handle_impl, execution_thread::main);
   } else {
-    plan_continue_on_thread(handle_impl, execution_thread::worker_thread);
+    plan_continue_on_thread(handle_impl, execution_thread::worker);
   }
 }
 void scheduler::change_thread(base_handle& handle_impl,

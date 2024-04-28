@@ -17,8 +17,8 @@ struct task;
 
 enum class execution_thread : std::uint8_t {
   undefined,
-  main_thread,
-  worker_thread
+  main,
+  worker
 };
 
 class scheduler {
@@ -31,7 +31,7 @@ class scheduler {
 
   template <typename R>
   task_handle<R> start_task(task<R> coro,
-                            execution_thread thread = execution_thread::main_thread) {
+                            execution_thread thread = execution_thread::main) {
     auto handle = coro.release_handle(internal::passkey{this});
     task_handle<R> result{handle};
     if (!handle.done()) [[likely]] {

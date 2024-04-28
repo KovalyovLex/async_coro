@@ -123,13 +123,13 @@ TEST(task, async_execution) {
   auto routine_1 = []() -> async_coro::task<float> {
     const auto current_th = std::this_thread::get_id();
 
-    co_await switch_to_thread(async_coro::execution_thread::worker_thread);
+    co_await switch_to_thread(async_coro::execution_thread::worker);
 
     EXPECT_NE(current_th, std::this_thread::get_id());
 
     async_done = true;
 
-    co_await switch_to_thread(async_coro::execution_thread::main_thread);
+    co_await switch_to_thread(async_coro::execution_thread::main);
 
     EXPECT_EQ(current_th, std::this_thread::get_id());
 
@@ -178,19 +178,19 @@ TEST(task, async_no_switch) {
   auto routine_1 = []() -> async_coro::task<float> {
     const auto current_th = std::this_thread::get_id();
 
-    co_await switch_to_thread(async_coro::execution_thread::worker_thread);
+    co_await switch_to_thread(async_coro::execution_thread::worker);
 
     EXPECT_NE(current_th, std::this_thread::get_id());
 
-    co_await switch_to_thread(async_coro::execution_thread::worker_thread);
+    co_await switch_to_thread(async_coro::execution_thread::worker);
 
     async_done = true;
 
-    co_await switch_to_thread(async_coro::execution_thread::main_thread);
+    co_await switch_to_thread(async_coro::execution_thread::main);
 
     EXPECT_EQ(current_th, std::this_thread::get_id());
 
-    co_await switch_to_thread(async_coro::execution_thread::main_thread);
+    co_await switch_to_thread(async_coro::execution_thread::main);
 
     EXPECT_EQ(current_th, std::this_thread::get_id());
 
@@ -200,7 +200,7 @@ TEST(task, async_no_switch) {
   auto routine = [](auto start) -> async_coro::task<int> {
     const auto current_th = std::this_thread::get_id();
 
-    co_await switch_to_thread(async_coro::execution_thread::main_thread);
+    co_await switch_to_thread(async_coro::execution_thread::main);
 
     EXPECT_EQ(current_th, std::this_thread::get_id());
 
@@ -258,7 +258,7 @@ TEST(task, when_all) {
     auto results = co_await async_coro::when_all(
         co_await async_coro::start_task(routine1()),
         co_await async_coro::start_task(routine2()),
-        co_await async_coro::start_task(routine3(), async_coro::execution_thread::worker_thread));
+        co_await async_coro::start_task(routine3(), async_coro::execution_thread::worker));
 
     const auto sum = std::apply(
         [&](auto... num) {
@@ -357,9 +357,9 @@ TEST(task, task_handle_move_to_thread) {
   std::atomic_bool ready = false;
 
   auto routine1 = [&]() -> async_coro::task<destructable> {
-    co_await switch_to_thread(async_coro::execution_thread::worker_thread);
+    co_await switch_to_thread(async_coro::execution_thread::worker);
     ready = true;
-    co_await switch_to_thread(async_coro::execution_thread::main_thread);
+    co_await switch_to_thread(async_coro::execution_thread::main);
 
     co_return destructable{};
   };
