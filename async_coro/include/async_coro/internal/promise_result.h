@@ -66,7 +66,7 @@ struct promise_result : promise_result_base<T> {
     return this->result.get_cref();
   }
 
-  auto move_result() noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
+  decltype(auto) move_result() noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
     this->check_exception();
     ASYNC_CORO_ASSERT(this->has_result());
     return this->result.move();

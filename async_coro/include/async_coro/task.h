@@ -94,15 +94,7 @@ struct task final {
     void await_suspend(std::coroutine_handle<T>) const noexcept {}
 
     R await_resume() {
-      if constexpr (!std::is_reference_v<R>) {
-        R res{t._handle.promise().move_result()};
-        t._handle.promise().try_free_task(internal::passkey<task>{});
-        return res;
-      } else {
-        auto& res = t._handle.promise().get_result_ref();
-        t._handle.promise().try_free_task(internal::passkey<task>{});
-        return res;
-      }
+      return t._handle.promise().move_result();
     }
   };
 

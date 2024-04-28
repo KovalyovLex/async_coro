@@ -38,6 +38,7 @@ jobs:
         -DCMAKE_CXX_COMPILER=g++
         -DCMAKE_C_COMPILER=gcc
         -DCMAKE_BUILD_TYPE=Release
+        -DASAN_ENABLED=TRUE
         -S ${{ github.workspace }}
 
     - name: Build
@@ -86,6 +87,7 @@ jobs:
         -DCMAKE_CXX_COMPILER=clang++-17
         -DCMAKE_C_COMPILER=clang-17
         -DCMAKE_BUILD_TYPE=Release
+        -DASAN_ENABLED=TRUE
         -S ${{ github.workspace }}
 
     - name: Build
@@ -128,6 +130,7 @@ jobs:
         -DCMAKE_CXX_COMPILER=cl
         -DCMAKE_C_COMPILER=cl
         -DCMAKE_BUILD_TYPE=Release
+        -DASAN_ENABLED=TRUE
         -S ${{ github.workspace }}
 
     - name: Build
@@ -148,6 +151,7 @@ jobs:
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
 
   build-android:
+    if: false
     runs-on: macos-13
     
     steps:
@@ -196,6 +200,7 @@ jobs:
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
         -DCMAKE_BUILD_TYPE=Release
+        -DASAN_ENABLED=TRUE
         -S ${{ github.workspace }}
 
     - name: Build

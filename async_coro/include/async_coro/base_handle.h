@@ -51,7 +51,8 @@ class base_handle {
       if (_continuation.load(std::memory_order::acquire) == nullptr) {
         bool expected = true;
         if (_ready_for_destroy.compare_exchange_strong(expected, false, std::memory_order::relaxed)) {
-          _handle.destroy();
+          const auto handle = std::exchange(_handle, {});
+          handle.destroy();
         }
       }
     }
