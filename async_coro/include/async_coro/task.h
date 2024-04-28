@@ -51,17 +51,13 @@ struct promise_type final : internal::promise_result<R>, base_handle {
     return std::move(in);
   }
 
-  bool has_continuation() const noexcept { return _continuation != nullptr; }
-
   void set_continuation(task_handle<R>* handle, internal::passkey_any<task_handle<R>>) {
-    ASYNC_CORO_ASSERT(!has_continuation() || handle == nullptr);
-    ASYNC_CORO_ASSERT(!is_coro_embedded());
-
-    _continuation = handle;
+    set_continuation_impl(handle);
   }
 
- private:
-  task_handle<R>* _continuation = nullptr;
+  void try_free_task(internal::passkey_any<task<R>>) {
+    try_free_task_impl();
+  }
 };
 
 // Default type for all coroutines
@@ -85,26 +81,29 @@ struct task final {
 
   ~task() noexcept {
     if (_handle) {
-      _handle.destroy();
+      _handle.promise().try_free_task(internal::passkey{this});
     }
   }
 
   struct awaiter {
     task& t;
+    alignas(R) std::array<std::byte, sizeof(R)> result;
 
     bool await_ready() const noexcept { return t._handle.done(); }
 
     template <typename T>
     void await_suspend(std::coroutine_handle<T>) const noexcept {}
 
-    decltype(auto) await_resume() const {
-      return t._handle.promise().move_result();
+    R await_resume() {
+      auto* ptr = reinterpret_cast<R*>(result.data());
+      new (ptr) R(std::move(t._handle.promise().move_result()));
+      t._handle.promise().try_free_task(internal::passkey<task>{});
+      return *ptr;
     }
   };
 
   // coroutine should be moved to become embedded
   auto operator co_await() && {
-    ASYNC_CORO_ASSERT(!_handle.promise().has_continuation());
     return awaiter(*this);
   }
 
@@ -126,64 +125,100 @@ struct task final {
   handle_type _handle{};
 };
 
-// task handle type tor schedulled coroutines
+// Task handle for schedulled coroutines. Can track coroutine state and get result
 template <typename R>
 class task_handle final {
  public:
   using continuation_t = move_only_function<void(promise_type<R>&) noexcept>;
 
   task_handle() noexcept = default;
-  explicit task_handle(
-      std::coroutine_handle<async_coro::promise_type<R>> h) noexcept
-      : _handle(std::move(h)) {}
+  explicit task_handle(std::coroutine_handle<async_coro::promise_type<R>> h) noexcept
+      : _handle(std::move(h)) {
+    ASYNC_CORO_ASSERT(_handle);
+    if (_handle) [[likely]] {
+      _handle.promise().set_continuation(this, internal::passkey{this});
+    }
+  }
 
   task_handle(const task_handle&) = delete;
   task_handle(task_handle&& other) noexcept
-      : _handle(std::exchange(other._handle, nullptr)) {}
+      : _handle(std::exchange(other._handle, nullptr)),
+        _continuation(std::move(other._continuation)) {
+    if (_handle) {
+      _handle.promise().set_continuation(this, internal::passkey{this});
+    }
+  }
 
   task_handle& operator=(const task_handle&) = delete;
   task_handle& operator=(task_handle&& other) noexcept {
-    std::swap(_handle, other._handle);
+    if (_handle == other._handle) {
+      return *this;
+    }
+    if (_handle) {
+      _handle.promise().set_continuation(nullptr, internal::passkey{this});
+    }
+    _handle = std::exchange(other._handle, {});
+    _continuation = std::move(other._continuation);
+
+    if (_handle) {
+      _handle.promise().set_continuation(this, internal::passkey{this});
+    }
+
     return *this;
   }
 
   ~task_handle() noexcept {
-    // task handle doesn't own task
-    if (_continuation && _handle) {
+    _continuation = nullptr;
+    if (_handle) {
       _handle.promise().set_continuation(nullptr, internal::passkey{this});
     }
   }
 
   // access
-  decltype(auto) get() & { return _handle.promise().get_result_ref(); }
+  decltype(auto) get() & {
+    ASYNC_CORO_ASSERT(_handle && _handle.done());
+    return _handle.promise().get_result_ref();
+  }
 
-  decltype(auto) get() const& { return _handle.promise().get_result_cref(); }
+  decltype(auto) get() const& {
+    ASYNC_CORO_ASSERT(_handle && _handle.done());
+    return _handle.promise().get_result_cref();
+  }
 
-  decltype(auto) get() && { return _handle.promise().move_result(); }
+  decltype(auto) get() && {
+    ASYNC_CORO_ASSERT(_handle && _handle.done());
+    return _handle.promise().move_result();
+  }
 
   void get() const&& = delete;
 
   template <typename Y>
     requires(std::same_as<Y, R> && !std::same_as<R, void>)
   operator Y&() & {
+    ASYNC_CORO_ASSERT(_handle && _handle.done());
     return _handle.promise().get_result_ref();
   }
+
   template <typename Y>
     requires(std::same_as<Y, R> && !std::same_as<R, void>)
   operator const Y&() const& {
+    ASYNC_CORO_ASSERT(_handle && _handle.done());
     return _handle.promise().get_result_cref();
   }
+
   template <typename Y>
     requires(std::same_as<Y, R> && !std::same_as<R, void>)
   operator Y() && {
+    ASYNC_CORO_ASSERT(_handle && _handle.done());
     return _handle.promise().move_result();
   }
 
-  bool done() const { return _handle.done(); }
+  bool done() const { return !_handle || _handle.done(); }
 
   void continue_with(continuation_t f) {
     ASYNC_CORO_ASSERT(!_continuation);
     ASYNC_CORO_ASSERT(f);
+    ASYNC_CORO_ASSERT(!_handle.promise().is_coro_embedded());
 
     if (!f) {
       return;
@@ -193,12 +228,14 @@ class task_handle final {
       f(_handle.promise());
     } else {
       _continuation = std::move(f);
-      _handle.promise().set_continuation(this, internal::passkey{this});
     }
   }
 
   void continue_impl(promise_type<R>& promise, internal::passkey_any<promise_type<R>>) noexcept {
-    _continuation(promise);
+    const auto f = std::exchange(_continuation, {});
+    if (f) {
+      f(promise);
+    }
   }
 
  private:
@@ -209,8 +246,8 @@ class task_handle final {
 template <typename R>
 std::suspend_always promise_type<R>::final_suspend() noexcept {
   on_final_suspend();
-  if (_continuation) {
-    _continuation->continue_impl(*this, internal::passkey{this});
+  if (auto* continue_with = get_continuation<task_handle<R>>()) {
+    continue_with->continue_impl(*this, internal::passkey{this});
   }
   return {};
 }

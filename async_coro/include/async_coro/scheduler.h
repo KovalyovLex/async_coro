@@ -33,11 +33,14 @@ class scheduler {
   task_handle<R> start_task(task<R> coro,
                             execution_thread thread = execution_thread::main_thread) {
     auto handle = coro.release_handle(internal::passkey{this});
+    task_handle<R> result{handle};
     if (!handle.done()) [[likely]] {
       add_coroutine(handle.promise(), thread);
-      return task_handle<R>{std::move(handle)};
+      return result;
     }
-    return {};
+    // free task as we released handle
+    handle.promise().try_free_task_impl();
+    return result;
   }
 
   working_queue& get_working_queue() noexcept { return _queue; }

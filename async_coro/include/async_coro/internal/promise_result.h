@@ -47,38 +47,30 @@ struct promise_result_base {
 template <typename T>
 struct promise_result : promise_result_base<T> {
   // C++ coroutine api
-  void return_value(T&& r) noexcept {
+  template <typename... TArgs>
+  void return_value(TArgs&&... args) noexcept {
     ASYNC_CORO_ASSERT(!this->is_initialized);
-    new (&this->store.result) T(std::move(r));
+    this->store.result.inplace_init(std::forward<TArgs>(args)...);
     this->is_initialized = true;
     this->is_result = true;
   }
 
-  // C++ coroutine api
-  void return_value(const T& r) noexcept(
-      std::is_nothrow_copy_constructible_v<T>) {
-    ASYNC_CORO_ASSERT(!this->is_initialized);
-    new (&this->store.result) T(r);
-    this->is_initialized = true;
-    this->is_result = true;
-  }
-
-  T& get_result_ref() noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
+  auto& get_result_ref() noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
     this->check_exception();
     ASYNC_CORO_ASSERT(this->has_result());
-    return this->store.result;
+    return this->store.result.get_ref();
   }
 
-  const T& get_result_cref() const noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
+  const auto& get_result_cref() const noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
     this->check_exception();
     ASYNC_CORO_ASSERT(this->has_result());
-    return this->store.result;
+    return this->store.result.get_cref();
   }
 
-  T move_result() noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
+  auto move_result() noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
     this->check_exception();
     ASYNC_CORO_ASSERT(this->has_result());
-    return std::move(this->store.result);
+    return this->store.result.move();
   }
 };
 

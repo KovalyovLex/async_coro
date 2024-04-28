@@ -1,7 +1,7 @@
 #include <async_coro/await_callback.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/start_task.h>
-#include <async_coro/switch_thread.h>
+#include <async_coro/switch_to_thread.h>
 #include <async_coro/task.h>
 #include <async_coro/when_all.h>
 #include <gtest/gtest.h>
@@ -123,13 +123,13 @@ TEST(task, async_execution) {
   auto routine_1 = []() -> async_coro::task<float> {
     const auto current_th = std::this_thread::get_id();
 
-    co_await switch_thread(async_coro::execution_thread::worker_thread);
+    co_await switch_to_thread(async_coro::execution_thread::worker_thread);
 
     EXPECT_NE(current_th, std::this_thread::get_id());
 
     async_done = true;
 
-    co_await switch_thread(async_coro::execution_thread::main_thread);
+    co_await switch_to_thread(async_coro::execution_thread::main_thread);
 
     EXPECT_EQ(current_th, std::this_thread::get_id());
 
@@ -178,19 +178,19 @@ TEST(task, async_no_switch) {
   auto routine_1 = []() -> async_coro::task<float> {
     const auto current_th = std::this_thread::get_id();
 
-    co_await switch_thread(async_coro::execution_thread::worker_thread);
+    co_await switch_to_thread(async_coro::execution_thread::worker_thread);
 
     EXPECT_NE(current_th, std::this_thread::get_id());
 
-    co_await switch_thread(async_coro::execution_thread::worker_thread);
+    co_await switch_to_thread(async_coro::execution_thread::worker_thread);
 
     async_done = true;
 
-    co_await switch_thread(async_coro::execution_thread::main_thread);
+    co_await switch_to_thread(async_coro::execution_thread::main_thread);
 
     EXPECT_EQ(current_th, std::this_thread::get_id());
 
-    co_await switch_thread(async_coro::execution_thread::main_thread);
+    co_await switch_to_thread(async_coro::execution_thread::main_thread);
 
     EXPECT_EQ(current_th, std::this_thread::get_id());
 
@@ -200,7 +200,7 @@ TEST(task, async_no_switch) {
   auto routine = [](auto start) -> async_coro::task<int> {
     const auto current_th = std::this_thread::get_id();
 
-    co_await switch_thread(async_coro::execution_thread::main_thread);
+    co_await switch_to_thread(async_coro::execution_thread::main_thread);
 
     EXPECT_EQ(current_th, std::this_thread::get_id());
 
@@ -315,4 +315,132 @@ TEST(task, when_all_no_wait) {
 
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), 5);
+}
+
+TEST(task, task_handle_outlive) {
+  static int num_instances = 0;
+
+  struct destructable {
+    destructable() { num_instances++; }
+    destructable(const destructable&) { num_instances++; }
+    ~destructable() { num_instances--; }
+  };
+
+  auto routine1 = []() -> async_coro::task<destructable> {
+    co_return destructable{};
+  };
+
+  async_coro::scheduler scheduler;
+
+  EXPECT_EQ(num_instances, 0);
+
+  {
+    auto handle = scheduler.start_task(routine1());
+
+    ASSERT_TRUE(handle.done());
+
+    EXPECT_EQ(num_instances, 1);
+  }
+
+  EXPECT_EQ(num_instances, 0);
+}
+
+TEST(task, task_handle_move_to_thread) {
+  static int num_instances = 0;
+
+  struct destructable {
+    destructable() { num_instances++; }
+    destructable(const destructable&) { num_instances++; }
+    ~destructable() { num_instances--; }
+  };
+
+  std::atomic_bool ready = false;
+
+  auto routine1 = [&]() -> async_coro::task<destructable> {
+    co_await switch_to_thread(async_coro::execution_thread::worker_thread);
+    ready = true;
+    co_await switch_to_thread(async_coro::execution_thread::main_thread);
+
+    co_return destructable{};
+  };
+
+  async_coro::scheduler scheduler;
+  scheduler.get_working_queue().set_num_threads(1);
+
+  EXPECT_EQ(num_instances, 0);
+
+  {
+    auto handle = scheduler.start_task(routine1());
+
+    std::thread th([handle2 = std::move(handle), &ready]() {
+      while (!ready) {
+        std::this_thread::yield();
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    });
+
+    ASSERT_TRUE(handle.done());
+
+    while (!ready) {
+      std::this_thread::yield();
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+
+    scheduler.update();
+
+    th.join();
+
+    scheduler.update();
+  }
+
+  EXPECT_EQ(num_instances, 0);
+}
+
+TEST(task, task_ref_result) {
+  static int num_instances = 0;
+
+  auto routine1 = []() -> async_coro::task<int&> {
+    co_return num_instances;
+  };
+
+  async_coro::scheduler scheduler;
+
+  auto handle = scheduler.start_task(routine1());
+
+  ASSERT_TRUE(handle.done());
+
+  EXPECT_EQ(&handle.get(), &num_instances);
+}
+
+TEST(task, task_const_ref_result) {
+  static int num_instances = 0;
+
+  auto routine1 = []() -> async_coro::task<const int&> {
+    co_return num_instances;
+  };
+
+  async_coro::scheduler scheduler;
+
+  auto handle = scheduler.start_task(routine1());
+
+  ASSERT_TRUE(handle.done());
+
+  EXPECT_EQ(&handle.get(), &num_instances);
+}
+
+TEST(task, task_ptr_result) {
+  static int num_instances = 0;
+
+  auto routine1 = []() -> async_coro::task<const int*> {
+    co_return &num_instances;
+  };
+
+  async_coro::scheduler scheduler;
+
+  auto handle = scheduler.start_task(routine1());
+
+  ASSERT_TRUE(handle.done());
+
+  EXPECT_EQ(handle.get(), &num_instances);
 }

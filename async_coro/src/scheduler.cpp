@@ -16,8 +16,8 @@ scheduler::~scheduler() {
   lock.unlock();
 
   for (auto& coro : coros) {
-    if (coro && coro->_handle) {
-      coro->_handle.destroy();
+    if (coro) {
+      coro->try_free_task_impl();
     }
   }
 }
@@ -69,6 +69,21 @@ void scheduler::continue_execution_impl(base_handle& handle_impl) {
       handle_impl._parent->_state == coroutine_state::suspended) {
     // wake up parent coroutine
     continue_execution(*handle_impl._parent);
+  } else if (handle_impl._state == coroutine_state::finished && handle_impl._parent == nullptr) {
+    // cleanup coroutine
+    {
+      // remove from managed
+      std::unique_lock lock{_mutex};
+      auto it = std::find(_managed_coroutines.begin(), _managed_coroutines.end(), &handle_impl);
+      ASYNC_CORO_ASSERT(it != _managed_coroutines.end());
+      if (it != _managed_coroutines.end()) {
+        if (*it != _managed_coroutines.back()) {
+          std::swap(*it, _managed_coroutines.back());
+        }
+        _managed_coroutines.resize(_managed_coroutines.size() - 1);
+      }
+    }
+    handle_impl.try_free_task_impl();
   }
 }
 
@@ -110,9 +125,7 @@ void scheduler::add_coroutine(base_handle& handle_impl,
 
     if (_is_destroying) {
       // if we are in destructor no way to run this coroutine
-      if (handle_impl._handle) {
-        handle_impl._handle.destroy();
-      }
+      handle_impl.try_free_task_impl();
       return;
     }
 
