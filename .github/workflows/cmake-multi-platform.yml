@@ -18,10 +18,10 @@ jobs:
       with:
         submodules: recursive
         
-    - name: Setup GCC
+    - name: Setup GCC 12
       uses: Dup4/actions-setup-gcc@v1
       with:
-        version: latest
+        version: 12
       
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
@@ -73,7 +73,7 @@ jobs:
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-    - name: Install newer Clang
+    - name: Install Clang 17
       run: |
        wget https://apt.llvm.org/llvm.sh
        chmod +x ./llvm.sh
