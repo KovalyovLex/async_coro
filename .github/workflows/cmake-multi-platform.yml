@@ -37,7 +37,7 @@ jobs:
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
         -DCMAKE_CXX_COMPILER=g++
         -DCMAKE_C_COMPILER=gcc
-        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo
         -DASAN_ENABLED=TRUE
         -S ${{ github.workspace }}
 
@@ -86,7 +86,7 @@ jobs:
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
         -DCMAKE_CXX_COMPILER=clang++-17
         -DCMAKE_C_COMPILER=clang-17
-        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo
         -DASAN_ENABLED=TRUE
         -S ${{ github.workspace }}
 
@@ -129,19 +129,19 @@ jobs:
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
         -DCMAKE_CXX_COMPILER=cl
         -DCMAKE_C_COMPILER=cl
-        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo
         -DASAN_ENABLED=TRUE
         -S ${{ github.workspace }}
 
     - name: Build
       # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config Release
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config RelWithDebInfo
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: ctest --build-config Release --output-on-failure
+      run: ctest --build-config RelWithDebInfo --output-on-failure
     
     - name: Archive run logs
       if: always()
@@ -199,19 +199,16 @@ jobs:
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
-        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo
         -DASAN_ENABLED=TRUE
         -S ${{ github.workspace }}
 
     - name: Build
-      # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config Release
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }}
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
-      # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: ctest --build-config Release --output-on-failure
+      run: ctest --output-on-failure
     
     - name: Archive run logs
       if: always()
