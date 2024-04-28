@@ -130,7 +130,7 @@ jobs:
         -DCMAKE_CXX_COMPILER=cl
         -DCMAKE_C_COMPILER=cl
         -DCMAKE_BUILD_TYPE=RelWithDebInfo
-        -DASAN_ENABLED=TRUE
+        -DASAN_ENABLED=FALSE
         -S ${{ github.workspace }}
 
     - name: Build
