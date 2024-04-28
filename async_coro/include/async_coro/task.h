@@ -242,7 +242,7 @@ class task_handle final {
 template <typename R>
 std::suspend_always promise_type<R>::final_suspend() noexcept {
   this->on_final_suspend();
-  if (auto* continue_with = this->get_task_handle<task_handle<R>>()) {
+  if (auto* continue_with = this->template get_task_handle<task_handle<R>>()) {
     continue_with->continue_impl(*this, internal::passkey{this});
   }
   return {};
