@@ -444,3 +444,45 @@ TEST(task, task_ptr_result) {
 
   EXPECT_EQ(handle.get(), &num_instances);
 }
+
+TEST(task, task_ref_result_await) {
+  static int num_instances = 0;
+
+  auto routine1 = []() -> async_coro::task<int&> {
+    co_return num_instances;
+  };
+
+  auto routine2 = [&]() -> async_coro::task<int&> {
+    auto& res = co_await routine1();
+    co_return res;
+  };
+
+  async_coro::scheduler scheduler;
+
+  auto handle = scheduler.start_task(routine2());
+
+  ASSERT_TRUE(handle.done());
+
+  EXPECT_EQ(&handle.get(), &num_instances);
+}
+
+TEST(task, task_const_ref_result_await) {
+  static int num_instances = 0;
+
+  auto routine1 = []() -> async_coro::task<const int&> {
+    co_return num_instances;
+  };
+
+  auto routine2 = [&]() -> async_coro::task<const int&> {
+    auto& res = co_await routine1();
+    co_return res;
+  };
+
+  async_coro::scheduler scheduler;
+
+  auto handle = scheduler.start_task(routine2());
+
+  ASSERT_TRUE(handle.done());
+
+  EXPECT_EQ(&handle.get(), &num_instances);
+}

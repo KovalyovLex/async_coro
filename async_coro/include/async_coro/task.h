@@ -87,7 +87,6 @@ struct task final {
 
   struct awaiter {
     task& t;
-    alignas(R) std::array<std::byte, sizeof(R)> result;
 
     bool await_ready() const noexcept { return t._handle.done(); }
 
@@ -95,10 +94,15 @@ struct task final {
     void await_suspend(std::coroutine_handle<T>) const noexcept {}
 
     R await_resume() {
-      auto* ptr = reinterpret_cast<R*>(result.data());
-      new (ptr) R(std::move(t._handle.promise().move_result()));
-      t._handle.promise().try_free_task(internal::passkey<task>{});
-      return *ptr;
+      if constexpr (!std::is_reference_v<R>) {
+        R res{t._handle.promise().move_result()};
+        t._handle.promise().try_free_task(internal::passkey<task>{});
+        return res;
+      } else {
+        auto& res = t._handle.promise().get_result_ref();
+        t._handle.promise().try_free_task(internal::passkey<task>{});
+        return res;
+      }
     }
   };
 

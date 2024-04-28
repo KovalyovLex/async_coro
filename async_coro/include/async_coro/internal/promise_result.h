@@ -6,15 +6,15 @@
 
 namespace async_coro::internal {
 template <typename T>
-struct promise_result_base {
+struct promise_result_base : protected store_type<T> {
   promise_result_base() : is_initialized(false), is_result(false) {}
 
   ~promise_result_base() noexcept(store_type<T>::nothrow_destructible) {
     if (is_initialized) {
       if (is_result) {
-        store.destroy_result();
+        this->destroy_result();
       } else {
-        store.destroy_exception();
+        this->destroy_exception();
       }
     }
   }
@@ -24,14 +24,14 @@ struct promise_result_base {
 #if !ASYNC_CORO_NO_EXCEPTIONS
   void unhandled_exception() noexcept {
     ASYNC_CORO_ASSERT(!is_initialized);
-    new (&store.exception) std::exception_ptr(std::current_exception());
+    new (&this->exception) std::exception_ptr(std::current_exception());
     is_initialized = true;
     is_result = false;
   }
 
   void check_exception() const {
     if (is_initialized && !is_result) {
-      std::rethrow_exception(store.exception);
+      std::rethrow_exception(this->exception);
     }
   }
 #else
@@ -39,7 +39,6 @@ struct promise_result_base {
 #endif
 
  protected:
-  ASYNC_CORO_NO_UNIQUE_ADDRESS store_type<T> store;
   bool is_initialized : 1;
   bool is_result : 1;
 };
@@ -50,7 +49,7 @@ struct promise_result : promise_result_base<T> {
   template <typename... TArgs>
   void return_value(TArgs&&... args) noexcept {
     ASYNC_CORO_ASSERT(!this->is_initialized);
-    this->store.result.inplace_init(std::forward<TArgs>(args)...);
+    this->result.inplace_init(std::forward<TArgs>(args)...);
     this->is_initialized = true;
     this->is_result = true;
   }
@@ -58,19 +57,19 @@ struct promise_result : promise_result_base<T> {
   auto& get_result_ref() noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
     this->check_exception();
     ASYNC_CORO_ASSERT(this->has_result());
-    return this->store.result.get_ref();
+    return this->result.get_ref();
   }
 
   const auto& get_result_cref() const noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
     this->check_exception();
     ASYNC_CORO_ASSERT(this->has_result());
-    return this->store.result.get_cref();
+    return this->result.get_cref();
   }
 
   auto move_result() noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
     this->check_exception();
     ASYNC_CORO_ASSERT(this->has_result());
-    return this->store.result.move();
+    return this->result.move();
   }
 };
 
