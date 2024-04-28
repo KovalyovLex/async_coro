@@ -12,6 +12,8 @@ jobs:
 
     strategy:
       fail-fast: true
+      matrix:
+        cmake_param: [-DASYNC_CORO_NO_EXCEPTIONS=TRUE, -DASYNC_CORO_NO_EXCEPTIONS=FALSE]
 
     steps:
     - uses: actions/checkout@v4
@@ -39,6 +41,7 @@ jobs:
         -DCMAKE_C_COMPILER=gcc
         -DCMAKE_BUILD_TYPE=RelWithDebInfo
         -DASAN_ENABLED=TRUE
+        ${{ matrix.cmake_param }}
         -S ${{ github.workspace }}
 
     - name: Build
@@ -60,6 +63,8 @@ jobs:
 
     strategy:
       fail-fast: true
+      matrix:
+        cmake_param: [-DASYNC_CORO_NO_EXCEPTIONS=TRUE, -DASYNC_CORO_NO_EXCEPTIONS=FALSE]
 
     steps:
     - uses: actions/checkout@v4
@@ -88,6 +93,7 @@ jobs:
         -DCMAKE_C_COMPILER=clang-17
         -DCMAKE_BUILD_TYPE=RelWithDebInfo
         -DASAN_ENABLED=TRUE
+        ${{ matrix.cmake_param }}
         -S ${{ github.workspace }}
 
     - name: Build

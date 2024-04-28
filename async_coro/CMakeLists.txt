@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.12)
  
 project(async_coro)
 
+option(ASYNC_CORO_NO_EXCEPTIONS "Disable exceptions support for async_coro library" FALSE)
+
+
 file(GLOB_RECURSE async_coro_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "src/**.h" "src/**.cpp")
 
 add_library(async_coro ${async_coro_src})
@@ -13,3 +16,10 @@ target_compile_options(async_coro PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
   $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror>
 )
+
+
+if(ASYNC_CORO_NO_EXCEPTIONS)
+  target_compile_definitions(async_coro PUBLIC
+    ASYNC_CORO_NO_EXCEPTIONS=1
+  )
+endif()
