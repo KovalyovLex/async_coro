@@ -70,7 +70,7 @@ struct result_coro_type<T&> {
 
 #if ASYNC_CORO_NO_EXCEPTIONS
 template <typename T>
-union store_type {
+struct store_type {
   static inline constexpr bool nothrow_destructible =
       std::is_nothrow_destructible_v<T>;
 
@@ -87,7 +87,7 @@ union store_type {
 };
 
 template <>
-union store_type<void> {
+struct store_type<void> {
   static inline constexpr bool nothrow_destructible = true;
 
   store_type() noexcept {}
