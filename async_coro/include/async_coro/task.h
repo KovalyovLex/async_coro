@@ -88,6 +88,11 @@ struct task final {
   struct awaiter {
     task& t;
 
+    awaiter(task& tas) noexcept : t(tas) {}
+    awaiter(const awaiter&) = delete;
+    awaiter(awaiter&&) = delete;
+    ~awaiter() noexcept = default;
+
     bool await_ready() const noexcept { return t._handle.done(); }
 
     template <typename T>
@@ -102,10 +107,8 @@ struct task final {
   auto operator co_await() && {
     return awaiter(*this);
   }
-  auto operator co_await() & {
-    return awaiter(*this);
-  }
 
+  auto operator co_await() & = delete;
   auto operator co_await() const& = delete;
   auto operator co_await() const&& = delete;
 
