@@ -24,7 +24,7 @@ concept embeddable_task =
     requires(T a) { a.embed_task(std::declval<base_handle&>()); };
 
 template <typename R>
-struct promise_type final : internal::promise_result<R>, base_handle {
+struct promise_type final : internal::promise_result<R> {
   // construct my promise from me
   constexpr auto get_return_object() noexcept {
     return std::coroutine_handle<promise_type>::from_promise(*this);
@@ -32,7 +32,7 @@ struct promise_type final : internal::promise_result<R>, base_handle {
 
   // all promises await to be started in scheduller or after embedding
   constexpr auto initial_suspend() noexcept {
-    init_promise(get_return_object());
+    this->init_promise(get_return_object());
     return std::suspend_always();
   }
 
@@ -51,12 +51,12 @@ struct promise_type final : internal::promise_result<R>, base_handle {
     return std::move(in);
   }
 
-  void set_continuation(task_handle<R>* handle, internal::passkey_any<task_handle<R>>) {
-    set_continuation_impl(handle);
+  void set_task_handle(task_handle<R>* handle, internal::passkey_any<task_handle<R>>) {
+    this->set_task_handle_impl(handle);
   }
 
   void try_free_task(internal::passkey_any<task<R>>) {
-    try_free_task_impl();
+    this->try_free_task_impl();
   }
 };
 
@@ -132,7 +132,7 @@ class task_handle final {
       : _handle(std::move(h)) {
     ASYNC_CORO_ASSERT(_handle);
     if (_handle) [[likely]] {
-      _handle.promise().set_continuation(this, internal::passkey{this});
+      _handle.promise().set_task_handle(this, internal::passkey{this});
     }
   }
 
@@ -141,7 +141,7 @@ class task_handle final {
       : _handle(std::exchange(other._handle, nullptr)),
         _continuation(std::move(other._continuation)) {
     if (_handle) {
-      _handle.promise().set_continuation(this, internal::passkey{this});
+      _handle.promise().set_task_handle(this, internal::passkey{this});
     }
   }
 
@@ -151,13 +151,13 @@ class task_handle final {
       return *this;
     }
     if (_handle) {
-      _handle.promise().set_continuation(nullptr, internal::passkey{this});
+      _handle.promise().set_task_handle(nullptr, internal::passkey{this});
     }
     _handle = std::exchange(other._handle, {});
     _continuation = std::move(other._continuation);
 
     if (_handle) {
-      _handle.promise().set_continuation(this, internal::passkey{this});
+      _handle.promise().set_task_handle(this, internal::passkey{this});
     }
 
     return *this;
@@ -166,7 +166,7 @@ class task_handle final {
   ~task_handle() noexcept {
     _continuation = nullptr;
     if (_handle) {
-      _handle.promise().set_continuation(nullptr, internal::passkey{this});
+      _handle.promise().set_task_handle(nullptr, internal::passkey{this});
     }
   }
 
@@ -241,8 +241,8 @@ class task_handle final {
 
 template <typename R>
 std::suspend_always promise_type<R>::final_suspend() noexcept {
-  on_final_suspend();
-  if (auto* continue_with = get_continuation<task_handle<R>>()) {
+  this->on_final_suspend();
+  if (auto* continue_with = this->get_task_handle<task_handle<R>>()) {
     continue_with->continue_impl(*this, internal::passkey{this});
   }
   return {};

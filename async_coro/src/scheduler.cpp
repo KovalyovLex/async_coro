@@ -65,25 +65,26 @@ void scheduler::continue_execution_impl(base_handle& handle_impl) {
                                                     : coroutine_state::suspended;
   }
 
-  if (handle_impl._state == coroutine_state::finished && handle_impl._parent &&
-      handle_impl._parent->_state == coroutine_state::suspended) {
-    // wake up parent coroutine
-    continue_execution(*handle_impl._parent);
-  } else if (handle_impl._state == coroutine_state::finished && handle_impl._parent == nullptr) {
-    // cleanup coroutine
-    {
-      // remove from managed
-      std::unique_lock lock{_mutex};
-      auto it = std::find(_managed_coroutines.begin(), _managed_coroutines.end(), &handle_impl);
-      ASYNC_CORO_ASSERT(it != _managed_coroutines.end());
-      if (it != _managed_coroutines.end()) {
-        if (*it != _managed_coroutines.back()) {
-          std::swap(*it, _managed_coroutines.back());
+  if (handle_impl._state == coroutine_state::finished) {
+    if (auto* parent = handle_impl.get_parent(); parent && parent->_state == coroutine_state::suspended) {
+      // wake up parent coroutine
+      continue_execution(*handle_impl._parent);
+    } else if (!parent) {
+      // cleanup coroutine
+      {
+        // remove from managed
+        std::unique_lock lock{_mutex};
+        auto it = std::find(_managed_coroutines.begin(), _managed_coroutines.end(), &handle_impl);
+        ASYNC_CORO_ASSERT(it != _managed_coroutines.end());
+        if (it != _managed_coroutines.end()) {
+          if (*it != _managed_coroutines.back()) {
+            std::swap(*it, _managed_coroutines.back());
+          }
+          _managed_coroutines.resize(_managed_coroutines.size() - 1);
         }
-        _managed_coroutines.resize(_managed_coroutines.size() - 1);
       }
+      handle_impl.try_free_task_impl();
     }
-    handle_impl.try_free_task_impl();
   }
 }
 
@@ -184,7 +185,7 @@ void scheduler::on_child_coro_added(base_handle& parent, base_handle& child) {
 
   child._scheduler = this;
   child._execution_thread = parent._execution_thread;
-  child._parent = &parent;
+  child.set_parent(parent);
   child._state = coroutine_state::suspended;
 
   // start execution of internal coroutine
