@@ -102,8 +102,10 @@ struct task final {
   auto operator co_await() && {
     return awaiter(*this);
   }
+  auto operator co_await() & {
+    return awaiter(*this);
+  }
 
-  auto operator co_await() & = delete;
   auto operator co_await() const& = delete;
   auto operator co_await() const&& = delete;
 
