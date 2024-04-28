@@ -1,6 +1,6 @@
 #pragma once
 
-#include <async_coro/base_handle.h>
+#include <async_coro/config.h>
 #include <async_coro/internal/passkey.h>
 #include <async_coro/move_only_function.h>
 #include <async_coro/task.h>
@@ -14,6 +14,8 @@
 namespace async_coro {
 template <typename R>
 struct task;
+
+class base_handle;
 
 enum class execution_thread : std::uint8_t {
   undefined,
