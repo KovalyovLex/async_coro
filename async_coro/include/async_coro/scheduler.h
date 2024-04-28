@@ -49,7 +49,6 @@ class scheduler {
 
   bool is_current_thread_fits(execution_thread thread) noexcept;
 
-  // TODO: make it private
   // Embed coroutine
   void on_child_coro_added(base_handle& parent, base_handle& child);
   // Can continue execution immediatelly or do same as plan_continue_execution
