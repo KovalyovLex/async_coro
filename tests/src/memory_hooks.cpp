@@ -11,6 +11,10 @@ void* operator new(std::size_t count) {
   return mem + 1;
 }
 
+void* operator new(std::size_t count, const std::nothrow_t&) noexcept {
+  return operator new(count);
+}
+
 void operator delete(void* ptr) noexcept {
   if (ptr == nullptr) {
     return;
@@ -22,5 +26,9 @@ void operator delete(void* ptr) noexcept {
 }
 
 void operator delete(void* ptr, std::size_t) noexcept {
+  return operator delete(ptr);
+}
+
+void operator delete(void* ptr, const std::nothrow_t&) noexcept {
   return operator delete(ptr);
 }
