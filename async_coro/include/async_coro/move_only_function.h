@@ -9,7 +9,53 @@
 
 namespace async_coro {
 namespace internal {
-template <size_t SFOBuffer, typename T>
+
+template <typename Fx, typename = void>
+struct deduce_signature {};  // can't deduce signature when &_Fx::operator() is missing, inaccessible, or ambiguous
+
+template <typename T>
+struct deduce_signature_impl {
+  static_assert(
+      always_false<T>::value,
+      "move_only_function cant deduce signature.");
+};
+
+template <typename R, typename T, typename... TArgs>
+struct deduce_signature_impl<R (T::*)(TArgs...) const> {
+  using type = R(TArgs...);
+};
+
+template <typename R, typename T, typename... TArgs>
+struct deduce_signature_impl<R (T::*)(TArgs...)> {
+  using type = R(TArgs...);
+};
+
+template <typename R, typename... TArgs>
+struct deduce_signature_impl<R (*)(TArgs...)> {
+  using type = R(TArgs...);
+};
+
+template <typename R, typename T, typename... TArgs>
+struct deduce_signature_impl<R (T::*)(TArgs...) const noexcept> {
+  using type = R(TArgs...) noexcept;
+};
+
+template <typename R, typename T, typename... TArgs>
+struct deduce_signature_impl<R (T::*)(TArgs...) noexcept> {
+  using type = R(TArgs...) noexcept;
+};
+
+template <typename R, typename... TArgs>
+struct deduce_signature_impl<R (*)(TArgs...) noexcept> {
+  using type = R(TArgs...) noexcept;
+};
+
+template <typename Fx>
+struct deduce_signature<Fx, std::void_t<decltype(&Fx::operator())>> {
+  using type = typename deduce_signature_impl<decltype(&Fx::operator())>::type;
+};
+
+template <size_t SFOSize, typename TFunc, typename T>
 class function_impl_call {
   static_assert(
       always_false<T>::value,
@@ -25,7 +71,7 @@ union small_buffer {
 
   small_buffer() noexcept {}
   explicit small_buffer(std::nullptr_t) noexcept {
-    std::memset(&mem[0], 0, Size);
+    fx = nullptr;
   }
   small_buffer(const small_buffer& other) noexcept {
     std::memcpy(&mem[0], &other.mem[0], Size);
@@ -33,20 +79,20 @@ union small_buffer {
   ~small_buffer() noexcept {}
 
   small_buffer& operator=(std::nullptr_t) noexcept {
-    std::memset(&mem[0], 0, Size);
+    fx = nullptr;
     return *this;
   }
 
   void swap_and_reset(small_buffer& other) noexcept {
     std::memcpy(&mem[0], &other.mem[0], Size);
-    std::memset(&other.mem[0], 0, Size);
+    other.fx = nullptr;
   }
 };
 
-template <size_t SFOBuffer, typename R, typename... TArgs>
-class function_impl_call<SFOBuffer, R(TArgs...)> {
+template <size_t SFOSize, typename TFunc, typename R, typename... TArgs>
+class function_impl_call<SFOSize, TFunc, R(TArgs...)> {
  protected:
-  using t_small_buffer = small_buffer<SFOBuffer>;
+  using t_small_buffer = small_buffer<SFOSize>;
 
   using t_invoke_f = R (*)(t_small_buffer&, TArgs&&...);
 
@@ -58,8 +104,7 @@ class function_impl_call<SFOBuffer, R(TArgs...)> {
   function_impl_call() noexcept {}
 
   function_impl_call(std::nullptr_t) noexcept
-      : _invoke(nullptr),
-        _buffer(nullptr) {
+      : _invoke(nullptr) {
   }
 
   function_impl_call(function_impl_call&&) noexcept = default;
@@ -69,18 +114,17 @@ class function_impl_call<SFOBuffer, R(TArgs...)> {
     if (_invoke == nullptr) [[unlikely]] {
       std::abort();
     }
-    return _invoke(_buffer, std::forward<TArgs>(args)...);
+    return _invoke(static_cast<const TFunc*>(this)->_buffer, std::forward<TArgs>(args)...);
   }
 
  protected:
   t_invoke_f _invoke;
-  mutable t_small_buffer _buffer;
 };
 
-template <size_t SFOBuffer, typename R, typename... TArgs>
-class function_impl_call<SFOBuffer, R(TArgs...) noexcept> {
+template <size_t SFOSize, typename TFunc, typename R, typename... TArgs>
+class function_impl_call<SFOSize, TFunc, R(TArgs...) noexcept> {
  protected:
-  using t_small_buffer = small_buffer<SFOBuffer>;
+  using t_small_buffer = small_buffer<SFOSize>;
 
   using t_invoke_f = R (*)(t_small_buffer&, TArgs&&...) noexcept;
 
@@ -92,8 +136,7 @@ class function_impl_call<SFOBuffer, R(TArgs...) noexcept> {
   function_impl_call() noexcept {}
 
   function_impl_call(std::nullptr_t) noexcept
-      : _invoke(nullptr),
-        _buffer(nullptr) {
+      : _invoke(nullptr) {
   }
 
   function_impl_call(function_impl_call&&) noexcept = default;
@@ -103,18 +146,19 @@ class function_impl_call<SFOBuffer, R(TArgs...) noexcept> {
     if (_invoke == nullptr) [[unlikely]] {
       std::abort();
     }
-    return _invoke(_buffer, std::forward<TArgs>(args)...);
+    return _invoke(static_cast<const TFunc*>(this)->_buffer, std::forward<TArgs>(args)...);
   }
 
  protected:
   t_invoke_f _invoke;
-  mutable t_small_buffer _buffer;
 };
 }  // namespace internal
 
-template <typename FTy, size_t SFOBuffer = sizeof(void*)>
-class move_only_function : public internal::function_impl_call<SFOBuffer, FTy> {
-  using super = internal::function_impl_call<SFOBuffer, FTy>;
+template <typename FTy, size_t SFOSize = sizeof(void*)>
+class move_only_function : public internal::function_impl_call<SFOSize, move_only_function<FTy, SFOSize>, FTy> {
+  using super = internal::function_impl_call<SFOSize, move_only_function<FTy, SFOSize>, FTy>;
+
+  friend super;
 
   enum deinit_op {
     action_move,
@@ -127,7 +171,7 @@ class move_only_function : public internal::function_impl_call<SFOBuffer, FTy> {
 
   template <typename Fx>
   inline static constexpr bool is_small_f =
-      sizeof(Fx) <= SFOBuffer && alignof(Fx) <= alignof(void*);
+      sizeof(Fx) <= SFOSize && alignof(Fx) <= alignof(typename super::t_small_buffer);
 
   template <typename Fx>
   inline static constexpr bool is_noexecept_init =
@@ -139,14 +183,14 @@ class move_only_function : public internal::function_impl_call<SFOBuffer, FTy> {
   move_only_function(no_init) noexcept {}
 
  public:
-  move_only_function() noexcept : super(nullptr), _move_or_destroy(nullptr) {}
+  move_only_function() noexcept : super(nullptr), _buffer(nullptr), _move_or_destroy(nullptr) {}
 
   move_only_function(std::nullptr_t) noexcept : move_only_function() {}
 
   move_only_function(const move_only_function&) = delete;
 
   move_only_function(move_only_function&& other) noexcept
-      : super(std::move(other)), _move_or_destroy(other._move_or_destroy) {
+      : super(std::move(other)), _move_or_destroy(other._move_or_destroy), _buffer(std::move(other._buffer)) {
     if (_move_or_destroy) {
       _move_or_destroy(*this, &other, action_move);
     }
@@ -273,6 +317,10 @@ class move_only_function : public internal::function_impl_call<SFOBuffer, FTy> {
     this->_invoke = nullptr;
   }
 
+  static super::t_small_buffer& get_buffer(const super* self) noexcept {
+    return static_cast<const move_only_function*>(self)->_buffer;
+  }
+
   template <typename TFunc, typename R, typename... TArgs>
   static auto make_invoke(R (*)(typename super::t_small_buffer&, TArgs...)) noexcept {
     return static_cast<typename super::t_invoke_f>(
@@ -289,58 +337,11 @@ class move_only_function : public internal::function_impl_call<SFOBuffer, FTy> {
 
  private:
   t_move_or_destroy_f _move_or_destroy;
+  mutable super::t_small_buffer _buffer;
 };
 
 template <typename R, class... TArgs>
 move_only_function(R(TArgs...)) -> move_only_function<R(TArgs...)>;
-
-namespace internal {
-template <typename Fx, typename = void>
-struct deduce_signature {};  // can't deduce signature when &_Fx::operator() is missing, inaccessible, or ambiguous
-
-template <typename T>
-struct deduce_signature_impl {
-  static_assert(
-      always_false<T>::value,
-      "move_only_function cant deduce signature.");
-};
-
-template <typename R, typename T, typename... TArgs>
-struct deduce_signature_impl<R (T::*)(TArgs...) const> {
-  using type = R(TArgs...);
-};
-
-template <typename R, typename T, typename... TArgs>
-struct deduce_signature_impl<R (T::*)(TArgs...)> {
-  using type = R(TArgs...);
-};
-
-template <typename R, typename... TArgs>
-struct deduce_signature_impl<R (*)(TArgs...)> {
-  using type = R(TArgs...);
-};
-
-template <typename R, typename T, typename... TArgs>
-struct deduce_signature_impl<R (T::*)(TArgs...) const noexcept> {
-  using type = R(TArgs...) noexcept;
-};
-
-template <typename R, typename T, typename... TArgs>
-struct deduce_signature_impl<R (T::*)(TArgs...) noexcept> {
-  using type = R(TArgs...) noexcept;
-};
-
-template <typename R, typename... TArgs>
-struct deduce_signature_impl<R (*)(TArgs...) noexcept> {
-  using type = R(TArgs...) noexcept;
-};
-
-template <typename Fx>
-struct deduce_signature<Fx, std::void_t<decltype(&Fx::operator())>> {
-  using type = typename deduce_signature_impl<decltype(&Fx::operator())>::type;
-};
-
-}  // namespace internal
 
 template <typename Fx>
 move_only_function(Fx) -> move_only_function<typename internal::deduce_signature<Fx>::type>;
