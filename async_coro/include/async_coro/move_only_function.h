@@ -183,7 +183,7 @@ class move_only_function : public internal::function_impl_call<SFOSize, move_onl
   move_only_function(no_init) noexcept {}
 
  public:
-  move_only_function() noexcept : super(nullptr), _buffer(nullptr), _move_or_destroy(nullptr) {}
+  move_only_function() noexcept : super(nullptr), _move_or_destroy(nullptr), _buffer(nullptr) {}
 
   move_only_function(std::nullptr_t) noexcept : move_only_function() {}
 
@@ -327,10 +327,10 @@ class move_only_function : public internal::function_impl_call<SFOSize, move_onl
         [](typename super::t_small_buffer& buffer, TArgs&&... args) noexcept(super::is_noexcept_invoke) {
           if constexpr (is_small_f<TFunc>) {
             auto& fx_t = reinterpret_cast<TFunc&>(buffer.mem[0]);
-            return std::invoke(fx_t, std::forward<TArgs>(args)...);
+            return fx_t(std::forward<TArgs>(args)...);
           } else {
             auto& fx_t = *static_cast<TFunc*>(buffer.fx);
-            return std::invoke(fx_t, std::forward<TArgs>(args)...);
+            return fx_t(std::forward<TArgs>(args)...);
           }
         });
   }
