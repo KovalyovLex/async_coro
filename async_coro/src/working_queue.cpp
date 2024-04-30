@@ -1,6 +1,8 @@
 #include <async_coro/config.h>
 #include <async_coro/working_queue.h>
 
+#include <algorithm>
+
 namespace async_coro {
 working_queue::~working_queue() {
   _num_threads_to_destroy.fetch_add(_num_alive_threads.load(std::memory_order::acquire),

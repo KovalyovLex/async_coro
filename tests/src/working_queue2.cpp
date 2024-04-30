@@ -2,6 +2,8 @@
 
 #include <async_coro/config.h>
 
+#include <algorithm>
+
 namespace async_coro {
 working_queue2::~working_queue2() {
   {
