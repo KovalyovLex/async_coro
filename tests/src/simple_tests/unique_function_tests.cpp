@@ -1,4 +1,4 @@
-#include <async_coro/move_only_function.h>
+#include <async_coro/unique_function.h>
 #include <gtest/gtest.h>
 
 #include <chrono>
@@ -13,7 +13,7 @@ static auto test_small_f() {
 
   const size_t before = mem_hook::num_allocated;
 
-  move_only_function<void() noexcept(is_noexcept)> f;
+  unique_function<void() noexcept(is_noexcept)> f;
 
   EXPECT_FALSE(f);
   static bool was_called = false;
@@ -57,9 +57,9 @@ static auto test_small_f() {
   EXPECT_EQ(before, mem_hook::num_allocated);
 }
 
-TEST(move_only_function, except_small_f) { test_small_f<false>(); }
+TEST(unique_function, except_small_f) { test_small_f<false>(); }
 
-TEST(move_only_function, noexcept_small_f) { test_small_f<true>(); }
+TEST(unique_function, noexcept_small_f) { test_small_f<true>(); }
 
 template <bool is_noexcept>
 static auto test_large_f() {
@@ -67,7 +67,7 @@ static auto test_large_f() {
 
   const size_t before = mem_hook::num_allocated;
 
-  move_only_function<void() noexcept(is_noexcept)> f;
+  unique_function<void() noexcept(is_noexcept)> f;
 
   EXPECT_FALSE(f);
   bool was_called = false;
@@ -108,14 +108,14 @@ static auto test_large_f() {
   EXPECT_EQ(mem_hook::num_allocated, before);
 }
 
-TEST(move_only_function, noexcept_large_f) { test_small_f<true>(); }
+TEST(unique_function, noexcept_large_f) { test_small_f<true>(); }
 
-TEST(move_only_function, except_large_f) { test_small_f<false>(); }
+TEST(unique_function, except_large_f) { test_small_f<false>(); }
 
-TEST(move_only_function, size_check) {
+TEST(unique_function, size_check) {
   using namespace async_coro;
 
-  EXPECT_EQ(sizeof(move_only_function<void()>), sizeof(void*) * 3);
+  EXPECT_EQ(sizeof(unique_function<void()>), sizeof(void*) * 3);
 }
 
 template <bool is_noexcept>
@@ -151,7 +151,7 @@ static auto num_moves_large_f() {
 
   cleaner clear{};
 
-  move_only_function<void() noexcept(is_noexcept)> f;
+  unique_function<void() noexcept(is_noexcept)> f;
 
   EXPECT_EQ(num_moves, 0);
 
@@ -173,11 +173,11 @@ static auto num_moves_large_f() {
   EXPECT_EQ(num_copyes, 0);
 }
 
-TEST(move_only_function, num_moves_large_f_noexcept) {
+TEST(unique_function, num_moves_large_f_noexcept) {
   num_moves_large_f<true>();
 }
 
-TEST(move_only_function, num_moves_large_f_except) {
+TEST(unique_function, num_moves_large_f_except) {
   num_moves_large_f<true>();
 }
 
@@ -208,7 +208,7 @@ static auto num_moves_small_f() {
 
   cleaner clear{};
 
-  move_only_function<void() noexcept(is_noexcept), sizeof(void*) + add_size> f;
+  unique_function<void() noexcept(is_noexcept), sizeof(void*) + add_size> f;
 
   EXPECT_EQ(num_moves, 0);
 
@@ -230,23 +230,23 @@ static auto num_moves_small_f() {
   EXPECT_EQ(num_copyes, 0);
 }
 
-TEST(move_only_function, num_moves_small_f_noexcept) {
+TEST(unique_function, num_moves_small_f_noexcept) {
   num_moves_small_f<true, 0>();
 }
 
-TEST(move_only_function, num_moves_small_f_except) {
+TEST(unique_function, num_moves_small_f_except) {
   num_moves_small_f<false, 0>();
 }
 
-TEST(move_only_function, num_moves_small_f_exra_size_noexcept) {
+TEST(unique_function, num_moves_small_f_exra_size_noexcept) {
   num_moves_small_f<true, sizeof(void*) + 4>();
 }
 
-TEST(move_only_function, num_moves_small_f_exra_size_except) {
+TEST(unique_function, num_moves_small_f_exra_size_except) {
   num_moves_small_f<false, sizeof(void*) + 4>();
 }
 
-TEST(move_only_function, forward_value) {
+TEST(unique_function, forward_value) {
   using namespace async_coro;
 
   static int num_moves = 0;
@@ -268,7 +268,7 @@ TEST(move_only_function, forward_value) {
 
   cleaner clean{};
 
-  move_only_function<void(test_struct)> f = [](auto s) {
+  unique_function<void(test_struct)> f = [](auto s) {
     EXPECT_NE(&s, nullptr);
   };
 
@@ -281,7 +281,7 @@ TEST(move_only_function, forward_value) {
   EXPECT_EQ(num_moves, 1);
 }
 
-TEST(move_only_function, return_value) {
+TEST(unique_function, return_value) {
   using namespace async_coro;
 
   static int num_moves = 0;
@@ -303,7 +303,7 @@ TEST(move_only_function, return_value) {
 
   cleaner clean{};
 
-  move_only_function<test_struct(int)> f = [](auto s) {
+  unique_function<test_struct(int)> f = [](auto s) {
     EXPECT_EQ(s, 3);
     return test_struct{};
   };
@@ -317,7 +317,7 @@ TEST(move_only_function, return_value) {
   EXPECT_EQ(num_moves, 0);
 }
 
-TEST(move_only_function, rvalue_forward) {
+TEST(unique_function, rvalue_forward) {
   using namespace async_coro;
 
   static int num_moves = 0;
@@ -340,7 +340,7 @@ TEST(move_only_function, rvalue_forward) {
   cleaner clean{};
 
   {
-    move_only_function<void(test_struct&&, int)> f = [](auto&& s, auto i) {
+    unique_function<void(test_struct&&, int)> f = [](auto&& s, auto i) {
       EXPECT_NE(&s, nullptr);
       EXPECT_EQ(i, 7);
     };
@@ -355,7 +355,7 @@ TEST(move_only_function, rvalue_forward) {
   }
 
   {
-    move_only_function<void(test_struct&&)> f = [](auto s) {
+    unique_function<void(test_struct&&)> f = [](auto s) {
       EXPECT_NE(&s, nullptr);
     };
 
@@ -369,13 +369,13 @@ TEST(move_only_function, rvalue_forward) {
   }
 }
 
-TEST(move_only_function, mutable_f) {
+TEST(unique_function, mutable_f) {
   using namespace async_coro;
 
   {
     int num_calls = 0;
 
-    move_only_function<void()> f = [called = false, &num_calls]() mutable {
+    unique_function<void()> f = [called = false, &num_calls]() mutable {
       if (!called) {
         called = true;
         num_calls++;
@@ -394,13 +394,13 @@ TEST(move_only_function, mutable_f) {
   }
 }
 
-TEST(move_only_function, mutable_noexcept_f) {
+TEST(unique_function, mutable_noexcept_f) {
   using namespace async_coro;
 
   {
     int num_calls = 0;
 
-    move_only_function<void() noexcept> f = [called = false, &num_calls]() mutable noexcept {
+    unique_function<void() noexcept> f = [called = false, &num_calls]() mutable noexcept {
       if (!called) {
         called = true;
         num_calls++;
@@ -419,60 +419,60 @@ TEST(move_only_function, mutable_noexcept_f) {
   }
 }
 
-TEST(move_only_function, lref_arg) {
+TEST(unique_function, lref_arg) {
   using namespace async_coro;
 
   static int val = 0;
 
-  move_only_function<void(int&)> f = [](auto& i) mutable noexcept {
+  unique_function<void(int&)> f = [](auto& i) mutable noexcept {
     EXPECT_EQ(&i, &val);
   };
 
   f(val);
 }
 
-TEST(move_only_function, const_lref_arg) {
+TEST(unique_function, const_lref_arg) {
   using namespace async_coro;
 
   static int val = 0;
 
-  move_only_function<void(const int&)> f = [](auto& i) mutable noexcept {
+  unique_function<void(const int&)> f = [](auto& i) mutable noexcept {
     EXPECT_EQ(&i, &val);
   };
 
   f(val);
 }
 
-TEST(move_only_function, rref_arg) {
+TEST(unique_function, rref_arg) {
   using namespace async_coro;
 
   static int val = 0;
 
-  move_only_function<void(int&&)> f = [](auto&& i) mutable noexcept {
+  unique_function<void(int&&)> f = [](auto&& i) mutable noexcept {
     EXPECT_EQ(&i, &val);
   };
 
   f(std::move(val));
 }
 
-TEST(move_only_function, val_arg) {
+TEST(unique_function, val_arg) {
   using namespace async_coro;
 
   static int val = 0;
 
-  move_only_function<void(int)> f = [](auto&& i) mutable noexcept {
+  unique_function<void(int)> f = [](auto&& i) mutable noexcept {
     EXPECT_NE(&i, &val);
   };
 
   f(val);
 }
 
-TEST(move_only_function, speed_invoke_function) {
+TEST(unique_function, speed_invoke_function) {
   using namespace async_coro;
 
   static int val = 0;
 
-  move_only_function<void(int)> f1 = [](auto&& i) mutable noexcept {
+  unique_function<void(int)> f1 = [](auto&& i) mutable noexcept {
     EXPECT_NE(&i, &val);
   };
 
@@ -492,5 +492,31 @@ TEST(move_only_function, speed_invoke_function) {
   }
   const auto f2_time = std::chrono::steady_clock::now() - t2;
 
-  std::cout << "move_only_function time: " << f1_time.count() << ", std::function time: " << f2_time.count() << std::endl;
+  std::cout << "unique_function time: " << f1_time.count() << ", std::function time: " << f2_time.count() << std::endl;
+}
+
+template <class FxSig, class Fx>
+using invocable = async_coro::internal::is_invocable_by_signature<FxSig, Fx>;
+
+int testF() { return 0; }
+bool testFS(int) { return false; }
+
+TEST(unique_function, compilation) {
+  auto testF1 = []() -> bool {
+    return false;
+  };
+
+  auto testF2 = [](auto) noexcept -> bool {
+    return false;
+  };
+
+  auto testF3 = [a = 3]() mutable {
+    a = 4;
+  };
+
+  static_assert(invocable<void(), decltype(testF1)>::value);
+  static_assert(invocable<void(), decltype(testF3)>::value);
+  static_assert(!invocable<void(), decltype(testF2)>::value);
+  static_assert(invocable<void(int) noexcept, decltype(testF2)>::value);
+  static_assert(!invocable<void() noexcept, decltype(testF1)>::value);
 }

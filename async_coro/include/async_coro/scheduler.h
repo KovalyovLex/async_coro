@@ -2,8 +2,8 @@
 
 #include <async_coro/config.h>
 #include <async_coro/internal/passkey.h>
-#include <async_coro/move_only_function.h>
 #include <async_coro/task.h>
+#include <async_coro/unique_function.h>
 #include <async_coro/working_queue.h>
 
 #include <coroutine>
@@ -68,8 +68,8 @@ class scheduler {
   std::mutex _mutex;
   working_queue _queue;
   std::vector<base_handle*> _managed_coroutines;  // guarded by _mutex
-  std::vector<move_only_function<void(scheduler&)>> _update_tasks;
-  std::vector<move_only_function<void(scheduler&)>> _update_tasks_syncronized;  // guarded by _task_mutex
+  std::vector<unique_function<void(scheduler&)>> _update_tasks;
+  std::vector<unique_function<void(scheduler&)>> _update_tasks_syncronized;  // guarded by _task_mutex
   std::thread::id _main_thread = {};
   bool _is_destroying = false;  // guarded by _mutex
   std::atomic_bool _has_syncronized_tasks = false;

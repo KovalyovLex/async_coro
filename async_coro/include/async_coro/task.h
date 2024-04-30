@@ -4,6 +4,7 @@
 #include <async_coro/config.h>
 #include <async_coro/internal/passkey.h>
 #include <async_coro/internal/promise_result.h>
+#include <async_coro/unique_function.h>
 
 #include <concepts>
 #include <coroutine>
@@ -130,7 +131,7 @@ struct task final {
 template <typename R>
 class task_handle final {
  public:
-  using continuation_t = move_only_function<void(promise_type<R>&) noexcept>;
+  using continuation_t = unique_function<void(promise_type<R>&) noexcept>;
 
   task_handle() noexcept = default;
   explicit task_handle(std::coroutine_handle<async_coro::promise_type<R>> h) noexcept

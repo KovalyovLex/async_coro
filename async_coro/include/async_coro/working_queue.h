@@ -2,7 +2,7 @@
 
 #include <async_coro/atomic_queue.h>
 #include <async_coro/config.h>
-#include <async_coro/move_only_function.h>
+#include <async_coro/unique_function.h>
 
 #include <concepts>
 #include <condition_variable>
@@ -20,7 +20,7 @@ class working_queue {
 
  public:
   // use function with Small Function Optimization buffer of 3 pointers
-  using task_function = move_only_function<void(), sizeof(void*) * 3>;
+  using task_function = unique_function<void(), sizeof(void*) * 3>;
 
   static inline constexpr uint32_t bucket_size_default =
       static_cast<uint32_t>(-1);

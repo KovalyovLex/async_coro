@@ -36,7 +36,7 @@ TEST_P(working_queue_speed_tests, atomic) {
   const auto parallel_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t1);
   is_executing = false;
 
-  const async_coro::move_only_function<void(int)> f = [&](int) {
+  const async_coro::unique_function<void(int)> f = [&](int) {
     EXPECT_TRUE(is_executing);
   };
 
@@ -75,7 +75,7 @@ TEST_P(working_queue_speed_tests, dummy) {
   const auto parallel_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t1);
   is_executing = false;
 
-  const async_coro::move_only_function<void(int)> f = [&](int) {
+  const async_coro::unique_function<void(int)> f = [&](int) {
     EXPECT_TRUE(is_executing);
   };
 
@@ -114,7 +114,7 @@ TEST_P(working_queue_speed_tests, moodycamel) {
   const auto parallel_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t1);
   is_executing = false;
 
-  const async_coro::move_only_function<void(int)> f = [&](int) {
+  const async_coro::unique_function<void(int)> f = [&](int) {
     EXPECT_TRUE(is_executing);
   };
 
@@ -168,7 +168,7 @@ TEST_P(working_queue_tests, sync_results) {
 
   EXPECT_NE(range_copy, range);
 
-  const async_coro::move_only_function f = [&](const int& v) {
+  const async_coro::unique_function f = [&](const int& v) {
     const auto idx = &v - range.data();
     range_copy[idx] = v;
   };
