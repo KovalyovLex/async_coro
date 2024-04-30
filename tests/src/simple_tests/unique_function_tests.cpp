@@ -511,6 +511,7 @@ TEST(unique_function, compilation) {
   };
 
   auto testF3 = [a = 3]() mutable {
+    EXPECT_EQ(a, 3);
     a = 4;
   };
 
