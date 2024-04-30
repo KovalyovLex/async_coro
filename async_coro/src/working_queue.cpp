@@ -114,7 +114,7 @@ void working_queue::start_up_threads()  // guarded by _threads_mutex
     _threads.emplace_back([this]() {
       auto to_destroy = _num_threads_to_destroy.load(std::memory_order::relaxed);
       int num_failed_tries = 0;
-      constexpr int max_num_ckecks_before_sleep = 20;
+      constexpr int max_num_ckecks_before_sleep = 30;
       while (true) {
         std::pair<task_function, task_id> task_pair;
 
@@ -130,7 +130,8 @@ void working_queue::start_up_threads()  // guarded by _threads_mutex
               if (num_failed_tries > max_num_ckecks_before_sleep) {
                 num_failed_tries = 0;
 
-                if (_num_threads_to_destroy.load(std::memory_order::relaxed) == 0) {
+                to_destroy = _num_threads_to_destroy.load(std::memory_order::relaxed);
+                if (to_destroy == 0) {
                   const auto current = _await_changes.load(std::memory_order::relaxed);
 
                   // we need to change number after store await changes
@@ -151,8 +152,6 @@ void working_queue::start_up_threads()  // guarded by _threads_mutex
           task_pair.first = nullptr;
           num_failed_tries = 0;
         }
-
-        to_destroy = _num_threads_to_destroy.load(std::memory_order::relaxed);
 
         // maybe it's time for retirement?
         while (to_destroy > 0) {
