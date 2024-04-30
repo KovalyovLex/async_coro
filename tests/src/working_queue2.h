@@ -104,7 +104,7 @@ void working_queue2::parallel_for(const Fx& f, It begin, It end,
     _tasks.push(std::make_pair<task_function, task_id>(
         [it, end_chuk_it, &f, &num_not_finished]() mutable {
           for (; it != end_chuk_it; ++it) {
-            std::invoke(f, *it);
+            f(*it);
           }
           num_not_finished.fetch_sub(1, std::memory_order::release);
         },

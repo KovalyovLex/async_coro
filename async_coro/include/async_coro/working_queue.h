@@ -109,7 +109,7 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
     _tasks.push(
         [it, end_chuk_it, &f, &num_finished]() mutable {
           for (; it != end_chuk_it; ++it) {
-            std::invoke(f, *it);
+            f(*it);
           }
           num_finished.fetch_add(1, std::memory_order::release);
         },

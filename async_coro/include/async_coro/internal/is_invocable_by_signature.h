@@ -45,7 +45,7 @@ struct function_signature<R(TArgs...)> {
 
 template <class FxSig, class Fx>
 struct is_invocable_by_signature {
-  inline static constexpr bool value = function_signature<FxSig>::is_invocable<Fx>::value;
+  inline static constexpr bool value = function_signature<FxSig>::template is_invocable<Fx>::value;
 };
 
 }  // namespace async_coro::internal
