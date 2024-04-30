@@ -8,23 +8,19 @@ working_queue::~working_queue() {
   _num_threads_to_destroy.fetch_add(_num_alive_threads.load(std::memory_order::acquire),
                                     std::memory_order::relaxed);
 
-  bool need_notify = false;
   std::vector<std::thread> threads;
 
   {
     std::unique_lock lock{_threads_mutex};
-
-    if (_num_sleeping_threads.load(std::memory_order::relaxed) != 0) {
-      need_notify = true;
-    }
 
     threads.swap(_threads);
     _num_alive_threads.store(0, std::memory_order::release);
   }
 
   // notify without lock
-  if (need_notify) {
-    _sleep_variable.notify_all();
+  if (_num_sleeping_threads.load(std::memory_order::acquire) != 0) {
+    _await_changes.fetch_add(1, std::memory_order::relaxed);
+    _await_changes.notify_all();
   }
 
   // join threads without lock
@@ -49,8 +45,9 @@ void working_queue::execute(task_function f) {
 
   _tasks.push(std::move(f), _current_id.fetch_add(1, std::memory_order::relaxed));
 
-  if (_num_sleeping_threads.load(std::memory_order::relaxed) != 0) {
-    _sleep_variable.notify_one();
+  if (_num_sleeping_threads.load(std::memory_order::acquire) != 0) {
+    _await_changes.fetch_add(1, std::memory_order::relaxed);
+    _await_changes.notify_one();
   }
 }
 
@@ -73,8 +70,9 @@ void working_queue::set_num_threads(uint32_t num) {
     _num_threads_to_destroy.fetch_add((int)(num_alive_threads - _num_threads),
                                       std::memory_order::relaxed);
     _num_alive_threads.store(_num_threads, std::memory_order::release);
-    if (_num_sleeping_threads.load(std::memory_order::relaxed) != 0) {
-      _sleep_variable.notify_all();
+    if (_num_sleeping_threads.load(std::memory_order::acquire) != 0) {
+      _await_changes.fetch_add(1, std::memory_order::relaxed);
+      _await_changes.notify_all();
     }
   } else {
     start_up_threads();
@@ -132,15 +130,16 @@ void working_queue::start_up_threads()  // guarded by _threads_mutex
               if (num_failed_tries > max_num_ckecks_before_sleep) {
                 num_failed_tries = 0;
 
-                std::unique_lock lock{_threads_mutex};
+                while (_num_threads_to_destroy.load(std::memory_order::relaxed) == 0 && !_tasks.has_value()) {
+                  const auto current = _await_changes.load(std::memory_order::relaxed);
 
-                _num_sleeping_threads.fetch_add(1, std::memory_order::relaxed);
+                  // we need to change number after store await changes
+                  _num_sleeping_threads.fetch_add(1, std::memory_order::release);
 
-                _sleep_variable.wait(lock, [this] {
-                  return _num_threads_to_destroy.load(std::memory_order::relaxed) != 0 || _tasks.has_value();
-                });
+                  _await_changes.wait(current, std::memory_order::relaxed);
 
-                _num_sleeping_threads.fetch_sub(1, std::memory_order::relaxed);
+                  _num_sleeping_threads.fetch_sub(1, std::memory_order::relaxed);
+                }
               }
             }
           }

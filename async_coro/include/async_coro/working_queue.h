@@ -5,7 +5,6 @@
 #include <async_coro/unique_function.h>
 
 #include <concepts>
-#include <condition_variable>
 #include <cstddef>
 #include <iterator>
 #include <mutex>
@@ -67,7 +66,6 @@ class working_queue {
 
  private:
   mutable std::mutex _threads_mutex;
-  std::condition_variable _sleep_variable;
   atomic_queue<std::pair<task_function, task_id>> _tasks;
   std::vector<std::thread> _threads;  // guarded by _threads_mutex
   uint32_t _num_threads = 0;          // guarded by _threads_mutex
@@ -75,6 +73,7 @@ class working_queue {
   std::atomic<uint32_t> _num_alive_threads = 0;
   std::atomic<uint32_t> _num_threads_to_destroy = 0;
   std::atomic<uint32_t> _num_sleeping_threads = 0;
+  std::atomic<uint32_t> _await_changes = 0;
 };
 
 template <typename Fx, std::random_access_iterator It>
@@ -118,8 +117,9 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
     num_schedulled++;
   }
 
-  if (_num_sleeping_threads.load(std::memory_order::relaxed) != 0) {
-    _sleep_variable.notify_all();
+  if (_num_sleeping_threads.load(std::memory_order::acquire) != 0) {
+    _await_changes.fetch_add(1, std::memory_order::relaxed);
+    _await_changes.notify_all();
   }
 
   // do work in this thread
