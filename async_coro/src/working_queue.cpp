@@ -130,7 +130,7 @@ void working_queue::start_up_threads()  // guarded by _threads_mutex
               if (num_failed_tries > max_num_ckecks_before_sleep) {
                 num_failed_tries = 0;
 
-                while (_num_threads_to_destroy.load(std::memory_order::relaxed) == 0 && !_tasks.has_value()) {
+                if (_num_threads_to_destroy.load(std::memory_order::relaxed) == 0) {
                   const auto current = _await_changes.load(std::memory_order::relaxed);
 
                   // we need to change number after store await changes
