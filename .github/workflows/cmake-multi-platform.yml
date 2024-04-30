@@ -55,7 +55,7 @@ jobs:
         -S ${{ github.workspace }}
 
     - name: Build
-      run: cmake --build ${{ steps.strings.outputs.build-output-dir }}
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --parallel
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
@@ -116,7 +116,7 @@ jobs:
         -S ${{ github.workspace }}
 
     - name: Build
-      run: cmake --build ${{ steps.strings.outputs.build-output-dir }}
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --parallel
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
@@ -172,7 +172,7 @@ jobs:
 
     - name: Build
       # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config RelWithDebInfo
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config RelWithDebInfo --parallel
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
@@ -254,7 +254,7 @@ jobs:
         -S ${{ github.workspace }}
 
     - name: Build
-      run: cmake --build ${{ steps.strings.outputs.build-output-dir }}
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --parallel
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
