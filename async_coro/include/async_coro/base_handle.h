@@ -21,7 +21,8 @@ class base_handle {
 
  public:
   base_handle() noexcept
-      : _state(coroutine_state::created),
+      : _parent(nullptr),
+        _state(coroutine_state::created),
         _is_embedded(false),
         _has_handle(false),
         _is_initialized(false),
@@ -33,12 +34,12 @@ class base_handle {
   scheduler& get_scheduler() noexcept {
     ASYNC_CORO_ASSERT(_scheduler != nullptr);
     return *_scheduler;
-  };
+  }
 
   const scheduler& get_scheduler() const noexcept {
     ASYNC_CORO_ASSERT(_scheduler != nullptr);
     return *_scheduler;
-  };
+  }
 
   bool is_current_thread_same() const noexcept {
     return _execution_thread == std::this_thread::get_id();

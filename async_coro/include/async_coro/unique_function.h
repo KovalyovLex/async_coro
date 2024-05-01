@@ -63,7 +63,7 @@ class function_impl_call<SFOSize, TFunc, R(TArgs...)> {
       : _invoke(nullptr) {
   }
 
-  function_impl_call(function_impl_call&&) noexcept = default;
+  function_impl_call(t_invoke_f invoke) noexcept : _invoke(invoke) {}
 
  public:
   R operator()(TArgs... args) const {
@@ -91,7 +91,7 @@ class function_impl_call<SFOSize, TFunc, R(TArgs...) noexcept> {
       : _invoke(nullptr) {
   }
 
-  function_impl_call(function_impl_call&&) noexcept = default;
+  function_impl_call(t_invoke_f invoke) noexcept : _invoke(invoke) {}
 
  public:
   R operator()(TArgs... args) const noexcept {
@@ -123,14 +123,16 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
   template <typename Fx>
   using is_invocable = internal::is_invocable_by_signature<FTy, Fx>;
 
+  using t_small_buffer = typename super::t_small_buffer;
+
   template <typename Fx>
   inline static constexpr bool is_small_f =
-      sizeof(Fx) <= SFOSize && alignof(Fx) <= alignof(typename super::t_small_buffer);
+      sizeof(Fx) <= SFOSize && alignof(Fx) <= alignof(t_small_buffer);
 
   template <typename Fx>
   inline static constexpr bool is_noexecept_init =
-      is_small_f<std::remove_cvref_t<Fx>> &&
-      std::is_nothrow_constructible_v<Fx, Fx&&>;
+      is_small_f<std::remove_cvref_t<Fx>>&&
+          std::is_nothrow_constructible_v<Fx, Fx&&>;
 
   struct no_init {};
 
@@ -144,7 +146,7 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
   unique_function(const unique_function&) = delete;
 
   unique_function(unique_function&& other) noexcept
-      : super(std::move(other)), _move_or_destroy(other._move_or_destroy), _buffer(std::move(other._buffer)) {
+      : super(other._invoke), _move_or_destroy(other._move_or_destroy), _buffer(std::move(other._buffer)) {
     if (_move_or_destroy) {
       _move_or_destroy(*this, &other, action_move);
     }
@@ -271,14 +273,14 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
     this->_invoke = nullptr;
   }
 
-  static super::t_small_buffer& get_buffer(const super* self) noexcept {
+  static t_small_buffer& get_buffer(const super* self) noexcept {
     return static_cast<const unique_function*>(self)->_buffer;
   }
 
   template <typename TFunc, typename R, typename... TArgs>
-  static auto make_invoke(R (*)(typename super::t_small_buffer&, TArgs...)) noexcept {
+  static auto make_invoke(R (*)(t_small_buffer&, TArgs...)) noexcept {
     return static_cast<typename super::t_invoke_f>(
-        [](typename super::t_small_buffer& buffer, TArgs&&... args) noexcept(super::is_noexcept_invoke) {
+        [](t_small_buffer& buffer, TArgs&&... args) noexcept(super::is_noexcept_invoke) {
           if constexpr (is_small_f<TFunc>) {
             auto& fx_t = reinterpret_cast<TFunc&>(buffer.mem[0]);
             return fx_t(std::forward<TArgs>(args)...);
@@ -291,7 +293,7 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
 
  private:
   t_move_or_destroy_f _move_or_destroy;
-  mutable super::t_small_buffer _buffer;
+  mutable t_small_buffer _buffer;
 };
 
 template <typename R, class... TArgs>
