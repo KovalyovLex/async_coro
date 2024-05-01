@@ -186,6 +186,7 @@ INSTANTIATE_TEST_SUITE_P(
     mt,
     working_queue_speed_tests,
     ::testing::Values(
+        std::make_tuple(0),
         std::make_tuple(1),
         std::make_tuple(2),
         std::make_tuple(3),
@@ -212,6 +213,10 @@ INSTANTIATE_TEST_SUITE_P(
     mt,
     working_queue_tests,
     ::testing::Values(
+        std::make_tuple(0, (uint32_t)-1),
+        std::make_tuple(0, (uint32_t)10),
+        std::make_tuple(0, (uint32_t)128),
+        std::make_tuple(0, (uint32_t)512),
         std::make_tuple(1, (uint32_t)-1),
         std::make_tuple(1, (uint32_t)10),
         std::make_tuple(1, (uint32_t)128),
