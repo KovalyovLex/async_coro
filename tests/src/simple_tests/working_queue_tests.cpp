@@ -125,5 +125,28 @@ TEST(working_queue, parallel_for_many) {
 
   EXPECT_EQ(max, 107);
   EXPECT_EQ(num_executions, range.size());
+
+  max = 0;
+  num_executions = 0;
+
+  std::this_thread::sleep_for(std::chrono::milliseconds{1});
+
+  is_executing = true;
+  queue.parallel_for(
+      [&](int v) {
+        EXPECT_TRUE(is_executing);
+
+        std::unique_lock lock{mutex};
+
+        executed_at.emplace(std::this_thread::get_id());
+
+        if (v > max) {
+          max = v;
+        }
+        num_executions++;
+      },
+      range.begin(), range.end());
+  is_executing = false;
+
   EXPECT_GT(executed_at.size(), 1);
 }

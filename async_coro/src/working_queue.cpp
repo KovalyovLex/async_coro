@@ -114,7 +114,7 @@ void working_queue::start_up_threads()  // guarded by _threads_mutex
     _threads.emplace_back([this]() {
       auto to_destroy = _num_threads_to_destroy.load(std::memory_order::relaxed);
       int num_failed_tries = 0;
-      constexpr int max_num_ckecks_before_sleep = 30;
+      constexpr int max_num_fails_before_sleep = 4;
       while (true) {
         std::pair<task_function, task_id> task_pair;
 
@@ -125,21 +125,25 @@ void working_queue::start_up_threads()  // guarded by _threads_mutex
             std::this_thread::yield();
             if (!_tasks.try_pop(task_pair)) {
               num_failed_tries++;
+              std::this_thread::yield();
 
               // sleep only if there is no work for long period
-              if (num_failed_tries > max_num_ckecks_before_sleep) {
-                num_failed_tries = 0;
+              if (num_failed_tries >= max_num_fails_before_sleep) {
+                num_failed_tries = 0;  // reset counter tries in both success either fail scenarios
 
-                to_destroy = _num_threads_to_destroy.load(std::memory_order::relaxed);
-                if (to_destroy == 0) {
-                  const auto current = _await_changes.load(std::memory_order::relaxed);
+                // final try
+                if (!_tasks.try_pop(task_pair)) {
+                  to_destroy = _num_threads_to_destroy.load(std::memory_order::relaxed);
+                  if (to_destroy == 0) {
+                    const auto current = _await_changes.load(std::memory_order::relaxed);
 
-                  // we need to change number after store await changes
-                  _num_sleeping_threads.fetch_add(1, std::memory_order::release);
+                    // we need to change number after store await changes
+                    _num_sleeping_threads.fetch_add(1, std::memory_order::release);
 
-                  _await_changes.wait(current, std::memory_order::relaxed);
+                    _await_changes.wait(current, std::memory_order::relaxed);
 
-                  _num_sleeping_threads.fetch_sub(1, std::memory_order::relaxed);
+                    _num_sleeping_threads.fetch_sub(1, std::memory_order::relaxed);
+                  }
                 }
               }
             }
