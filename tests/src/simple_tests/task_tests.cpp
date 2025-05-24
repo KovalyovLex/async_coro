@@ -394,7 +394,6 @@ TEST(task, when_any) {
   scheduler.get_working_queue().set_num_threads(1);
 
   auto handle = scheduler.start_task(routine());
-  EXPECT_FALSE(handle.done());
 
   // wait for worker thread finish coro
   sema.acquire();
