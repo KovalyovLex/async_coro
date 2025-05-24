@@ -14,7 +14,8 @@ set_property(TARGET async_coro PROPERTY CXX_STANDARD 20)
 
 target_compile_options(async_coro PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
-  $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror -Wthread-safety>
+  $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror>
+  $<$<CXX_COMPILER_ID:Clang>:-Wthread-safety>
 )
 
 
