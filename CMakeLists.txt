@@ -47,10 +47,6 @@ target_include_directories(async_coro_tests PRIVATE "tests/src")
 set_property(TARGET async_coro_tests PROPERTY CXX_STANDARD 20)
 
 # enable full warnings checks in our targets
-target_compile_options(async_coro PRIVATE
-    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /permissive->
-    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror -std=c++20>
-)
 target_compile_options(async_coro_tests PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX /permissive->
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Werror -std=c++20>

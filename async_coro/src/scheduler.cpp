@@ -1,4 +1,5 @@
 #include <async_coro/base_handle.h>
+#include <async_coro/internal/thread_safety/unique_lock.h>
 #include <async_coro/scheduler.h>
 
 #include <algorithm>
@@ -12,7 +13,7 @@ scheduler::scheduler() noexcept {
 }
 
 scheduler::~scheduler() {
-  std::unique_lock lock{_mutex};
+  unique_lock lock{_mutex};
   auto coros = std::move(_managed_coroutines);
   _is_destroying = true;
   lock.unlock();
@@ -45,7 +46,7 @@ void scheduler::update() {
 
   if (_has_synchronized_tasks.load(std::memory_order::acquire)) {
     {
-      std::unique_lock lock{_task_mutex};
+      unique_lock lock{_task_mutex};
       _update_tasks.swap(_update_tasks_synchronized);
       _has_synchronized_tasks.store(false, std::memory_order::release);
     }
@@ -75,7 +76,7 @@ void scheduler::continue_execution_impl(base_handle& handle_impl) {
       // cleanup coroutine
       {
         // remove from managed
-        std::unique_lock lock{_mutex};
+        unique_lock lock{_mutex};
         auto it = std::find(_managed_coroutines.begin(), _managed_coroutines.end(), &handle_impl);
         ASYNC_CORO_ASSERT(it != _managed_coroutines.end());
         if (it != _managed_coroutines.end()) {
@@ -101,7 +102,7 @@ void scheduler::plan_continue_on_thread(base_handle& handle_impl, execution_thre
             sched.continue_execution_impl(*handle_base);
           });
     } else {
-      std::unique_lock lock{_task_mutex};
+      unique_lock lock{_task_mutex};
       _update_tasks_synchronized.emplace_back(
           [handle_base = &handle_impl](scheduler& sched) {
             handle_base->_execution_thread = std::this_thread::get_id();
@@ -124,7 +125,7 @@ void scheduler::add_coroutine(base_handle& handle_impl,
   ASYNC_CORO_ASSERT(handle_impl._handle);
 
   {
-    std::unique_lock lock{_mutex};
+    unique_lock lock{_mutex};
 
     if (_is_destroying) {
       // if we are in destructor no way to run this coroutine

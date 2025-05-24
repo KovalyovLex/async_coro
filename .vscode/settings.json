@@ -93,6 +93,7 @@
   "editor.formatOnSave": true,
   "cSpell.words": [
     "coro",
-    "coros"
+    "coros",
+    "COTHREAD"
   ]
 }

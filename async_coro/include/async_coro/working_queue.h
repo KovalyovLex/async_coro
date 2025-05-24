@@ -2,12 +2,13 @@
 
 #include <async_coro/atomic_queue.h>
 #include <async_coro/config.h>
+#include <async_coro/internal/thread_safety/analysis.h>
+#include <async_coro/internal/thread_safety/mutex.h>
 #include <async_coro/unique_function.h>
 
 #include <concepts>
 #include <cstddef>
 #include <iterator>
-#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -65,10 +66,10 @@ class working_queue {
   void try_to_awake_thread(bool multiple) noexcept;
 
  private:
-  mutable std::mutex _threads_mutex;
+  mutable mutex _threads_mutex;
   atomic_queue<std::pair<task_function, task_id>> _tasks;
-  std::vector<std::thread> _threads;  // guarded by _threads_mutex
-  uint32_t _num_threads = 0;          // guarded by _threads_mutex
+  std::vector<std::thread> _threads COTHREAD_GUARDED_BY(_threads_mutex);
+  uint32_t _num_threads COTHREAD_GUARDED_BY(_threads_mutex) = 0;
   std::atomic<task_id> _current_id = 0;
   std::atomic<uint32_t> _num_alive_threads = 0;
   std::atomic<uint32_t> _num_threads_to_destroy = 0;

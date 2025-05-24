@@ -1,13 +1,14 @@
 #include "working_queue2.h"
 
 #include <async_coro/config.h>
+#include <async_coro/internal/thread_safety/unique_lock.h>
 
 #include <algorithm>
 
 namespace async_coro {
 working_queue2::~working_queue2() {
   {
-    std::unique_lock lock{_mutex};
+    unique_lock lock{_mutex};
     // mutex for guarantee that all sleeping threads will be awaken so do this increment inside lock
     _num_threads_to_destroy.fetch_add(
         _num_alive_threads.load(std::memory_order::acquire),
@@ -16,7 +17,7 @@ working_queue2::~working_queue2() {
   _condition.notify_all();
 
   {
-    std::unique_lock lock{_threads_mutex};
+    unique_lock lock{_threads_mutex};
     for (auto& thread : _threads) {
       if (thread.joinable()) {
         thread.join();
@@ -27,7 +28,7 @@ working_queue2::~working_queue2() {
   }
 
   {
-    std::unique_lock lock{_mutex};
+    unique_lock lock{_mutex};
 
     // execute all rest tasks
     while (!_tasks.empty()) {
@@ -47,7 +48,7 @@ working_queue2::~working_queue2() {
 void working_queue2::execute(task_function f) {
   ASYNC_CORO_ASSERT(_num_alive_threads.load(std::memory_order::acquire) > 0);
 
-  std::unique_lock lock{_mutex};
+  unique_lock lock{_mutex};
 
   _tasks.push(std::make_pair(std::move(f), _current_id++));
 
@@ -62,7 +63,7 @@ void working_queue2::set_num_threads(uint32_t num) {
     return;
   }
 
-  std::unique_lock lock{_threads_mutex};
+  unique_lock lock{_threads_mutex};
 
   const auto num_alive_threads =
       _num_alive_threads.load(std::memory_order::acquire);
@@ -91,7 +92,7 @@ bool working_queue2::is_current_thread_worker() const noexcept {
 
   const auto id = std::this_thread::get_id();
 
-  std::unique_lock lock{_threads_mutex};
+  unique_lock lock{_threads_mutex};
 
   for (const auto& thread : _threads) {
     if (thread.get_id() == id) {
@@ -122,7 +123,7 @@ void working_queue2::start_up_threads()  // guarded by _threads_mutex
 
         // if there is no work to do - go to sleep
         if (to_destroy == 0) {
-          std::unique_lock lock{_mutex};
+          unique_lock lock{_mutex};
 
           if (_tasks.empty()) {
             _num_sleeping_threads++;
@@ -151,7 +152,7 @@ void working_queue2::start_up_threads()  // guarded by _threads_mutex
         }
 
         // do some work
-        std::unique_lock lock{_mutex};
+        unique_lock lock{_mutex};
 
         if (!_tasks.empty()) {
           auto f = std::move(_tasks.front());

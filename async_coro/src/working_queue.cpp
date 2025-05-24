@@ -1,4 +1,5 @@
 #include <async_coro/config.h>
+#include <async_coro/internal/thread_safety/unique_lock.h>
 #include <async_coro/working_queue.h>
 
 #include <algorithm>
@@ -11,7 +12,7 @@ working_queue::~working_queue() {
   std::vector<std::thread> threads;
 
   {
-    std::unique_lock lock{_threads_mutex};
+    unique_lock lock{_threads_mutex};
 
     threads.swap(_threads);
     _num_alive_threads.store(0, std::memory_order::release);
@@ -50,7 +51,7 @@ void working_queue::set_num_threads(uint32_t num) {
     return;
   }
 
-  std::unique_lock lock{_threads_mutex};
+  unique_lock lock{_threads_mutex};
 
   const auto num_alive_threads = _num_alive_threads.load(std::memory_order::acquire);
 
@@ -79,7 +80,7 @@ bool working_queue::is_current_thread_worker() const noexcept {
 
   const auto id = std::this_thread::get_id();
 
-  std::unique_lock lock{_threads_mutex};
+  unique_lock lock{_threads_mutex};
 
   for (const auto& thread : _threads) {
     if (thread.get_id() == id) {
@@ -101,8 +102,7 @@ void working_queue::try_to_awake_thread(bool multiple) noexcept {
   }
 }
 
-void working_queue::start_up_threads()  // guarded by _threads_mutex
-{
+void working_queue::start_up_threads() COTHREAD_REQUIRES(_threads_mutex) {
   // cleanup finished threads first
   const auto it =
       std::remove_if(_threads.begin(), _threads.end(),

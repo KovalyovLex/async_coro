@@ -1,17 +1,18 @@
 #pragma once
 
 #include <async_coro/config.h>
+#include <async_coro/internal/thread_safety/analysis.h>
+#include <async_coro/internal/thread_safety/condition_variable.h>
+#include <async_coro/internal/thread_safety/mutex.h>
 #include <async_coro/unique_function.h>
 
 #include <concepts>
-#include <condition_variable>
 #include <cstddef>
 #include <iterator>
-#include <mutex>
 #include <queue>
 #include <thread>
-#include <type_traits>
 #include <vector>
+
 
 namespace async_coro {
 class working_queue2 {
@@ -65,14 +66,14 @@ class working_queue2 {
   void start_up_threads();
 
  private:
-  mutable std::mutex _mutex;
-  mutable std::mutex _threads_mutex;
-  std::condition_variable _condition;                    // guarded by _mutex
-  std::queue<std::pair<task_function, task_id>> _tasks;  // guarded by _mutex
-  std::vector<std::thread> _threads;                     // guarded by _threads_mutex
-  uint32_t _num_threads = 0;                             // guarded by _threads_mutex
-  uint32_t _num_sleeping_threads = 0;                    // guarded by _mutex
-  task_id _current_id = 0;                               // guarded by _mutex
+  mutable mutex _mutex;
+  mutable mutex _threads_mutex;
+  condition_variable _condition COTHREAD_GUARDED_BY(_mutex);
+  std::queue<std::pair<task_function, task_id>> _tasks COTHREAD_GUARDED_BY(_mutex);
+  std::vector<std::thread> _threads COTHREAD_GUARDED_BY(_threads_mutex);
+  uint32_t _num_threads COTHREAD_GUARDED_BY(_threads_mutex) = 0;
+  uint32_t _num_sleeping_threads COTHREAD_GUARDED_BY(_mutex) = 0;
+  task_id _current_id COTHREAD_GUARDED_BY(_mutex) = 0;
   std::atomic<uint32_t> _num_alive_threads = 0;
   std::atomic<uint32_t> _num_threads_to_destroy = 0;
 };
@@ -94,7 +95,7 @@ void working_queue2::parallel_for(const Fx& f, It begin, It end,
   }
 
   std::atomic<uint32_t> num_not_finished = 0;
-  std::unique_lock lock{_mutex};
+  _mutex.lock();
   uint32_t rest = static_cast<uint32_t>(size);
   for (auto it = begin; it != end;) {
     const auto step = std::min(rest, bucket_size);
@@ -115,22 +116,21 @@ void working_queue2::parallel_for(const Fx& f, It begin, It end,
   const auto wait_id = _current_id;
 
   if (_num_sleeping_threads != 0) {
-    lock.unlock();
+    _mutex.unlock();
     _condition.notify_all();
-    lock.lock();
+    _mutex.lock();
   }
 
   // do work in this thread
   while (!_tasks.empty()) {
     if (_tasks.front().second > wait_id) {
-      lock.unlock();
       break;
     }
 
     auto to_execute = std::move(_tasks.front());
     _tasks.pop();
 
-    lock.unlock();
+    _mutex.unlock();
 
     to_execute.first();
     to_execute.first = nullptr;  // destroy function with no lock
@@ -139,8 +139,10 @@ void working_queue2::parallel_for(const Fx& f, It begin, It end,
       break;
     }
 
-    lock.lock();
+    _mutex.lock();
   }
+
+  _mutex.unlock();
 
   // wait till all precesses finish
   auto to_await = num_not_finished.load(std::memory_order::acquire);
