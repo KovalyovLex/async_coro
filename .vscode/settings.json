@@ -90,5 +90,9 @@
     "semaphore": "cpp",
     "resumable": "cpp"
   },
-  "editor.formatOnSave": true
+  "editor.formatOnSave": true,
+  "cSpell.words": [
+    "coro",
+    "coros"
+  ]
 }
