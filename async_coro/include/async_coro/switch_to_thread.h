@@ -3,6 +3,7 @@
 #include <async_coro/internal/await_switch.h>
 
 namespace async_coro {
+
 /**
  * @brief Switches execution to the specified thread.
  *
@@ -20,4 +21,5 @@ namespace async_coro {
 inline auto switch_to_thread(execution_thread thread) {
   return internal::await_switch{thread};
 }
+
 }  // namespace async_coro

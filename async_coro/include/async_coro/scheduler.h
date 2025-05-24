@@ -12,6 +12,7 @@
 #include <vector>
 
 namespace async_coro {
+
 template <typename R>
 struct task;
 
@@ -74,4 +75,5 @@ class scheduler {
   bool _is_destroying COTHREAD_GUARDED_BY(_mutex) = false;
   std::atomic_bool _has_synchronized_tasks = false;
 };
+
 }  // namespace async_coro

@@ -7,6 +7,7 @@
 #include <thread>
 
 namespace async_coro {
+
 enum class coroutine_state : std::uint8_t {
   created,
   running,
@@ -116,4 +117,5 @@ class base_handle {
   bool _is_initialized : 1;
   bool _is_result : 1;
 };
+
 }  // namespace async_coro
