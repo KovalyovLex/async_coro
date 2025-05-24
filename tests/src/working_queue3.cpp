@@ -1,6 +1,7 @@
 #include "working_queue3.h"
 
 #include <async_coro/config.h>
+#include <async_coro/internal/thread_safety/unique_lock.h>
 
 #include <algorithm>
 
@@ -12,7 +13,7 @@ working_queue3::~working_queue3() {
   std::vector<std::thread> threads;
 
   {
-    std::unique_lock lock{_threads_mutex};
+    unique_lock lock{_threads_mutex};
 
     threads.swap(_threads);
     _num_alive_threads.store(0, std::memory_order::release);
@@ -57,7 +58,7 @@ void working_queue3::set_num_threads(uint32_t num) {
     return;
   }
 
-  std::unique_lock lock{_threads_mutex};
+  unique_lock lock{_threads_mutex};
 
   const auto num_alive_threads = _num_alive_threads.load(std::memory_order::acquire);
 
@@ -88,7 +89,7 @@ bool working_queue3::is_current_thread_worker() const noexcept {
 
   const auto id = std::this_thread::get_id();
 
-  std::unique_lock lock{_threads_mutex};
+  unique_lock lock{_threads_mutex};
 
   for (const auto& thread : _threads) {
     if (thread.get_id() == id) {

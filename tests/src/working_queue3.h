@@ -1,16 +1,15 @@
 #pragma once
 
 #include <async_coro/config.h>
+#include <async_coro/internal/thread_safety/analysis.h>
+#include <async_coro/internal/thread_safety/mutex.h>
 #include <async_coro/unique_function.h>
 #include <concurrentqueue.h>
 
 #include <concepts>
 #include <cstddef>
 #include <iterator>
-#include <mutex>
-#include <queue>
 #include <thread>
-#include <type_traits>
 #include <vector>
 
 namespace async_coro {
@@ -65,10 +64,10 @@ class working_queue3 {
   void start_up_threads();
 
  private:
-  mutable std::mutex _threads_mutex;
+  mutable mutex _threads_mutex;
   moodycamel::ConcurrentQueue<std::pair<task_function, task_id>> _tasks;
-  std::vector<std::thread> _threads;  // guarded by _threads_mutex
-  uint32_t _num_threads = 0;          // guarded by _threads_mutex
+  std::vector<std::thread> _threads COTHREAD_GUARDED_BY(_threads_mutex);
+  uint32_t _num_threads COTHREAD_GUARDED_BY(_threads_mutex) = 0;
   std::atomic<task_id> _current_id = 0;
   std::atomic<uint32_t> _num_alive_threads = 0;
   std::atomic<uint32_t> _num_threads_to_destroy = 0;
@@ -98,18 +97,18 @@ void working_queue3::parallel_for(const Fx& f, It begin, It end,
   for (auto it = begin; it != end;) {
     const auto step = std::min(rest, bucket_size);
     rest -= step;
-    const auto end_chuk_it = it + static_cast<difference_t>(step);
+    const auto end_chunk_it = it + static_cast<difference_t>(step);
     num_not_finished.fetch_add(1, std::memory_order::relaxed);
     wait_id = _current_id.fetch_add(1, std::memory_order::relaxed);
     _tasks.enqueue(std::pair<task_function, task_id>(
-        [it, end_chuk_it, &f, &num_not_finished]() mutable {
-          for (; it != end_chuk_it; ++it) {
+        [it, end_chunk_it, &f, &num_not_finished]() mutable {
+          for (; it != end_chunk_it; ++it) {
             f(*it);
           }
           num_not_finished.fetch_sub(1, std::memory_order::release);
         },
         wait_id));
-    it = end_chuk_it;
+    it = end_chunk_it;
   }
 
   if (_num_sleeping_threads.load(std::memory_order::acquire) != 0) {
