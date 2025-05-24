@@ -7,6 +7,7 @@
 #include <coroutine>
 
 namespace async_coro::internal {
+
 template <typename T>
 struct await_callback {
   T _on_await;
@@ -39,4 +40,5 @@ struct await_callback {
 
 template <typename T>
 await_callback(T&&) -> await_callback<T>;
+
 }  // namespace async_coro::internal

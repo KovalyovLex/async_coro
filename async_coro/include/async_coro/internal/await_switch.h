@@ -7,6 +7,7 @@
 #include <coroutine>
 
 namespace async_coro::internal {
+
 struct await_switch {
   explicit await_switch(execution_thread t) noexcept : thread(t) {}
   await_switch(const await_switch&) = delete;
@@ -35,4 +36,5 @@ struct await_switch {
   execution_thread thread;
   bool need_switch = true;
 };
+
 }  // namespace async_coro::internal

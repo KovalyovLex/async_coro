@@ -43,11 +43,11 @@ void scheduler::update() {
     _update_tasks.clear();
   }
 
-  if (_has_syncronized_tasks.load(std::memory_order::acquire)) {
+  if (_has_synchronized_tasks.load(std::memory_order::acquire)) {
     {
       std::unique_lock lock{_task_mutex};
-      _update_tasks.swap(_update_tasks_syncronized);
-      _has_syncronized_tasks.store(false, std::memory_order::release);
+      _update_tasks.swap(_update_tasks_synchronized);
+      _has_synchronized_tasks.store(false, std::memory_order::release);
     }
 
     for (size_t i = 0; i < _update_tasks.size(); i++) {
@@ -96,18 +96,18 @@ void scheduler::plan_continue_on_thread(base_handle& handle_impl, execution_thre
   if (thread == execution_thread::main) {
     if (std::this_thread::get_id() == _main_thread) {
       _update_tasks.emplace_back(
-          [handle_base = &handle_impl](auto& thiz) {
+          [handle_base = &handle_impl](scheduler& sched) {
             handle_base->_execution_thread = std::this_thread::get_id();
-            thiz.continue_execution_impl(*handle_base);
+            sched.continue_execution_impl(*handle_base);
           });
     } else {
       std::unique_lock lock{_task_mutex};
-      _update_tasks_syncronized.emplace_back(
-          [handle_base = &handle_impl](auto& thiz) {
+      _update_tasks_synchronized.emplace_back(
+          [handle_base = &handle_impl](scheduler& sched) {
             handle_base->_execution_thread = std::this_thread::get_id();
-            thiz.continue_execution_impl(*handle_base);
+            sched.continue_execution_impl(*handle_base);
           });
-      _has_syncronized_tasks.store(true, std::memory_order::release);
+      _has_synchronized_tasks.store(true, std::memory_order::release);
     }
   } else {
     _queue.execute([this, handle_base = &handle_impl]() {
@@ -138,7 +138,7 @@ void scheduler::add_coroutine(base_handle& handle_impl,
   handle_impl._scheduler = this;
 
   if (is_current_thread_fits(thread)) {
-    // start execution immediatelly if we in right thread
+    // start execution immediately if we in right thread
 
     handle_impl._execution_thread = std::this_thread::get_id();
     continue_execution_impl(handle_impl);
@@ -152,7 +152,7 @@ void scheduler::continue_execution(base_handle& handle_impl) {
   ASYNC_CORO_ASSERT(handle_impl._state == coroutine_state::suspended);
 
   if (handle_impl.is_current_thread_same()) {
-    // start execution immediatelly if we in right thread
+    // start execution immediately if we in right thread
     continue_execution_impl(handle_impl);
   } else {
     if (handle_impl._execution_thread == _main_thread) {

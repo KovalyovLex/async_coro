@@ -51,11 +51,11 @@ class scheduler {
 
   // Embed coroutine
   void on_child_coro_added(base_handle& parent, base_handle& child);
-  // Can continue execution immediatelly or do same as plan_continue_execution
+  // Can continue execution immediately or do same as plan_continue_execution
   void continue_execution(base_handle& handle_impl);
-  // Only plans excution on thread that was assigned for the coro. So continue will be called later
+  // Only plans execution on thread that was assigned for the coro. So continue will be called later
   void plan_continue_execution(base_handle& handle_impl) noexcept;
-  // Always plan excution on thread and changes aggigned thread of coro.
+  // Always plan execution on thread and changes assigned thread of coro.
   void change_thread(base_handle& handle_impl, execution_thread thread);
 
  private:
@@ -69,9 +69,9 @@ class scheduler {
   working_queue _queue;
   std::vector<base_handle*> _managed_coroutines;  // guarded by _mutex
   std::vector<unique_function<void(scheduler&)>> _update_tasks;
-  std::vector<unique_function<void(scheduler&)>> _update_tasks_syncronized;  // guarded by _task_mutex
+  std::vector<unique_function<void(scheduler&)>> _update_tasks_synchronized;  // guarded by _task_mutex
   std::thread::id _main_thread = {};
   bool _is_destroying = false;  // guarded by _mutex
-  std::atomic_bool _has_syncronized_tasks = false;
+  std::atomic_bool _has_synchronized_tasks = false;
 };
 }  // namespace async_coro

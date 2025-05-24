@@ -17,7 +17,7 @@ namespace async_coro {
  * // code after will be executed in the main thread
  * \endcode
  */
-auto switch_to_thread(execution_thread thread) {
+inline auto switch_to_thread(execution_thread thread) {
   return internal::await_switch{thread};
 }
 }  // namespace async_coro

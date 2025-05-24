@@ -130,9 +130,9 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
       sizeof(Fx) <= SFOSize && alignof(Fx) <= alignof(t_small_buffer);
 
   template <typename Fx>
-  inline static constexpr bool is_noexecept_init =
-      is_small_f<std::remove_cvref_t<Fx>>&&
-          std::is_nothrow_constructible_v<Fx, Fx&&>;
+  inline static constexpr bool is_noexcept_init =
+      is_small_f<std::remove_cvref_t<Fx>> &&
+      std::is_nothrow_constructible_v<Fx, Fx&&>;
 
   struct no_init {};
 
@@ -155,7 +155,7 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
 
   template <typename Fx,
             typename = std::enable_if_t<is_invocable<Fx>::value>>
-  unique_function(Fx&& func) noexcept(is_noexecept_init<Fx>)
+  unique_function(Fx&& func) noexcept(is_noexcept_init<Fx>)
       : unique_function(no_init{}) {
     init(std::forward<Fx>(func));
   }
@@ -195,7 +195,7 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
   template <typename Fx, typename = std::enable_if_t<
                              is_invocable<Fx>::value &&
                              !std::is_same_v<Fx, unique_function>>>
-  unique_function& operator=(Fx&& func) noexcept(is_noexecept_init<Fx>) {
+  unique_function& operator=(Fx&& func) noexcept(is_noexcept_init<Fx>) {
     clear();
     init(std::forward<Fx>(func));
     return *this;
@@ -207,7 +207,7 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
 
  private:
   template <typename Fx>
-  void init(Fx&& func) noexcept(is_noexecept_init<Fx>) {
+  void init(Fx&& func) noexcept(is_noexcept_init<Fx>) {
     static_assert(std::is_nothrow_destructible_v<Fx>, "lambda should have noexcept destructor");
 
     using TFunc = std::remove_cvref_t<Fx>;
@@ -230,7 +230,7 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
               } else {
                 // action_move
                 if constexpr (!std::is_trivially_move_constructible_v<TFunc>) {
-                  static_assert(std::is_nothrow_move_constructible_v<TFunc>, "lambda should have noexcept move contructor");
+                  static_assert(std::is_nothrow_move_constructible_v<TFunc>, "lambda should have noexcept move constructor");
 
                   auto* to = reinterpret_cast<TFunc*>(&self._buffer.mem[0]);
                   auto& from = reinterpret_cast<TFunc&>(other->_buffer.mem[0]);

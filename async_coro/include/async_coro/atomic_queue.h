@@ -106,9 +106,9 @@ class atomic_queue {
     need_release = false;
 
     // wait till other threads finish push\pop and block future work
-    int32_t expected_prots = 1;
-    while (!c->free_protect.compare_exchange_strong(expected_prots, -1, std::memory_order::relaxed)) {
-      expected_prots = 1;
+    int32_t expected_protects = 1;
+    while (!c->free_protect.compare_exchange_strong(expected_protects, -1, std::memory_order::relaxed)) {
+      expected_protects = 1;
       std::this_thread::yield();
     }
 
@@ -127,7 +127,7 @@ class atomic_queue {
   }
 
   task_chunk* create_next_chunk(task_chunk* c) noexcept {
-    // TODO: actially this method can throw exception because of new
+    // TODO: actually this method can throw exception because of new
 
     auto* next_created = c->next.load(std::memory_order::relaxed);
     if (next_created == nullptr) {
