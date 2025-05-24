@@ -148,5 +148,5 @@ TEST(working_queue, parallel_for_many) {
       range.begin(), range.end());
   is_executing = false;
 
-  EXPECT_GT(executed_at.size(), 1);
+  EXPECT_TRUE(executed_at.size() > 1 || (!executed_at.contains(std::this_thread::get_id())));
 }

@@ -318,7 +318,7 @@ TEST(task, when_all_no_wait) {
   EXPECT_EQ(handle.get(), 5);
 }
 
-TEST(task, when_any_no_wait) {
+TEST(task, when_any_no_wait_sleep) {
   std::binary_semaphore sema{0};
 
   auto routine1 = []() -> async_coro::task<int> {
@@ -355,6 +355,45 @@ TEST(task, when_any_no_wait) {
   std::this_thread::sleep_for(std::chrono::milliseconds{1});
 
   scheduler.update();
+
+  ASSERT_TRUE(handle.done());
+  EXPECT_EQ(handle.get(), 1);
+}
+
+TEST(task, when_any_no_wait) {
+  std::function<void()> continue_f;
+
+  auto routine1 = []() -> async_coro::task<int> {
+    co_return 1;
+  };
+
+  auto routine2 = [&]() -> async_coro::task<double> {
+    co_await async_coro::await_callback([&continue_f](auto f) { continue_f = std::move(f); });
+
+    co_return 2.72;
+  };
+
+  auto routine = [&]() -> async_coro::task<int> {
+    auto result = co_await async_coro::when_any(
+        co_await async_coro::start_task(routine1()),
+        co_await async_coro::start_task(routine2()));
+
+    int sum = 0;
+    std::visit([&](auto num) { return sum = int(num); }, result);
+    co_return sum;
+  };
+
+  async_coro::scheduler scheduler;
+  scheduler.get_working_queue().set_num_threads(1);
+
+  auto handle = scheduler.start_task(routine());
+  EXPECT_TRUE(handle.done());
+
+  ASSERT_TRUE(continue_f);
+
+  scheduler.update();
+
+  continue_f();
 
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), 1);
