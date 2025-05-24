@@ -34,10 +34,18 @@ struct await_when_any {
     std::destroy_at(&_result);
   }
 
-  bool await_ready() const noexcept {
+  bool await_ready() noexcept {
+    const auto store_result = [this](auto& coro) noexcept -> bool {
+      bool expected = false;
+      if (this->_has_result.compare_exchange_strong(expected, true, std::memory_order::relaxed)) {
+        new (&_result) std::variant<TArgs...>(std::move(coro.get()));
+      }
+      return true;
+    };
+
     return std::apply(
-        [&](const auto&... coros) {
-          return (coros.done() && ...);
+        [&](const auto&... coros) noexcept {
+          return ((coros.done() && store_result(coros)) || ...);
         },
         _coroutines);
   }
@@ -45,7 +53,7 @@ struct await_when_any {
   template <typename U>
     requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> h) {
-    const auto continue_f = [&](auto& coro) {
+    const auto continue_f = [&](auto& coro) noexcept {
       coro.continue_with([this, h](auto& res) noexcept {
         bool expected = false;
         if (this->_has_result.compare_exchange_strong(expected, true, std::memory_order::relaxed)) {

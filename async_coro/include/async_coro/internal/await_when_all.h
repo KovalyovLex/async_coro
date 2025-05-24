@@ -42,7 +42,7 @@ struct await_when_all {
   void await_suspend(std::coroutine_handle<U> h) {
     const auto continue_f = [&](auto& coro) {
       coro.continue_with([this, h](auto&) noexcept {
-        if (--this->_counter == 0) {
+        if (this->_counter.fetch_sub(1, std::memory_order::relaxed) == 1) {
           // continue this coro
 
           base_handle& handle = h.promise();
