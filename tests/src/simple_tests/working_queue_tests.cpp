@@ -1,19 +1,13 @@
 #include <async_coro/working_queue.h>
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <initializer_list>
-#include <iostream>
 #include <mutex>
 #include <set>
-#include <string>
 #include <thread>
 #include <vector>
-
-#include "working_queue2.h"
-#include "working_queue3.h"
 
 TEST(working_queue, create_many_threads_one_by_one) {
   async_coro::working_queue queue;
