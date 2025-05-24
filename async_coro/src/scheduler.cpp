@@ -5,6 +5,7 @@
 #include <thread>
 
 namespace async_coro {
+
 scheduler::scheduler() noexcept {
   // store this thread as main
   _main_thread = std::this_thread::get_id();
@@ -192,4 +193,5 @@ void scheduler::on_child_coro_added(base_handle& parent, base_handle& child) {
   // start execution of internal coroutine
   continue_execution_impl(child);
 }
+
 }  // namespace async_coro

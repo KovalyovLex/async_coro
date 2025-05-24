@@ -151,11 +151,11 @@ void working_queue::start_up_threads()  // guarded by _threads_mutex
 
         // maybe it's time for retirement?
         while (to_destroy > 0) [[unlikely]] {
-            if (_num_threads_to_destroy.compare_exchange_weak(to_destroy, to_destroy - 1, std::memory_order::relaxed)) {
-              // our work is done
-              return;
-            }
+          if (_num_threads_to_destroy.compare_exchange_weak(to_destroy, to_destroy - 1, std::memory_order::relaxed)) {
+            // our work is done
+            return;
           }
+        }
 
         while (to_destroy == 0 && _tasks.try_pop(task_pair)) {
           task_pair.first();

@@ -266,4 +266,5 @@ class atomic_queue {
   std::atomic<task_chunk*> _head_push;
   std::atomic<task_chunk*> _free_chain;
 };
+
 };  // namespace async_coro

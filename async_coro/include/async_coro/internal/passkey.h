@@ -3,6 +3,7 @@
 #include <concepts>
 
 namespace async_coro::internal {
+
 template <typename T>
 class passkey {
   friend T;
@@ -32,4 +33,5 @@ struct passkey_successors {
     requires(std::derived_from<U, T> || (std::derived_from<U, Others> || ...))
   passkey_successors(const passkey<U>&) {}
 };
+
 }  // namespace async_coro::internal

@@ -5,6 +5,7 @@
 #include <utility>
 
 namespace async_coro {
+
 /**
  * @brief Suspends current coroutine and calls the continuation function.
  *
@@ -30,4 +31,5 @@ template <typename T>
 auto await_callback(T continuation) {
   return internal::await_callback{std::move(continuation)};
 }
+
 }  // namespace async_coro

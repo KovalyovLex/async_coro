@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.12)
  
 project(async_coro_tests)
 
-option(ASAN_ENABLED "Enable adress sanitizer for all targets" OFF)
+option(ASAN_ENABLED "Enable address sanitizer for all targets" OFF)
 
 if (ASAN_ENABLED)
   if (WIN32)

@@ -8,12 +8,11 @@
 #include <cstddef>
 #include <iterator>
 #include <mutex>
-#include <queue>
 #include <thread>
-#include <type_traits>
 #include <vector>
 
 namespace async_coro {
+
 class working_queue {
   using task_id = size_t;
 
@@ -43,7 +42,7 @@ class working_queue {
   /// @param f function to execute
   /// @param begin iterator on beginning or range
   /// @param end iterator of end
-  /// @param bucket_size how work will be shrinked. By default all range (end - begin) splited on num_threads + 1 chunks and executes in parralel
+  /// @param bucket_size how work will be shrunk. By default all range (end - begin) spited on num_threads + 1 chunks and executes in parallel
   template <typename Fx, std::random_access_iterator It>
     requires(std::invocable<Fx, decltype(*std::declval<It>())>)
   void parallel_for(const Fx& f, It begin, It end,
@@ -57,7 +56,7 @@ class working_queue {
   /// @return num_threads
   uint32_t get_num_threads() const noexcept { return _num_alive_threads.load(std::memory_order::acquire); }
 
-  /// @brief Checks it current thread belogs to worker threads
+  /// @brief Checks it current thread belongs to worker threads
   /// @return true if current thread is worker
   bool is_current_thread_worker() const noexcept;
 
@@ -90,31 +89,31 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
   using difference_t = typename std::iterator_traits<It>::difference_type;
 
   if (bucket_size == bucket_size_default) {
-    // equal destribution, plan work for num threads + 1
+    // equal distribution, plan work for num threads + 1
     const auto num_workers =
         _num_alive_threads.load(std::memory_order::acquire) + 1;
     bucket_size = static_cast<uint32_t>(size) / num_workers;
   }
 
   std::atomic<uint32_t> num_finished = 0;
-  uint32_t num_schedulled = 0;
+  uint32_t num_scheduled = 0;
   uint32_t rest = static_cast<uint32_t>(size);
   task_id wait_id = 0;
   for (auto it = begin; it != end;) {
     const auto step = std::min(rest, bucket_size);
     rest -= step;
-    const auto end_chuk_it = it + static_cast<difference_t>(step);
+    const auto end_chunk_it = it + static_cast<difference_t>(step);
     wait_id = _current_id.fetch_add(1, std::memory_order::relaxed);
     _tasks.push(
-        [it, end_chuk_it, &f, &num_finished]() mutable {
-          for (; it != end_chuk_it; ++it) {
+        [it, end_chunk_it, &f, &num_finished]() mutable {
+          for (; it != end_chunk_it; ++it) {
             f(*it);
           }
           num_finished.fetch_add(1, std::memory_order::release);
         },
         wait_id);
-    it = end_chuk_it;
-    num_schedulled++;
+    it = end_chunk_it;
+    num_scheduled++;
   }
 
   if (_num_sleeping_threads.load(std::memory_order::acquire) != 0) {
@@ -143,9 +142,10 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
 
   // wait till all precesses finish
   auto to_await = num_finished.load(std::memory_order::acquire);
-  while (to_await < num_schedulled) {
+  while (to_await < num_scheduled) {
     std::this_thread::yield();
     to_await = num_finished.load(std::memory_order::acquire);
   }
 }
+
 }  // namespace async_coro

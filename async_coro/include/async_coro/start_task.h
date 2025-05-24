@@ -7,7 +7,7 @@ namespace async_coro {
 /**
  * @brief Schedules parallel task.
  *
- * This function schedules parallel task in scheduller assotiated with this coroutine and returns task handle.
+ * This function schedules parallel task in scheduler associated with this coroutine and returns task handle.
  *
  * @tparam R The return type of the task.
  * @param task The task to be started.

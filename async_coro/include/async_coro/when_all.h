@@ -7,7 +7,7 @@ namespace async_coro {
 /**
  * @brief Waits for all the given tasks to complete.
  *
- * This function suspends corrent coroutine and waits for all the specified tasks to complete before proceeding.
+ * This function suspends current coroutine and waits for all the specified tasks to complete before proceeding.
  *
  * @tparam TArgs The argument types of the tasks.
  * @param coroutines The task handles representing the tasks to wait for.

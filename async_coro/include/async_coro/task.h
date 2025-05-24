@@ -127,7 +127,7 @@ struct task final {
   handle_type _handle{};
 };
 
-// Task handle for schedulled coroutines. Can track coroutine state and get result
+// Task handle for scheduled coroutines. Can track coroutine state and get result
 template <typename R>
 class task_handle final {
  public:
