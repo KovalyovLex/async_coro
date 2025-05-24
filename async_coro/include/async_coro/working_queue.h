@@ -62,6 +62,7 @@ class working_queue {
 
  private:
   void start_up_threads();
+  void try_to_awake_thread(bool multiple) noexcept;
 
  private:
   mutable std::mutex _threads_mutex;
@@ -88,17 +89,26 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
 
   using difference_t = typename std::iterator_traits<It>::difference_type;
 
+  const auto num_workers = _num_alive_threads.load(std::memory_order::relaxed);
+
+  if (num_workers == 0) {
+    // just single threaded consecutive process
+    for (auto it = begin; it != end; ++it) {
+      f(*it);
+    }
+    return;
+  }
+
   if (bucket_size == bucket_size_default) {
     // equal distribution, plan work for num threads + 1
-    const auto num_workers =
-        _num_alive_threads.load(std::memory_order::acquire) + 1;
-    bucket_size = static_cast<uint32_t>(size) / num_workers;
+    bucket_size = static_cast<uint32_t>(size) / (num_workers + 1);
   }
 
   std::atomic<uint32_t> num_finished = 0;
   uint32_t num_scheduled = 0;
   uint32_t rest = static_cast<uint32_t>(size);
   task_id wait_id = 0;
+
   for (auto it = begin; it != end;) {
     const auto step = std::min(rest, bucket_size);
     rest -= step;
@@ -112,13 +122,9 @@ void working_queue::parallel_for(const Fx& f, It begin, It end,
           num_finished.fetch_add(1, std::memory_order::release);
         },
         wait_id);
+    try_to_awake_thread(false);
     it = end_chunk_it;
     num_scheduled++;
-  }
-
-  if (_num_sleeping_threads.load(std::memory_order::acquire) != 0) {
-    _await_changes.fetch_add(1, std::memory_order::relaxed);
-    _await_changes.notify_all();
   }
 
   // do work in this thread
