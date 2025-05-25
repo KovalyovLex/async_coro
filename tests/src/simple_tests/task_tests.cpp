@@ -355,7 +355,7 @@ TEST(task, when_all_with_void) {
 
     sema.release();
 
-    co_return 3.14;
+    co_return 3.14f;
   };
 
   bool executed = false;
@@ -412,7 +412,7 @@ TEST(task, when_all_with_void_first) {
 
     sema.release();
 
-    co_return 3.14;
+    co_return 3.14f;
   };
 
   bool executed = false;
@@ -469,7 +469,7 @@ TEST(task, when_all_with_void_last) {
 
     sema.release();
 
-    co_return 3.14;
+    co_return 3.14f;
   };
 
   bool executed = false;
