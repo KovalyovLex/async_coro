@@ -1,11 +1,16 @@
 #pragma once
 
 #include <async_coro/base_handle.h>
+#include <async_coro/internal/remove_void_tuple.h>
 #include <async_coro/scheduler.h>
 
+#include <algorithm>
 #include <atomic>
 #include <coroutine>
 #include <tuple>
+#include <type_traits>
+#include <utility>
+
 
 namespace async_coro {
 
@@ -18,6 +23,8 @@ namespace async_coro::internal {
 
 template <typename... TArgs>
 struct await_when_all {
+  using result_type = remove_void_tuple_t<TArgs...>;
+
   explicit await_when_all(task_handle<TArgs>... coroutines) noexcept
       : _coroutines(std::move(coroutines)...) {
     static_assert(sizeof...(TArgs) > 0);
@@ -58,13 +65,35 @@ struct await_when_all {
         _coroutines);
   }
 
-  std::tuple<TArgs...> await_resume() {
-    return std::apply(
-        [&](auto&... coros) {
-          return std::tuple<TArgs...>{coros...};
-        },
-        _coroutines);
+  result_type await_resume() {
+    return [&]<size_t... Ints>(std::integer_sequence<size_t, Ints...>) -> result_type {
+      if constexpr (std::is_same_v<result_type, std::tuple<>>) {
+        return {};
+      } else {
+        return {std::get<Ints>(std::move(_coroutines)).get()...};
+      }
+    }(result_index_seq{});
   }
+
+ private:
+  template <size_t I, size_t... Ints1, size_t... Ints2>
+  static auto get_filtered_index_sequence(std::integer_sequence<size_t, Ints1...>, std::integer_sequence<size_t, I, Ints2...>) {
+    using tuple_t = std::tuple<task_handle<TArgs>...>;
+    using tuple_value_t = std::remove_cvref_t<decltype(std::get<I>(std::declval<tuple_t>()))>;
+
+    if constexpr (std::is_same_v<tuple_value_t, task_handle<void>>) {
+      return get_filtered_index_sequence(std::integer_sequence<size_t, Ints1...>{}, std::integer_sequence<size_t, Ints2...>{});
+    } else {
+      return get_filtered_index_sequence(std::integer_sequence<size_t, Ints1..., I>{}, std::integer_sequence<size_t, Ints2...>{});
+    }
+  }
+
+  template <size_t... Ints>
+  static std::integer_sequence<size_t, Ints...> get_filtered_index_sequence(std::integer_sequence<size_t, Ints...>, std::integer_sequence<size_t>) {
+    return {};
+  }
+
+  using result_index_seq = decltype(get_filtered_index_sequence(std::integer_sequence<size_t>{}, std::index_sequence_for<TArgs...>{}));
 
  private:
   std::atomic_size_t _counter = sizeof...(TArgs);
