@@ -3,7 +3,7 @@
 #include <async_coro/base_handle.h>
 #include <async_coro/config.h>
 #include <async_coro/internal/passkey.h>
-#include <async_coro/internal/promise_result.h>
+#include <async_coro/internal/promise_result_holder.h>
 #include <async_coro/unique_function.h>
 
 #include <concepts>
@@ -25,7 +25,7 @@ concept embeddable_task =
     requires(T a) { a.embed_task(std::declval<base_handle&>()); };
 
 template <typename R>
-struct promise_type final : internal::promise_result<R> {
+struct promise_type final : internal::promise_result_holder<R> {
   // construct my promise from me
   constexpr auto get_return_object() noexcept {
     return std::coroutine_handle<promise_type>::from_promise(*this);
@@ -42,7 +42,7 @@ struct promise_type final : internal::promise_result<R> {
 
   template <typename T>
   constexpr decltype(auto) await_transform(T&& in) noexcept {
-    // return non standart awaiters as is
+    // return non standard awaiters as is
     return std::move(in);
   }
 
@@ -61,7 +61,15 @@ struct promise_type final : internal::promise_result<R> {
   }
 };
 
-// Default type for all coroutines
+/**
+ * @brief Default return type for asynchronous coroutines.
+ *
+ * This type is used as the default return type for coroutines producing a result of type `R`.
+ * It encapsulates the coroutine handle and associated promise, and defines the coroutine
+ * interface expected by the compiler.
+ *
+ * @tparam R The result type produced by the coroutine.
+ */
 template <typename R>
 struct task final {
   using promise_type = async_coro::promise_type<R>;
@@ -72,7 +80,8 @@ struct task final {
 
   task(const task&) = delete;
   task(task&& other) noexcept
-      : _handle(std::exchange(other._handle, nullptr)) {}
+      : _handle(std::exchange(other._handle, nullptr)) {
+  }
 
   task& operator=(const task&) = delete;
   task& operator=(task&& other) noexcept {
@@ -127,11 +136,26 @@ struct task final {
   handle_type _handle{};
 };
 
-// Task handle for scheduled coroutines. Can track coroutine state and get result
+/**
+ * @brief Handle for scheduled coroutine tasks.
+ *
+ * Represents a handle to a coroutine task scheduled for execution. This class provides
+ * unique ownership of the coroutine state for the user, while also enabling shared ownership
+ * with the coroutine scheduler.
+ *
+ * The handle can be used to:
+ * - Track the coroutine's execution state.
+ * - Access the result of the coroutine once it completes.
+ * - Attach a continuation function, enabling a reactive programming approach.
+ *
+ * To safely use a continuation, the `task_handle` must outlive the associated coroutine.
+ *
+ * @tparam R The result type produced by the coroutine.
+ */
 template <typename R>
 class task_handle final {
  public:
-  using continuation_t = unique_function<void(promise_type<R>&) noexcept>;
+  using continuation_t = unique_function<void(promise_result<R>&) noexcept>;
 
   task_handle() noexcept = default;
   explicit task_handle(std::coroutine_handle<async_coro::promise_type<R>> h) noexcept
@@ -176,7 +200,7 @@ class task_handle final {
     }
   }
 
-  // access
+  // access for result
   decltype(auto) get() & {
     ASYNC_CORO_ASSERT(_handle && _handle.done());
     return _handle.promise().get_result_ref();
@@ -215,8 +239,11 @@ class task_handle final {
     return _handle.promise().move_result();
   }
 
+  // Checks if coroutine is finished.
+  // If state is empty returns true as well
   bool done() const { return !_handle || _handle.done(); }
 
+  // Sets callback that will be called after coroutine finish
   void continue_with(continuation_t f) {
     ASYNC_CORO_ASSERT(!_continuation);
     ASYNC_CORO_ASSERT(f);

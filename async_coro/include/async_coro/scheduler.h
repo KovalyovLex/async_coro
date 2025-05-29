@@ -32,6 +32,7 @@ class scheduler {
   // Executes planned tasks for main thread
   void update();
 
+  // Schedules task and starts it execution
   template <typename R>
   task_handle<R> start_task(task<R> coro,
                             execution_thread thread = execution_thread::main) {
@@ -46,10 +47,14 @@ class scheduler {
     return result;
   }
 
+  // Returns working queue associated with this scheduler
   working_queue& get_working_queue() noexcept { return _queue; }
 
-  bool is_current_thread_fits(execution_thread thread) noexcept;
+ public:
+  // for internal api use
 
+  // Checks is current thread fits requested 'thread'
+  bool is_current_thread_fits(execution_thread thread) noexcept;
   // Embed coroutine
   void on_child_coro_added(base_handle& parent, base_handle& child);
   // Can continue execution immediately or do same as plan_continue_execution
