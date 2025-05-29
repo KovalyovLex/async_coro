@@ -923,6 +923,62 @@ TEST(task, when_any_index_check_last) {
   EXPECT_EQ(handle.get(), 3);
 }
 
+TEST(task, when_any_continue_after_parent_complete) {
+  std::function<void()> continue_f1;
+  std::function<void()> continue_f2;
+
+  async_coro::scheduler scheduler;
+
+  {
+    auto routine1 = [&]() -> async_coro::task<int> {
+      co_await async_coro::await_callback([&continue_f1](auto f) { continue_f1 = std::move(f); });
+
+      co_return 1;
+    };
+
+    auto routine2 = [&]() -> async_coro::task<int> {
+      co_await async_coro::await_callback([&continue_f2](auto f) { continue_f2 = std::move(f); });
+
+      co_return 2;
+    };
+
+    auto routine3 = []() -> async_coro::task<int> {
+      co_return 3;
+    };
+
+    auto routine = [&]() -> async_coro::task<int> {
+      auto result = co_await async_coro::when_any(
+          co_await async_coro::start_task(routine1()),
+          co_await async_coro::start_task(routine2()),
+          co_await async_coro::start_task(routine3()));
+
+      EXPECT_EQ(result.index(), 2);
+
+      co_return std::visit(
+          [sum = 0](auto num) mutable {
+            sum = int(num);
+            return sum;
+          },
+          result);
+    };
+
+    scheduler.get_working_queue().set_num_threads(1);
+
+    auto handle = scheduler.start_task(routine());
+    EXPECT_TRUE(handle.done());
+
+    ASSERT_TRUE(continue_f1);
+    ASSERT_TRUE(continue_f2);
+
+    ASSERT_TRUE(handle.done());
+    EXPECT_EQ(handle.get(), 3);
+
+    continue_f1();
+  }
+
+  continue_f2();
+}
+
 TEST(task, when_any) {
   std::binary_semaphore sema{0};
 
