@@ -4,42 +4,17 @@
 #include <async_coro/internal/always_false.h>
 #include <async_coro/internal/deduce_function_signature.h>
 #include <async_coro/internal/is_invocable_by_signature.h>
+#include <async_coro/internal/unique_function_storage.h>
 
-#include <cstddef>
 #include <cstdlib>
-#include <cstring>
 #include <memory>
 #include <type_traits>
 #include <utility>
 
+#include "async_coro/internal/passkey.h"
+
 namespace async_coro {
 namespace internal {
-
-template <size_t Size>
-union small_buffer {
-  static_assert(Size >= sizeof(void*), "Size of buffer to small");
-
-  void* fx;
-  std::byte mem[Size];
-
-  small_buffer() noexcept {}
-  explicit small_buffer(std::nullptr_t) noexcept
-      : fx(nullptr) {}
-  small_buffer(const small_buffer& other) noexcept {
-    std::memcpy(&mem[0], &other.mem[0], Size);
-  }
-  ~small_buffer() noexcept {}
-
-  small_buffer& operator=(std::nullptr_t) noexcept {
-    fx = nullptr;
-    return *this;
-  }
-
-  void swap_and_reset(small_buffer& other) noexcept {
-    std::memcpy(&mem[0], &other.mem[0], Size);
-    other.fx = nullptr;
-  }
-};
 
 template <size_t SFOSize, typename TFunc, typename T>
 class function_impl_call {
@@ -72,6 +47,16 @@ class function_impl_call<SFOSize, TFunc, R(TArgs...)> {
     return _invoke(static_cast<const TFunc*>(this)->_buffer, std::forward<TArgs>(args)...);
   }
 
+  R move_to_storage_and_call(unique_function_storage<SFOSize>& store, TArgs... args) {
+    ASYNC_CORO_ASSERT(_invoke);
+
+    const auto invoke = std::exchange(this->_invoke, nullptr);
+
+    store = std::move(*static_cast<TFunc*>(this));
+
+    return invoke(store.get_buffer(internal::passkey{this}), std::forward<TArgs>(args)...);
+  }
+
  protected:
   t_invoke_f _invoke;
 };
@@ -100,30 +85,51 @@ class function_impl_call<SFOSize, TFunc, R(TArgs...) noexcept> {
     return _invoke(static_cast<const TFunc*>(this)->_buffer, std::forward<TArgs>(args)...);
   }
 
+  R move_to_storage_and_call(unique_function_storage<SFOSize>& store, TArgs... args) noexcept {
+    ASYNC_CORO_ASSERT(_invoke);
+
+    const auto invoke = std::exchange(this->_invoke, nullptr);
+    const auto funcPtr = static_cast<TFunc*>(this);
+    const auto moveOrDestroy = funcPtr->_move_or_destroy;
+
+    store = std::move(*funcPtr);
+
+    return invoke(store.get_buffer(internal::passkey{this}), std::forward<TArgs>(args)...);
+  }
+
  protected:
   t_invoke_f _invoke;
 };
+
 }  // namespace internal
 
+/**
+ * @brief A move-only function wrapper with customizable small object optimization.
+ *
+ * This class serves as an analog to `std::move_only_function`, optimized for internal
+ * object size and performance. It allows customization of the buffer size used for
+ * small object optimization (SOO), enabling efficient storage of small callable objects
+ * directly within the function wrapper without dynamic memory allocation.
+ *
+ * @tparam FTy The function signature, e.g., `R(Args...)`, where `R` is the return type
+ *             and `Args...` are the parameter types.
+ * @tparam SFOSize The size (in bytes) of the internal buffer used for small object optimization.
+ *                 Defaults to `sizeof(void*)`.
+ */
 template <typename FTy, size_t SFOSize = sizeof(void*)>
-class unique_function : public internal::function_impl_call<SFOSize, unique_function<FTy, SFOSize>, FTy> {
+class unique_function : private internal::function_impl_call<SFOSize, unique_function<FTy, SFOSize>, FTy>,
+                        private unique_function_storage<SFOSize> {
   using super = internal::function_impl_call<SFOSize, unique_function<FTy, SFOSize>, FTy>;
+  using storage = unique_function_storage<SFOSize>;
 
   friend super;
-
-  enum deinit_op {
-    action_move,
-    action_destroy,
-  };
-
-  using t_move_or_destroy_f = void (*)(unique_function& self,
-                                       unique_function* other,
-                                       deinit_op op) noexcept;
 
   template <typename Fx>
   using is_invocable = internal::is_invocable_by_signature<FTy, Fx>;
 
   using t_small_buffer = typename super::t_small_buffer;
+
+  using t_move_or_destroy_f = typename t_small_buffer::t_move_or_destroy_f;
 
   template <typename Fx>
   inline static constexpr bool is_small_f =
@@ -136,21 +142,19 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
 
   struct no_init {};
 
-  unique_function(no_init) noexcept {}
+  unique_function(no_init) noexcept : storage(typename storage::no_init{}) {}
 
  public:
-  unique_function() noexcept : super(nullptr), _move_or_destroy(nullptr), _buffer(nullptr) {}
+  unique_function() noexcept : super(nullptr), storage() {}
 
   unique_function(std::nullptr_t) noexcept : unique_function() {}
 
   unique_function(const unique_function&) = delete;
 
   unique_function(unique_function&& other) noexcept
-      : super(other._invoke), _move_or_destroy(other._move_or_destroy), _buffer(std::move(other._buffer)) {
-    if (_move_or_destroy) {
-      _move_or_destroy(*this, &other, action_move);
-    }
-    other.clear();
+      : super(other._invoke),
+        storage(std::move(other)) {
+    other._invoke = nullptr;
   }
 
   template <typename Fx,
@@ -160,35 +164,20 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
     init(std::forward<Fx>(func));
   }
 
-  ~unique_function() noexcept {
-    if (_move_or_destroy) {
-      _move_or_destroy(*this, nullptr, action_destroy);
-    }
-  }
+  ~unique_function() noexcept = default;
 
   unique_function& operator=(const unique_function&) const = delete;
 
   unique_function& operator=(unique_function&& other) noexcept {
-    if (this == &other) {
-      return *this;
-    }
-
-    clear();
-
-    if (other._move_or_destroy) {
-      other._move_or_destroy(*this, &other, action_move);
-    } else {
-      this->_buffer.swap_and_reset(other._buffer);
-    }
+    *static_cast<storage*>(this) = std::move(other);
 
     this->_invoke = std::exchange(other._invoke, nullptr);
-    _move_or_destroy = std::exchange(other._move_or_destroy, nullptr);
 
     return *this;
   }
 
   unique_function& operator=(std::nullptr_t) noexcept {
-    clear();
+    this->clear();
     return *this;
   }
 
@@ -196,7 +185,7 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
                              is_invocable<Fx>::value &&
                              !std::is_same_v<Fx, unique_function>>>
   unique_function& operator=(Fx&& func) noexcept(is_noexcept_init<Fx>) {
-    clear();
+    this->clear();
     init(std::forward<Fx>(func));
     return *this;
   }
@@ -204,6 +193,8 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
   explicit operator bool() const noexcept { return this->_invoke != nullptr; }
 
   using super::operator();
+
+  using super::move_to_storage_and_call;
 
  private:
   template <typename Fx>
@@ -220,22 +211,23 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
       if constexpr (!std::is_trivially_destructible_v<TFunc> ||
                     !std::is_trivially_move_constructible_v<TFunc>) {
         this->_move_or_destroy = static_cast<t_move_or_destroy_f>(
-            [](unique_function& self, unique_function* other, deinit_op op) noexcept {
-              if (op == action_destroy) {
+            [](t_small_buffer& self, t_small_buffer* other, internal::deinit_op op) noexcept {
+              if (op == internal::deinit_op::destroy) {
                 if constexpr (!std::is_trivially_destructible_v<TFunc>) {
-                  auto* fx = reinterpret_cast<TFunc*>(&self._buffer.mem[0]);
+                  auto* fx = reinterpret_cast<TFunc*>(&self.mem[0]);
                   std::destroy_at(fx);
                 }
-                self._buffer = nullptr;
+                self = nullptr;
               } else {
                 // action_move
                 if constexpr (!std::is_trivially_move_constructible_v<TFunc>) {
                   static_assert(std::is_nothrow_move_constructible_v<TFunc>, "lambda should have noexcept move constructor");
 
-                  auto* to = reinterpret_cast<TFunc*>(&self._buffer.mem[0]);
-                  auto& from = reinterpret_cast<TFunc&>(other->_buffer.mem[0]);
+                  auto* to = reinterpret_cast<TFunc*>(&self.mem[0]);
+                  auto& from = reinterpret_cast<TFunc&>(other->mem[0]);
                   new (to) TFunc(std::move(from));
-                  other->_buffer = nullptr;
+                  std::destroy_at(&from);
+                  *other = nullptr;
                 }
               }
             });
@@ -246,17 +238,17 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
       new (&this->_buffer.mem[0]) Fx(std::forward<Fx>(func));
     } else {
       // large function
-      _move_or_destroy = static_cast<t_move_or_destroy_f>(
-          [](unique_function& self, unique_function* other, auto op) noexcept {
-            if (op == action_destroy) {
-              if (self._buffer.fx) {
-                auto* fx = static_cast<TFunc*>(self._buffer.fx);
+      this->_move_or_destroy = static_cast<t_move_or_destroy_f>(
+          [](t_small_buffer& self, t_small_buffer* other, internal::deinit_op op) noexcept {
+            if (op == internal::deinit_op::destroy) {
+              if (self.fx) {
+                auto* fx = static_cast<TFunc*>(self.fx);
                 delete fx;
-                self._buffer.fx = nullptr;
+                self.fx = nullptr;
               }
             } else {
               // action_move
-              self._buffer.fx = std::exchange(other->_buffer.fx, nullptr);
+              self.fx = std::exchange(other->fx, nullptr);
             }
           });
       this->_buffer.fx = new TFunc(std::forward<Fx>(func));
@@ -264,17 +256,8 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
   }
 
   void clear() noexcept {
-    if (_move_or_destroy) {
-      _move_or_destroy(*this, nullptr, action_destroy);
-    } else {
-      this->_buffer = nullptr;
-    }
-    _move_or_destroy = nullptr;
+    storage::clear();
     this->_invoke = nullptr;
-  }
-
-  static t_small_buffer& get_buffer(const super* self) noexcept {
-    return static_cast<const unique_function*>(self)->_buffer;
   }
 
   template <typename TFunc, typename R, typename... TArgs>
@@ -290,10 +273,6 @@ class unique_function : public internal::function_impl_call<SFOSize, unique_func
           }
         });
   }
-
- private:
-  t_move_or_destroy_f _move_or_destroy;
-  mutable t_small_buffer _buffer;
 };
 
 template <typename R, class... TArgs>

@@ -521,3 +521,45 @@ TEST(unique_function, compilation) {
   static_assert(invocable<void(int) noexcept, decltype(testF2)>::value);
   static_assert(!invocable<void() noexcept, decltype(testF1)>::value);
 }
+
+TEST(unique_function, store_storage) {
+  using namespace async_coro;
+
+  static int num_alive = 0;
+
+  struct move_struct {
+    move_struct() {
+      num_alive++;
+    }
+    move_struct(const move_struct&) = delete;
+    move_struct(move_struct&&) noexcept {
+      num_alive++;
+    }
+    move_struct& operator=(const move_struct&) = delete;
+    move_struct& operator=(move_struct&&) = delete;
+    ~move_struct() noexcept {
+      num_alive--;
+    }
+  };
+
+  {
+    unique_function_storage storage;
+
+    {
+      unique_function<float(int)> f = [to_move = move_struct{}](auto&& i) noexcept {
+        (void)to_move;
+        EXPECT_EQ(i, 34);
+
+        return 22.5f;
+      };
+
+      EXPECT_EQ(num_alive, 1);
+
+      EXPECT_FLOAT_EQ(f.move_to_storage_and_call(storage, 34), 22.5f);
+    }
+
+    EXPECT_EQ(num_alive, 1);
+  }
+
+  EXPECT_EQ(num_alive, 0);
+}
