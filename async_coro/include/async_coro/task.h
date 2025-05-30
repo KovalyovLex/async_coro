@@ -3,7 +3,7 @@
 #include <async_coro/base_handle.h>
 #include <async_coro/config.h>
 #include <async_coro/internal/passkey.h>
-#include <async_coro/internal/promise_result_holder.h>
+#include <async_coro/internal/promise_type.h>
 #include <async_coro/unique_function.h>
 
 #include <concepts>
@@ -12,54 +12,7 @@
 
 namespace async_coro {
 
-template <typename R>
-class task_handle;
-
-template <typename R>
-struct task;
-
 class scheduler;
-
-template <typename T>
-concept embeddable_task =
-    requires(T a) { a.embed_task(std::declval<base_handle&>()); };
-
-template <typename R>
-struct promise_type final : internal::promise_result_holder<R> {
-  // construct my promise from me
-  constexpr auto get_return_object() noexcept {
-    return std::coroutine_handle<promise_type>::from_promise(*this);
-  }
-
-  // all promises await to be started in scheduller or after embedding
-  constexpr auto initial_suspend() noexcept {
-    this->init_promise(get_return_object());
-    return std::suspend_always();
-  }
-
-  // we dont want to destroy our result here
-  std::suspend_always final_suspend() noexcept;
-
-  template <typename T>
-  constexpr decltype(auto) await_transform(T&& in) noexcept {
-    // return non standard awaiters as is
-    return std::move(in);
-  }
-
-  template <embeddable_task T>
-  constexpr decltype(auto) await_transform(T&& in) {
-    in.embed_task(*this);
-    return std::move(in);
-  }
-
-  void set_task_handle(task_handle<R>* handle, internal::passkey_any<task_handle<R>>) {
-    this->set_task_handle_impl(handle);
-  }
-
-  void try_free_task(internal::passkey_any<task<R>>) {
-    this->try_free_task_impl();
-  }
-};
 
 /**
  * @brief Default return type for asynchronous coroutines.
@@ -72,7 +25,7 @@ struct promise_type final : internal::promise_result_holder<R> {
  */
 template <typename R>
 struct task final {
-  using promise_type = async_coro::promise_type<R>;
+  using promise_type = async_coro::internal::promise_type<R>;
   using handle_type = std::coroutine_handle<promise_type>;
   using return_type = R;
 
@@ -154,11 +107,14 @@ struct task final {
  */
 template <typename R>
 class task_handle final {
+  using promise_type = async_coro::internal::promise_type<R>;
+  using handle_type = std::coroutine_handle<promise_type>;
+
  public:
   using continuation_t = unique_function<void(promise_result<R>&) noexcept>;
 
   task_handle() noexcept = default;
-  explicit task_handle(std::coroutine_handle<async_coro::promise_type<R>> h) noexcept
+  explicit task_handle(handle_type h) noexcept
       : _handle(std::move(h)) {
     ASYNC_CORO_ASSERT(_handle);
     if (_handle) [[likely]] {
@@ -260,7 +216,7 @@ class task_handle final {
     }
   }
 
-  void continue_impl(promise_type<R>& promise, internal::passkey_any<promise_type<R>>) noexcept {
+  void continue_impl(promise_type& promise, internal::passkey_any<promise_type>) noexcept {
     const auto f = std::exchange(_continuation, {});
     if (f) {
       f(promise);
@@ -268,9 +224,11 @@ class task_handle final {
   }
 
  private:
-  std::coroutine_handle<async_coro::promise_type<R>> _handle{};
+  handle_type _handle{};
   continuation_t _continuation;
 };
+
+namespace internal {
 
 template <typename R>
 std::suspend_always promise_type<R>::final_suspend() noexcept {
@@ -280,5 +238,7 @@ std::suspend_always promise_type<R>::final_suspend() noexcept {
   }
   return {};
 }
+
+}  // namespace internal
 
 }  // namespace async_coro
