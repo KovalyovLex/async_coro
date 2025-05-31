@@ -30,6 +30,13 @@ class aligned_name_generator {
 using test_aligned_types = ::testing::Types<uint16_t, int32_t, unsigned int, uint64_t, float, double, long double>;
 TYPED_TEST_SUITE(aligned_ptr_test, test_aligned_types, aligned_name_generator);
 
+struct malloc_deleter {
+  template <class T>
+  void operator()(T* ptr) noexcept {
+    std::free(ptr);
+  }
+};
+
 TEST(aligned_ptr_test, int_ptr_stack) {
   using value_type = int;
 
@@ -53,6 +60,36 @@ TEST(aligned_ptr_test, int_ptr_stack) {
 
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, &val);
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 1);
+}
+
+TEST(aligned_ptr_test, int_ptr_heap) {
+  using value_type = int;
+
+  using tagged_ptr = async_coro::internal::aligned_tagged_ptr<value_type, true>;
+
+  tagged_ptr intptr;
+
+  auto val = std::unique_ptr<value_type, malloc_deleter>(new (std::malloc(sizeof(value_type))) value_type{0});
+
+  EXPECT_EQ(alignof(value_type), 4);
+  EXPECT_EQ(tagged_ptr::num_bits, 4);
+  EXPECT_EQ(tagged_ptr::max_tag_num, 0b1111);
+
+  ASSERT_EQ(reinterpret_cast<intptr_t>(val.get()) & tagged_ptr::max_tag_num, 0);
+
+  EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, nullptr);
+  EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 0);
+
+  tagged_ptr::tagged_pair pair{nullptr, 0};
+  ASSERT_TRUE(intptr.compare_exchange_strong(pair, {val.get(), 1}, std::memory_order::relaxed));
+
+  EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, val.get());
+  EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 1);
+
+  intptr.store({val.get(), 3}, std::memory_order::relaxed);
+
+  EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, val.get());
+  EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 3);
 }
 
 TYPED_TEST(aligned_ptr_test, ptr_stack) {
@@ -89,7 +126,7 @@ TYPED_TEST(aligned_ptr_test, ptr_heap) {
 
   tagged_ptr intptr;
 
-  auto val = std::make_unique<value_type>(0);
+  auto val = std::unique_ptr<value_type, malloc_deleter>(new (std::malloc(sizeof(value_type))) value_type{0});
 
   ASSERT_EQ(reinterpret_cast<intptr_t>(val.get()) & tagged_ptr::max_tag_num, 0);
 

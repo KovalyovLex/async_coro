@@ -18,24 +18,24 @@ namespace async_coro::internal {
  * lock-free structures like hazard pointers or tagged memory reclamation schemes.
  *
  * The number of bits available for tagging is determined by the alignment of the type `T`.
- * If `OnlyHeapAllocated` is set to true (default), a conservative alignment is used to
- * ensure safe tagging for heap-allocated objects.
+ * If `OnlyMallocAllocated` is set to true (default), a conservative alignment is used to
+ * ensure safe tagging for heap-allocated objects with malloc (or without support aligned new).
  *
  * Internally, the pointer and tag are packed into a single atomic integer for efficient
  * concurrent access and manipulation. The class provides lock-free `load`, `store`,
  * and `compare_exchange_strong` operations.
  *
  * @tparam T The pointed-to object type. Must be a complete type.
- * @tparam OnlyHeapAllocated If true, assumes the pointer is always heap-allocated,
+ * @tparam OnlyMallocAllocated If true, assumes the pointer is always heap-allocated,
  *         allowing use of stricter alignment for maximizing available tag bits.
  */
-template <class T, bool OnlyHeapAllocated = true>
+template <class T, bool OnlyMallocAllocated = true>
 class aligned_tagged_ptr {
  public:
   /**
    * @brief Number of low bits safely usable for tagging based on pointer alignment.
    */
-  inline static constexpr std::uint32_t num_bits = get_num_bits<std::uint32_t>(OnlyHeapAllocated ? std::max(alignof(T), alignof(std::max_align_t)) : alignof(T));
+  inline static constexpr std::uint32_t num_bits = get_num_bits<std::uint32_t>(OnlyMallocAllocated ? std::max(alignof(T), alignof(std::max_align_t)) : alignof(T));
 
   /**
    * @brief Maximum numeric tag value that can be stored in available bits.
