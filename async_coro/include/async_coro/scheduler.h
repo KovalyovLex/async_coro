@@ -2,14 +2,15 @@
 
 #include <async_coro/config.h>
 #include <async_coro/internal/passkey.h>
-#include <async_coro/internal/thread_safety/analysis.h>
-#include <async_coro/internal/thread_safety/mutex.h>
 #include <async_coro/task.h>
+#include <async_coro/thread_safety/analysis.h>
+#include <async_coro/thread_safety/mutex.h>
 #include <async_coro/unique_function.h>
 #include <async_coro/working_queue.h>
 
 #include <thread>
 #include <vector>
+
 
 namespace async_coro {
 
@@ -73,11 +74,11 @@ class scheduler {
   mutex _task_mutex;
   mutex _mutex;
   working_queue _queue;
-  std::vector<base_handle*> COTHREAD_GUARDED_BY(_mutex) _managed_coroutines;
+  std::vector<base_handle*> CORO_THREAD_GUARDED_BY(_mutex) _managed_coroutines;
   std::vector<unique_function<void(scheduler&)>> _update_tasks;
-  std::vector<unique_function<void(scheduler&)>> COTHREAD_GUARDED_BY(_task_mutex) _update_tasks_synchronized;
+  std::vector<unique_function<void(scheduler&)>> CORO_THREAD_GUARDED_BY(_task_mutex) _update_tasks_synchronized;
   std::thread::id _main_thread = {};
-  bool _is_destroying COTHREAD_GUARDED_BY(_mutex) = false;
+  bool _is_destroying CORO_THREAD_GUARDED_BY(_mutex) = false;
   std::atomic_bool _has_synchronized_tasks = false;
 };
 

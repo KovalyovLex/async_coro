@@ -1,6 +1,6 @@
 #pragma once
 
-#include <async_coro/internal/thread_safety/analysis.h>
+#include <async_coro/thread_safety/analysis.h>
 
 #include <mutex>
 
@@ -10,7 +10,7 @@ template <typename T>
 class unique_lock;
 
 // Replacement for std::mutex to work with clang thread safety analysis
-class COTHREAD_CAPABILITY("mutex") mutex : protected std::mutex {
+class CORO_THREAD_CAPABILITY("mutex") mutex : protected std::mutex {
   friend unique_lock<mutex>;
 
  public:
@@ -20,15 +20,15 @@ class COTHREAD_CAPABILITY("mutex") mutex : protected std::mutex {
   mutex(const mutex&) = delete;
   mutex& operator=(const mutex&) = delete;
 
-  void lock() COTHREAD_ACQUIRE() {
+  void lock() CORO_THREAD_ACQUIRE() {
     super::lock();
   }
 
-  [[nodiscard]] bool try_lock() noexcept COTHREAD_TRY_ACQUIRE(true) {
+  [[nodiscard]] bool try_lock() noexcept CORO_THREAD_TRY_ACQUIRE(true) {
     return super::try_lock();
   }
 
-  void unlock() noexcept COTHREAD_RELEASE() {
+  void unlock() noexcept CORO_THREAD_RELEASE() {
     super::unlock();
   }
 };

@@ -1,5 +1,5 @@
 #include <async_coro/config.h>
-#include <async_coro/internal/thread_safety/unique_lock.h>
+#include <async_coro/thread_safety/unique_lock.h>
 #include <async_coro/working_queue.h>
 
 #include <algorithm>
@@ -102,7 +102,7 @@ void working_queue::try_to_awake_thread(bool multiple) noexcept {
   }
 }
 
-void working_queue::start_up_threads() COTHREAD_REQUIRES(_threads_mutex) {
+void working_queue::start_up_threads() CORO_THREAD_REQUIRES(_threads_mutex) {
   // cleanup finished threads first
   const auto it =
       std::remove_if(_threads.begin(), _threads.end(),

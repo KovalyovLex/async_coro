@@ -1,9 +1,9 @@
 #pragma once
 
 #include <async_coro/config.h>
-#include <async_coro/internal/thread_safety/analysis.h>
-#include <async_coro/internal/thread_safety/condition_variable.h>
-#include <async_coro/internal/thread_safety/mutex.h>
+#include <async_coro/thread_safety/analysis.h>
+#include <async_coro/thread_safety/condition_variable.h>
+#include <async_coro/thread_safety/mutex.h>
 #include <async_coro/unique_function.h>
 
 #include <concepts>
@@ -12,7 +12,6 @@
 #include <queue>
 #include <thread>
 #include <vector>
-
 
 namespace async_coro {
 class working_queue2 {
@@ -68,12 +67,12 @@ class working_queue2 {
  private:
   mutable mutex _mutex;
   mutable mutex _threads_mutex;
-  condition_variable _condition COTHREAD_GUARDED_BY(_mutex);
-  std::queue<std::pair<task_function, task_id>> _tasks COTHREAD_GUARDED_BY(_mutex);
-  std::vector<std::thread> _threads COTHREAD_GUARDED_BY(_threads_mutex);
-  uint32_t _num_threads COTHREAD_GUARDED_BY(_threads_mutex) = 0;
-  uint32_t _num_sleeping_threads COTHREAD_GUARDED_BY(_mutex) = 0;
-  task_id _current_id COTHREAD_GUARDED_BY(_mutex) = 0;
+  condition_variable _condition CORO_THREAD_GUARDED_BY(_mutex);
+  std::queue<std::pair<task_function, task_id>> _tasks CORO_THREAD_GUARDED_BY(_mutex);
+  std::vector<std::thread> _threads CORO_THREAD_GUARDED_BY(_threads_mutex);
+  uint32_t _num_threads CORO_THREAD_GUARDED_BY(_threads_mutex) = 0;
+  uint32_t _num_sleeping_threads CORO_THREAD_GUARDED_BY(_mutex) = 0;
+  task_id _current_id CORO_THREAD_GUARDED_BY(_mutex) = 0;
   std::atomic<uint32_t> _num_alive_threads = 0;
   std::atomic<uint32_t> _num_threads_to_destroy = 0;
 };

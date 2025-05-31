@@ -1,8 +1,8 @@
 #pragma once
 
 #include <async_coro/config.h>
-#include <async_coro/internal/thread_safety/analysis.h>
-#include <async_coro/internal/thread_safety/mutex.h>
+#include <async_coro/thread_safety/analysis.h>
+#include <async_coro/thread_safety/mutex.h>
 #include <async_coro/unique_function.h>
 #include <concurrentqueue.h>
 
@@ -66,8 +66,8 @@ class working_queue3 {
  private:
   mutable mutex _threads_mutex;
   moodycamel::ConcurrentQueue<std::pair<task_function, task_id>> _tasks;
-  std::vector<std::thread> _threads COTHREAD_GUARDED_BY(_threads_mutex);
-  uint32_t _num_threads COTHREAD_GUARDED_BY(_threads_mutex) = 0;
+  std::vector<std::thread> _threads CORO_THREAD_GUARDED_BY(_threads_mutex);
+  uint32_t _num_threads CORO_THREAD_GUARDED_BY(_threads_mutex) = 0;
   std::atomic<task_id> _current_id = 0;
   std::atomic<uint32_t> _num_alive_threads = 0;
   std::atomic<uint32_t> _num_threads_to_destroy = 0;

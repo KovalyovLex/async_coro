@@ -1,9 +1,10 @@
 #include <async_coro/base_handle.h>
-#include <async_coro/internal/thread_safety/unique_lock.h>
 #include <async_coro/scheduler.h>
+#include <async_coro/thread_safety/unique_lock.h>
 
 #include <algorithm>
 #include <thread>
+
 
 namespace async_coro {
 

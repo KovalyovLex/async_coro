@@ -1,7 +1,7 @@
 #include "working_queue2.h"
 
 #include <async_coro/config.h>
-#include <async_coro/internal/thread_safety/unique_lock.h>
+#include <async_coro/thread_safety/unique_lock.h>
 
 #include <algorithm>
 
