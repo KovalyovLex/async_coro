@@ -43,7 +43,7 @@ class aligned_tagged_ptr {
   inline static constexpr std::uint32_t max_tag_num = get_mask<std::uint32_t>(num_bits);
 
   /// Type representing a pair of a pointer and its associated tag.
-  using tagged_pair = tagged_pair<T>;
+  using tagged_ptr = tagged_pair<T>;
 
   /**
    * @brief Constructs an aligned tagged pointer from a raw pointer with a tag of 0.
@@ -70,12 +70,12 @@ class aligned_tagged_ptr {
    * @brief Atomically loads the current tagged pointer.
    *
    * @param order The memory ordering for the atomic load.
-   * @return The current pointer and tag as a `tagged_pair`.
+   * @return The current pointer and tag as a `tagged_ptr`.
    */
-  tagged_pair load(std::memory_order order) const noexcept {
+  tagged_ptr load(std::memory_order order) const noexcept {
     const auto value = _raw_ptr.load(order);
 
-    tagged_pair ans;
+    tagged_ptr ans;
     convert_raw_to_tagged(ans, value);
 
     return ans;
@@ -87,7 +87,7 @@ class aligned_tagged_ptr {
    * @param new_value The pointer and tag to store.
    * @param order The memory ordering for the atomic store.
    */
-  void store(const tagged_pair& new_value, std::memory_order order) noexcept {
+  void store(const tagged_ptr& new_value, std::memory_order order) noexcept {
     _raw_ptr.store(convert_tagged_to_raw(new_value), order);
   }
 
@@ -99,7 +99,7 @@ class aligned_tagged_ptr {
    * @param order The memory ordering for the operation.
    * @return `true` if the exchange succeeded, `false` otherwise.
    */
-  bool compare_exchange_strong(tagged_pair& old_value, const tagged_pair& new_value, std::memory_order order) noexcept {
+  bool compare_exchange_strong(tagged_ptr& old_value, const tagged_ptr& new_value, std::memory_order order) noexcept {
     auto old_ptr = convert_tagged_to_raw(old_value);
     const auto new_ptr = convert_tagged_to_raw(new_value);
 
@@ -118,12 +118,12 @@ class aligned_tagged_ptr {
   /// Mask for extracting the tag from a tagged integer.
   inline static constexpr std::uintptr_t tag_mask = max_tag_num;
 
-  static void convert_raw_to_tagged(tagged_pair& value, std::uintptr_t ptr_bits) noexcept {
+  static void convert_raw_to_tagged(tagged_ptr& value, std::uintptr_t ptr_bits) noexcept {
     value.ptr = reinterpret_cast<T*>(ptr_bits & address_mask);
     value.tag = static_cast<std::uint32_t>(ptr_bits & tag_mask);
   }
 
-  static std::uintptr_t convert_tagged_to_raw(const tagged_pair& value) noexcept {
+  static std::uintptr_t convert_tagged_to_raw(const tagged_ptr& value) noexcept {
     std::uintptr_t ptr_bits = reinterpret_cast<std::uintptr_t>(value.ptr);
 
     ASYNC_CORO_ASSERT((ptr_bits & tag_mask) == 0);

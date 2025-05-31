@@ -55,7 +55,7 @@ TEST(aligned_ptr_test, int_ptr_stack) {
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, nullptr);
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 0);
 
-  tagged_ptr::tagged_pair pair{nullptr, 0};
+  tagged_ptr::tagged_ptr pair{nullptr, 0};
   ASSERT_TRUE(intptr.compare_exchange_strong(pair, {&val, 1}, std::memory_order::relaxed));
 
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, &val);
@@ -80,7 +80,7 @@ TEST(aligned_ptr_test, int_ptr_heap) {
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, nullptr);
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 0);
 
-  tagged_ptr::tagged_pair pair{nullptr, 0};
+  tagged_ptr::tagged_ptr pair{nullptr, 0};
   ASSERT_TRUE(intptr.compare_exchange_strong(pair, {val.get(), 1}, std::memory_order::relaxed));
 
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, val.get());
@@ -106,7 +106,7 @@ TYPED_TEST(aligned_ptr_test, ptr_stack) {
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, nullptr);
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 0);
 
-  typename tagged_ptr::tagged_pair pair{nullptr, 0};
+  typename tagged_ptr::tagged_ptr pair{nullptr, 0};
   ASSERT_TRUE(intptr.compare_exchange_strong(pair, {&val, 1}, std::memory_order::relaxed));
 
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, &val);
@@ -133,7 +133,7 @@ TYPED_TEST(aligned_ptr_test, ptr_heap) {
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, nullptr);
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 0);
 
-  typename tagged_ptr::tagged_pair pair{nullptr, 0};
+  typename tagged_ptr::tagged_ptr pair{nullptr, 0};
   ASSERT_TRUE(intptr.compare_exchange_strong(pair, {val.get(), 1}, std::memory_order::relaxed));
 
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, val.get());
