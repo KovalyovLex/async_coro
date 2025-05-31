@@ -1,6 +1,7 @@
 #pragma once
 
 #include <async_coro/config.h>
+#include <async_coro/internal/hardware_interference_size.h>
 #include <async_coro/internal/virtual_tagged_ptr.h>
 #include <async_coro/thread_safety/spin_lock_mutex.h>
 #include <async_coro/thread_safety/unique_lock.h>
