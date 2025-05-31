@@ -47,7 +47,7 @@ class atomic_queue {
             ASYNC_CORO_ASSERT(next_created != nullptr);
             protect = next_created->free_protect.load(std::memory_order::relaxed);
           }
-        } while (!next_created->free_protect.compare_exchange_weak(protect, protect + 1, std::memory_order::relaxed));
+        } while (!next_created->free_protect.compare_exchange_strong(protect, protect + 1, std::memory_order::relaxed));
 
         next_created->push(q, std::forward<U>(v)...);
       }
@@ -62,7 +62,7 @@ class atomic_queue {
             // no values
             return false;
           }
-        } while (!begin.compare_exchange_weak(cur_begin, cur_begin + 1, std::memory_order::relaxed));
+        } while (!begin.compare_exchange_strong(cur_begin, cur_begin + 1, std::memory_order::relaxed));
 
         // syncronization here guaranteed by end in release-acquire ordering
         v = std::move(reinterpret_cast<T&>(values[cur_begin]));
@@ -133,7 +133,7 @@ class atomic_queue {
     if (next_created == nullptr) {
       // only one thread allowed to create next chunk
       bool expected_zone = false;
-      while (!c->create_next_crit.compare_exchange_weak(expected_zone, true, std::memory_order::relaxed)) {
+      while (!c->create_next_crit.compare_exchange_strong(expected_zone, true, std::memory_order::acq_rel)) {
         expected_zone = false;
         std::this_thread::yield();
       }
@@ -142,7 +142,7 @@ class atomic_queue {
 
       next_created = c->next.load(std::memory_order::relaxed);
       if (next_created) {
-        c->create_next_crit.store(false, std::memory_order::relaxed);
+        c->create_next_crit.store(false, std::memory_order::release);
         return next_created;
       }
 
@@ -167,10 +167,10 @@ class atomic_queue {
       c->next.store(free, std::memory_order::relaxed);
 
       task_chunk* expected = c;
-      while (!_head_push.compare_exchange_weak(expected, free, std::memory_order::relaxed)) {
+      while (!_head_push.compare_exchange_strong(expected, free, std::memory_order::acq_rel)) {
       }
 
-      c->create_next_crit.store(false, std::memory_order::relaxed);
+      c->create_next_crit.store(false, std::memory_order::release);
       return free;
     } else {
       return next_created;
@@ -191,10 +191,8 @@ class atomic_queue {
     ASYNC_CORO_ASSERT(head1 != nullptr);
     ASYNC_CORO_ASSERT(head2 != nullptr);
 
-    while (!_head_pop.compare_exchange_weak(head1, nullptr, std::memory_order::relaxed)) {
-    }
-    while (!_free_chain.compare_exchange_weak(head2, nullptr, std::memory_order::relaxed)) {
-    }
+    _head_pop.store(nullptr, std::memory_order::relaxed);
+    _free_chain.store(nullptr, std::memory_order::relaxed);
     _head_push.store(nullptr, std::memory_order::relaxed);
 
     while (head1) {
@@ -228,7 +226,7 @@ class atomic_queue {
         ASYNC_CORO_ASSERT(head != nullptr);
         protect = head->free_protect.load(std::memory_order::relaxed);
       }
-    } while (!head->free_protect.compare_exchange_weak(protect, protect + 1, std::memory_order::relaxed));
+    } while (!head->free_protect.compare_exchange_strong(protect, protect + 1, std::memory_order::relaxed));
 
     head->push(*this, std::forward<U>(v)...);
   }
@@ -244,7 +242,7 @@ class atomic_queue {
         ASYNC_CORO_ASSERT(head != nullptr);
         protect = head->free_protect.load(std::memory_order::relaxed);
       }
-    } while (!head->free_protect.compare_exchange_weak(protect, protect + 1, std::memory_order::relaxed));
+    } while (!head->free_protect.compare_exchange_strong(protect, protect + 1, std::memory_order::relaxed));
 
     // release of free_protect inside try_pop
     bool need_release = true;
