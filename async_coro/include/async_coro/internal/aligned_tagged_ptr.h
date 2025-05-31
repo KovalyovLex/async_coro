@@ -35,7 +35,7 @@ class aligned_tagged_ptr {
   /**
    * @brief Number of low bits safely usable for tagging based on pointer alignment.
    */
-  inline static constexpr std::uint32_t num_bits = get_num_bits<std::uint32_t>(OnlyMallocAllocated ? std::max(alignof(T), alignof(std::max_align_t)) : alignof(T));
+  inline static constexpr std::uint32_t num_bits = get_num_bits<std::uint32_t>((std::uint32_t)(OnlyMallocAllocated ? std::max(alignof(T), alignof(std::max_align_t)) : alignof(T)));
 
   /**
    * @brief Maximum numeric tag value that can be stored in available bits.

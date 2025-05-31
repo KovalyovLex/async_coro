@@ -109,7 +109,7 @@ TYPED_TEST(virtual_ptr_test, ptr_heap) {
 
   tagged_ptr intptr;
 
-  auto val = std::make_unique<value_type>(0);
+  auto val = std::make_unique<value_type>(value_type{0});
   auto val2 = value_type{2};
 
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, nullptr);

@@ -18,6 +18,11 @@ namespace async_coro {
 
 template <typename T, uint32_t BlockSize = 64>
 class atomic_stack {
+#if defined _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4324)
+#endif
+
   struct alignas(std::hardware_constructive_interference_size) value_holder {
     // using union to not initialize value by default
     union {
@@ -30,6 +35,10 @@ class atomic_stack {
     value_holder(value_holder&&) = delete;
     ~value_holder() noexcept {}
   };
+
+#if defined _MSC_VER
+#pragma warning(pop)
+#endif
 
   struct values_array {
     values_array(uint32_t index)
