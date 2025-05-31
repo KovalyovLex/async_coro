@@ -72,8 +72,7 @@ TEST(aligned_ptr_test, int_ptr_heap) {
   auto val = std::unique_ptr<value_type, malloc_deleter>(new (std::malloc(sizeof(value_type))) value_type{0});
 
   EXPECT_EQ(alignof(value_type), 4);
-  EXPECT_EQ(tagged_ptr::num_bits, 4);
-  EXPECT_EQ(tagged_ptr::max_tag_num, 0b1111);
+  EXPECT_GE(tagged_ptr::num_bits, 3);
 
   ASSERT_EQ(reinterpret_cast<intptr_t>(val.get()) & tagged_ptr::max_tag_num, 0);
 

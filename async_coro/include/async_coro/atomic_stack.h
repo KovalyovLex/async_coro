@@ -79,7 +79,7 @@ class atomic_stack {
     if (!free_tagged.ptr) [[unlikely]] {
       // get block from bank
 
-      values_array* free_bank = _free_bank.load(std::memory_order::relaxed);
+      values_array* free_bank = _free_bank.load(std::memory_order::acquire);
       ASYNC_CORO_ASSERT(free_bank != nullptr);
 
       auto index = free_bank->free_index.fetch_add(1, std::memory_order::relaxed);

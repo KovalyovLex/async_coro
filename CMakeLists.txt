@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.12)
 project(async_coro_tests)
 
 option(ASAN_ENABLED "Enable address sanitizer for all targets" OFF)
+option(TSAN_ENABLED "Enable thread sanitizer for all targets" OFF)
+
 
 if (ASAN_ENABLED)
   if (WIN32)
@@ -12,6 +14,11 @@ if (ASAN_ENABLED)
     add_compile_options(-fsanitize=address)
     add_link_options(-fsanitize=address)
   endif()
+endif()
+
+if (TSAN_ENABLED)
+  add_compile_options(-fsanitize=thread -Wno-error=tsan)
+  add_link_options(-fsanitize=thread)
 endif()
 
 set(gtest_force_shared_crt ON CACHE BOOL "Force use dynamic libs in tests" FORCE)
