@@ -1,268 +1,174 @@
 #pragma once
 
 #include <async_coro/config.h>
+#include <async_coro/thread_safety/spin_lock_mutex.h>
+#include <async_coro/thread_safety/unique_lock.h>
 
 #include <array>
 #include <atomic>
-#include <thread>
+#include <memory>
 #include <type_traits>
+#include <vector>
 
 namespace async_coro {
 
 template <typename T, uint32_t BlockSize = 64>
 class atomic_queue {
-  struct task_chunk {
-    alignas(alignof(T)) std::array<char[sizeof(T)], BlockSize> values;
-    std::atomic<task_chunk*> next = nullptr;
-    std::atomic<uint32_t> begin = 0;
-    std::atomic<uint32_t> end = 0;
-    std::atomic<uint32_t> num_used = 0;
-    std::atomic<int32_t> free_protect = 0;
-    std::atomic_bool create_next_crit = false;
+  union union_store {
+    T value;
+    char tmp_byte;
 
-    template <typename... U>
-    void push(atomic_queue& q, U&&... v) noexcept(std::is_nothrow_constructible_v<T, U&&...>) {
-      auto cur_index = num_used.fetch_add(1, std::memory_order::relaxed);
-      if (cur_index < values.size()) {
-        new (&values[cur_index]) T(std::forward<U>(v)...);
+    union_store() noexcept {}
+    ~union_store() noexcept {}
+  };
 
-        // wait other threads finish write
-        auto expected = cur_index;
-        while (!end.compare_exchange_strong(expected, cur_index + 1, std::memory_order::release, std::memory_order::relaxed)) {
-          std::this_thread::yield();
-          expected = cur_index;
+  struct value {
+    union_store val;
+    value* next;
+  };
+
+  struct values_bank {
+    std::array<value, BlockSize> values;
+
+    values_bank() noexcept {
+      value* prev_value = nullptr;
+      for (auto& val : values) {
+        if (prev_value) {
+          prev_value->next = &val;
         }
-        free_protect.fetch_sub(1, std::memory_order::relaxed);
-      } else {
-        // need to use next chunk
-        num_used.fetch_sub(1, std::memory_order::relaxed);
-        auto* next_created = q.create_next_chunk(this);
-        free_protect.fetch_sub(1, std::memory_order::relaxed);
-
-        auto protect = next_created->free_protect.load(std::memory_order::relaxed);
-        do {
-          if (protect < 0) {
-            // this chunk was freed try next
-            next_created = q._head_push.load(std::memory_order::relaxed);
-            ASYNC_CORO_ASSERT(next_created != nullptr);
-            protect = next_created->free_protect.load(std::memory_order::relaxed);
-          }
-        } while (!next_created->free_protect.compare_exchange_strong(protect, protect + 1, std::memory_order::relaxed));
-
-        next_created->push(q, std::forward<U>(v)...);
+        prev_value = &val;
       }
-    }
-
-    bool try_pop(T& v, atomic_queue& q, bool& need_release) noexcept(std::is_nothrow_move_assignable_v<T>) {
-      auto cur_begin = begin.load(std::memory_order::relaxed);
-      if (cur_begin < values.size()) {
-        const auto cur_end = end.load(std::memory_order::acquire);
-        do {
-          if (cur_begin >= cur_end) {
-            // no values
-            return false;
-          }
-        } while (!begin.compare_exchange_strong(cur_begin, cur_begin + 1, std::memory_order::relaxed));
-
-        // syncronization here guaranteed by end in release-acquire ordering
-        v = std::move(reinterpret_cast<T&>(values[cur_begin]));
-        return true;
-      } else {
-        auto* cur_next = next.load(std::memory_order::relaxed);
-        if (cur_next) {
-          // current chunk is over
-          return q.on_chunk_depleted(v, this, cur_next, need_release);
-        }
-        return false;
-      }
-    }
-
-    bool has_value() const noexcept {
-      const auto cur_begin = begin.load(std::memory_order::relaxed);
-      const auto cur_end = end.load(std::memory_order::relaxed);
-      if (cur_begin < values.size()) {
-        return cur_begin < cur_end;
-      } else {
-        auto* cur_next = next.load(std::memory_order::relaxed);
-        return cur_next && cur_next->has_value();
-      }
+      prev_value->next = nullptr;
     }
   };
 
-  bool on_chunk_depleted(T& v, task_chunk* c, task_chunk* cur_next, bool& need_release) noexcept {
-    // head will be next
-    task_chunk* expected = c;
-    if (!_head_pop.compare_exchange_strong(expected, cur_next, std::memory_order::relaxed)) {
-      if (expected == cur_next) {
-        // freed by someone else
-        need_release = false;
-        c->free_protect.fetch_sub(1, std::memory_order::relaxed);
-        return this->try_pop(v);
-      }
-      return false;
-    }
-    // only one thread can pass here
-
-    need_release = false;
-
-    // wait till other threads finish push\pop and block future work
-    int32_t expected_protects = 1;
-    while (!c->free_protect.compare_exchange_strong(expected_protects, -1, std::memory_order::relaxed)) {
-      expected_protects = 1;
-      std::this_thread::yield();
-    }
-
-    // push c to list of free chunks
-    expected = _free_chain.load(std::memory_order::relaxed);
-
-    ASYNC_CORO_ASSERT(c->next.load(std::memory_order::relaxed) == cur_next);
-
-    c->next.store(expected, std::memory_order::relaxed);
-
-    while (!_free_chain.compare_exchange_strong(expected, c, std::memory_order::relaxed)) {
-      c->next.store(expected, std::memory_order::relaxed);
-    }
-
-    return this->try_pop(v);
-  }
-
-  task_chunk* create_next_chunk(task_chunk* c) noexcept {
-    // TODO: actually this method can throw exception because of new
-
-    auto* next_created = c->next.load(std::memory_order::relaxed);
-    if (next_created == nullptr) {
-      // only one thread allowed to create next chunk
-      bool expected_zone = false;
-      while (!c->create_next_crit.compare_exchange_strong(expected_zone, true, std::memory_order::acq_rel)) {
-        expected_zone = false;
-        std::this_thread::yield();
-      }
-
-      // this is crit zone only for current chunk but few threads can create different chunks at same time so _head_push and _free_chain need syncronization
-
-      next_created = c->next.load(std::memory_order::relaxed);
-      if (next_created) {
-        c->create_next_crit.store(false, std::memory_order::release);
-        return next_created;
-      }
-
-      auto free = _free_chain.load(std::memory_order::relaxed);
-      if (free == nullptr) {
-        // create new one
-        free = new task_chunk();
-      } else {
-        auto next = free->next.load(std::memory_order::relaxed);
-        while (!_free_chain.compare_exchange_strong(free, next, std::memory_order::relaxed)) {
-          ASYNC_CORO_ASSERT(free != nullptr);
-          next = free->next.load(std::memory_order::relaxed);
-        }
-
-        free->next.store(nullptr, std::memory_order::relaxed);
-        free->begin.store(0, std::memory_order::relaxed);
-        free->end.store(0, std::memory_order::relaxed);
-        free->num_used.store(0, std::memory_order::relaxed);
-        free->free_protect.store(0, std::memory_order::relaxed);
-      }
-
-      c->next.store(free, std::memory_order::relaxed);
-
-      task_chunk* expected = c;
-      while (!_head_push.compare_exchange_strong(expected, free, std::memory_order::acq_rel)) {
-      }
-
-      c->create_next_crit.store(false, std::memory_order::release);
-      return free;
-    } else {
-      return next_created;
-    }
-  }
-
  public:
-  atomic_queue()
-      : _head_pop(new task_chunk()), _free_chain(new task_chunk()) {
-    _free_chain.load(std::memory_order::relaxed)->free_protect.store(-1, std::memory_order::relaxed);
-    _head_push.store(_head_pop.load(std::memory_order::relaxed), std::memory_order::relaxed);
-  }
+  atomic_queue() noexcept {}
 
   ~atomic_queue() noexcept {
-    auto head1 = _head_pop.load(std::memory_order::relaxed);
-    auto head2 = _free_chain.load(std::memory_order::relaxed);
+    unique_lock lock{_value_mutex};
 
-    ASYNC_CORO_ASSERT(head1 != nullptr);
-    ASYNC_CORO_ASSERT(head2 != nullptr);
+    auto head = _head.load(std::memory_order::relaxed);
+    _head.store(nullptr, std::memory_order::relaxed);
+    _last = nullptr;
 
-    _head_pop.store(nullptr, std::memory_order::relaxed);
-    _free_chain.store(nullptr, std::memory_order::relaxed);
-    _head_push.store(nullptr, std::memory_order::relaxed);
-
-    while (head1) {
-      auto* next = head1->next.load(std::memory_order::relaxed);
-      head1->next.store(nullptr, std::memory_order::relaxed);
-
-      delete head1;
-
-      head1 = next;
-    }
-
-    while (head2) {
-      auto* next = head2->next.load(std::memory_order::relaxed);
-      head2->next.store(nullptr, std::memory_order::relaxed);
-
-      delete head2;
-
-      head2 = next;
+    while (head) {
+      std::destroy_at(std::addressof(head->val.value));
+      head = head->next;
     }
   }
 
   template <typename... U>
-  void push(U&&... v) noexcept(std::is_nothrow_constructible_v<T, U&&...>) {
-    auto head = _head_push.load(std::memory_order::relaxed);
-    ASYNC_CORO_ASSERT(head != nullptr);
-    auto protect = head->free_protect.load(std::memory_order::relaxed);
-    do {
-      if (protect < 0) [[unlikely]] {
-        // this chunk was freed try next
-        head = _head_push.load(std::memory_order::relaxed);
-        ASYNC_CORO_ASSERT(head != nullptr);
-        protect = head->free_protect.load(std::memory_order::relaxed);
-      }
-    } while (!head->free_protect.compare_exchange_strong(protect, protect + 1, std::memory_order::relaxed));
+  void push(U&&... v) {
+    value* head;
 
-    head->push(*this, std::forward<U>(v)...);
+    {
+      unique_lock lock{_free_value_mutex};
+
+      if (!_free_value) {
+        allocate_new_bank();
+      }
+
+      head = _free_value;
+      _free_value = head->next;
+    }
+
+    new (std::addressof(head->val.value)) T{std::forward<U>(v)...};
+    head->next = nullptr;
+
+    unique_lock lock{_value_mutex};
+
+    value* expected_to_set = nullptr;
+    _head.compare_exchange_strong(expected_to_set, head, std::memory_order::relaxed);
+    if (_last) {
+      _last->next = head;
+    }
+    _last = head;
+  }
+
+  template <typename... U>
+  bool try_push(U&&... v) noexcept(std::is_nothrow_constructible_v<T, U&&...>) {
+    value* head;
+
+    {
+      unique_lock lock{_free_value_mutex};
+
+      if (!_free_value) {
+        return false;
+      }
+
+      head = _free_value;
+      _free_value = head->next;
+    }
+
+    new (std::addressof(head->val.value)) T{std::forward<U>(v)...};
+    head->next = nullptr;
+
+    unique_lock lock{_value_mutex};
+
+    value* expected_to_set = nullptr;
+    _head.compare_exchange_strong(expected_to_set, head, std::memory_order::relaxed);
+    if (_last) {
+      _last->next = head;
+    }
+    _last = head;
   }
 
   bool try_pop(T& v) noexcept(std::is_nothrow_move_assignable_v<T>) {
-    auto head = _head_pop.load(std::memory_order::relaxed);
-    ASYNC_CORO_ASSERT(head != nullptr);
-    auto protect = head->free_protect.load(std::memory_order::relaxed);
-    do {
-      if (protect < 0) {
-        // this chunk was freed try next
-        head = _head_pop.load(std::memory_order::relaxed);
-        ASYNC_CORO_ASSERT(head != nullptr);
-        protect = head->free_protect.load(std::memory_order::relaxed);
-      }
-    } while (!head->free_protect.compare_exchange_strong(protect, protect + 1, std::memory_order::relaxed));
+    value* head;
 
-    // release of free_protect inside try_pop
-    bool need_release = true;
-    auto ans = head->try_pop(v, *this, need_release);
-    if (need_release) [[likely]] {
-      head->free_protect.fetch_sub(1, std::memory_order::relaxed);
+    {
+      // we use common lock here as  head->next can change unexpectedly
+      unique_lock lock{_value_mutex};
+
+      head = _head.load(std::memory_order::relaxed);
+      if (head) {
+        if (!_head.compare_exchange_strong(head, head->next, std::memory_order::relaxed)) {
+          ASYNC_CORO_ASSERT(false);
+        }
+        if (_last == head) {
+          _last = head->next;
+        }
+      } else {
+        return false;
+      }
     }
-    return ans;
+
+    v = std::move(head->val.value);
+    std::destroy_at(std::addressof(head->val.value));
+
+    {
+      unique_lock lock{_free_value_mutex};
+      head->next = _free_value;
+      _free_value = head;
+    }
+
+    return true;
   }
 
   bool has_value() const noexcept {
-    auto head = _head_pop.load(std::memory_order::relaxed);
-    ASYNC_CORO_ASSERT(head != nullptr);
-    return head->has_value();
+    return _head.load(std::memory_order::relaxed) != nullptr;
   }
 
  private:
-  std::atomic<task_chunk*> _head_pop;
-  std::atomic<task_chunk*> _head_push;
-  std::atomic<task_chunk*> _free_chain;
+  inline void allocate_new_bank() CORO_THREAD_REQUIRES(_free_value_mutex) {
+    _additional_banks.emplace_back(std::make_unique<values_bank>());
+    _free_value = std::addressof(_additional_banks.back()->values[0]);
+  }
+
+ private:
+  spin_lock_mutex _free_value_mutex;
+  value* _free_value CORO_THREAD_GUARDED_BY(_free_value_mutex) = nullptr;
+
+  values_bank _head_bank;
+
+  spin_lock_mutex _value_mutex;
+  value* _last CORO_THREAD_GUARDED_BY(_value_mutex) = nullptr;
+
+  std::vector<std::unique_ptr<values_bank>> _additional_banks CORO_THREAD_GUARDED_BY(_free_value_mutex);
+
+  // moved to end to minify false sharing effects with other atomics
+  std::atomic<value*> _head = nullptr;
 };
 
 };  // namespace async_coro
