@@ -17,8 +17,12 @@ if (ASAN_ENABLED)
 endif()
 
 if (TSAN_ENABLED)
-  add_compile_options(-fsanitize=thread -Wno-error=tsan)
+  add_compile_options(-fsanitize=thread)
   add_link_options(-fsanitize=thread)
+
+  if (CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+    add_compile_options(-Wno-error=tsan)
+  endif()
 endif()
 
 set(gtest_force_shared_crt ON CACHE BOOL "Force use dynamic libs in tests" FORCE)
