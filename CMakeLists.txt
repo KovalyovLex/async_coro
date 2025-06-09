@@ -16,7 +16,7 @@ if (ASAN_ENABLED)
   endif()
 endif()
 
-if (TSAN_ENABLED)
+if (TSAN_ENABLED AND NOT WIN32)
   add_compile_options(-fsanitize=thread)
   add_link_options(-fsanitize=thread)
 
