@@ -280,7 +280,7 @@ TEST(task, when_all) {
   // wait for worker thread finish coro
   sema.acquire();
 
-  std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  std::this_thread::sleep_for(std::chrono::milliseconds{10});
 
   EXPECT_FALSE(handle.done());
   scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
@@ -330,7 +330,7 @@ TEST(task, when_all_void) {
   // wait for worker thread finish coro
   sema.acquire();
 
-  std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  std::this_thread::sleep_for(std::chrono::milliseconds{10});
 
   EXPECT_FALSE(executed);
 
@@ -386,7 +386,7 @@ TEST(task, when_all_with_void) {
   // wait for worker thread finish coro
   sema.acquire();
 
-  std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  std::this_thread::sleep_for(std::chrono::milliseconds{10});
 
   EXPECT_FALSE(executed);
 
@@ -443,7 +443,7 @@ TEST(task, when_all_with_void_first) {
   // wait for worker thread finish coro
   sema.acquire();
 
-  std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  std::this_thread::sleep_for(std::chrono::milliseconds{10});
 
   EXPECT_FALSE(executed);
 
@@ -500,7 +500,7 @@ TEST(task, when_all_with_void_last) {
   // wait for worker thread finish coro
   sema.acquire();
 
-  std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  std::this_thread::sleep_for(std::chrono::milliseconds{10});
 
   EXPECT_FALSE(executed);
 
