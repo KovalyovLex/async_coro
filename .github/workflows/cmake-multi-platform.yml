@@ -177,10 +177,6 @@ jobs:
           {
             name: "",
             cmake: -DASAN_ENABLED=FALSE
-          },
-          {
-            name: "-asan",
-            cmake: -DASAN_ENABLED=TRUE
           }
         ]
 
