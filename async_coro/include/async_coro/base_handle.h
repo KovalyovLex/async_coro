@@ -100,12 +100,22 @@ class base_handle {
   }
 
  private:
+  static constexpr uint8_t coroutine_state_mask = (1 << 0) | (1 << 1) | (1 << 2);
+  static constexpr uint8_t ready_for_destroy_mask = 1 << 3;
+  static constexpr uint8_t has_handle_mask = (1 << 4);
+  static constexpr uint8_t is_embedded_mask = (1 << 5);
+  static constexpr uint8_t has_continuation_mask = (1 << 6);
+
+  static constexpr uint8_t get_inverted_mask(uint8_t mask) noexcept {
+    return static_cast<uint8_t>(~mask);
+  }
+
   bool is_ready_for_destroy() const noexcept {
     return _atomic_state.load(std::memory_order::relaxed) & ready_for_destroy_mask;
   }
 
   void set_ready_for_destroy(bool value) noexcept {
-    update_value(value ? ready_for_destroy_mask : 0, ~ready_for_destroy_mask, std::memory_order::relaxed, std::memory_order::release);
+    update_value(value ? ready_for_destroy_mask : 0, get_inverted_mask(ready_for_destroy_mask), std::memory_order::relaxed, std::memory_order::release);
   }
 
   bool get_has_handle() const noexcept {
@@ -113,7 +123,7 @@ class base_handle {
   }
 
   void set_has_handle(bool value) noexcept {
-    update_value(value ? has_handle_mask : 0, ~has_handle_mask);
+    update_value(value ? has_handle_mask : 0, get_inverted_mask(has_handle_mask));
   }
 
   coroutine_state get_coroutine_state() const noexcept {
@@ -121,7 +131,7 @@ class base_handle {
   }
 
   void set_coroutine_state(coroutine_state value) noexcept {
-    update_value(static_cast<uint8_t>(value), ~coroutine_state_mask);
+    update_value(static_cast<uint8_t>(value), get_inverted_mask(coroutine_state_mask));
   }
 
   bool is_embedded() const noexcept {
@@ -129,7 +139,7 @@ class base_handle {
   }
 
   void set_embedded(bool value) noexcept {
-    update_value(value ? is_embedded_mask : 0, ~is_embedded_mask);
+    update_value(value ? is_embedded_mask : 0, get_inverted_mask(is_embedded_mask));
   }
 
   bool get_has_continuation() const noexcept {
@@ -137,7 +147,7 @@ class base_handle {
   }
 
   void set_has_continuation(bool value) noexcept {
-    update_value(value ? has_continuation_mask : 0, ~has_continuation_mask);
+    update_value(value ? has_continuation_mask : 0, get_inverted_mask(has_continuation_mask));
   }
 
   void update_value(const uint8_t value, const uint8_t mask, std::memory_order read = std::memory_order::relaxed, std::memory_order write = std::memory_order::relaxed) noexcept {
@@ -146,12 +156,7 @@ class base_handle {
     }
   }
 
-  static constexpr uint8_t coroutine_state_mask = (1 << 0) | (1 << 1) | (1 << 2);
-  static constexpr uint8_t ready_for_destroy_mask = 1 << 3;
-  static constexpr uint8_t has_handle_mask = (1 << 4);
-  static constexpr uint8_t is_embedded_mask = (1 << 5);
-  static constexpr uint8_t has_continuation_mask = (1 << 6);
-
+ private:
   union {
     std::atomic<internal::continue_function_base*> _continuation;
     base_handle* _parent;
