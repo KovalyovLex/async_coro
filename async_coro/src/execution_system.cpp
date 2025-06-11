@@ -202,10 +202,19 @@ void execution_system::set_thread_name(std::thread& thread, const std::string& n
   info.dwThreadID = threadId;
   info.dwFlags = 0;
 
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wlanguage-extension-token"
+#endif
+
   __try {
     RaiseException(MS_VC_EXCEPTION, 0, sizeof(info) / sizeof(ULONG_PTR), (ULONG_PTR*)&info);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
   }
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 
 #else
 
