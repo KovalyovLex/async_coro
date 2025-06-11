@@ -210,6 +210,7 @@ void execution_system::set_thread_name(std::thread& thread, const std::string& n
 #else
 
 #ifdef __APPLE__
+  (void)thread;
   pthread_setname_np(name.c_str());
 #else
   auto handle = thread.native_handle();
