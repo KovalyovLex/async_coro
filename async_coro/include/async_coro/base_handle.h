@@ -52,6 +52,8 @@ class base_handle {
 
   bool is_finished() const noexcept { return get_coroutine_state() == coroutine_state::finished; }
 
+  bool is_suspended() const noexcept { return get_coroutine_state() == coroutine_state::suspended; }
+
   // Should be called on every await_suspend in child coroutines
   void on_suspended() noexcept {
     set_coroutine_state(coroutine_state::suspended);
@@ -114,8 +116,8 @@ class base_handle {
     return _atomic_state.load(std::memory_order::relaxed) & ready_for_destroy_mask;
   }
 
-  void set_ready_for_destroy(bool value) noexcept {
-    update_value(value ? ready_for_destroy_mask : 0, get_inverted_mask(ready_for_destroy_mask), std::memory_order::relaxed, std::memory_order::release);
+  void set_ready_for_destroy() noexcept {
+    update_value(ready_for_destroy_mask, get_inverted_mask(ready_for_destroy_mask), std::memory_order::relaxed, std::memory_order::release);
   }
 
   bool get_has_handle() const noexcept {
@@ -123,7 +125,11 @@ class base_handle {
   }
 
   void set_has_handle(bool value) noexcept {
-    update_value(value ? has_handle_mask : 0, get_inverted_mask(has_handle_mask));
+    if (value) {
+      update_value(has_handle_mask, get_inverted_mask(has_handle_mask));
+    } else {
+      update_value(0, get_inverted_mask(has_handle_mask), std::memory_order::relaxed, std::memory_order::release);
+    }
   }
 
   coroutine_state get_coroutine_state() const noexcept {

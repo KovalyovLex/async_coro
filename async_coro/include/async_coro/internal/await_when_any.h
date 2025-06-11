@@ -99,7 +99,7 @@ struct await_when_any {
             new (&_result) result_type{index, std::monostate{}};
           }
           base_handle& handle = h.promise();
-          handle.get_scheduler().continue_execution(handle);
+          handle.get_scheduler().plan_continue_execution(handle);
         }
       });
     };

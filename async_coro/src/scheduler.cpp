@@ -127,6 +127,13 @@ void scheduler::continue_execution(base_handle& handle_impl) {
   }
 }
 
+void scheduler::plan_continue_execution(base_handle& handle_impl) {
+  ASYNC_CORO_ASSERT(handle_impl._execution_thread != std::thread::id{});
+  ASYNC_CORO_ASSERT(handle_impl.get_coroutine_state() == coroutine_state::suspended);
+
+  plan_continue_on_thread(handle_impl, handle_impl._execution_queue);
+}
+
 void scheduler::change_execution_queue(base_handle& handle_impl,
                                        execution_queue_mark execution_queue) {
   ASYNC_CORO_ASSERT(!is_current_thread_fits(execution_queue));

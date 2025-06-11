@@ -54,7 +54,7 @@ struct await_when_all {
           // continue this coro
 
           base_handle& handle = h.promise();
-          handle.get_scheduler().continue_execution(handle);
+          handle.get_scheduler().plan_continue_execution(handle);
         }
       });
     };

@@ -52,6 +52,9 @@ class scheduler {
   // If current thread the same as last executed - continues execution immediately or plans execution on queue
   void continue_execution(base_handle& handle_impl);
 
+  // Only plans execution on thread that was assigned for the coro. So continue will be called later
+  void plan_continue_execution(base_handle& handle_impl);
+
   // Plans execution on execution_queue.
   void change_execution_queue(base_handle& handle_impl, execution_queue_mark execution_queue);
 

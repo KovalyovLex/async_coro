@@ -9,7 +9,7 @@ void base_handle::on_task_freed_by_scheduler() {
   if (is_coro_embedded() || !get_has_handle()) {
     destroy_impl();
   } else {
-    set_ready_for_destroy(true);
+    set_ready_for_destroy();
   }
 }
 
