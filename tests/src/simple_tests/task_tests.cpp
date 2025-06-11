@@ -12,7 +12,6 @@
 #include <semaphore>
 #include <variant>
 
-
 namespace task_tests {
 struct coro_runner {
   template <typename T>

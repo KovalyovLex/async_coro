@@ -4,7 +4,6 @@
 #include <type_traits>
 #include <utility>
 
-
 namespace async_coro::internal {
 
 template <bool IsNoexcept, class R, class... TArgs>

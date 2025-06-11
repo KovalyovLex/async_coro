@@ -7,7 +7,6 @@
 #include <cstring>
 #include <utility>
 
-
 namespace async_coro {
 
 namespace internal {
