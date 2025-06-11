@@ -5,10 +5,21 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "(Linux) Launch",
+      "type": "lldb",
+      "request": "launch",
+      // Resolved by CMake Tools:
+      "program": "${command:cmake.launchTargetPath}",
+      "args": [],
+      "cwd": "${fileDirname}",
+      "console": "externalTerminal"
+    },
+    {
       "name": "(Windows) Launch",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/build/vsCode/RelWithDebInfo/RelWithDebInfo/async_coro_tests.exe",
+      // Resolved by CMake Tools:
+      "program": "${command:cmake.launchTargetPath}",
       "args": [],
       "stopAtEntry": false,
       "cwd": "${fileDirname}",
