@@ -12,6 +12,13 @@
 
 namespace async_coro {
 
+/**
+ * @brief A thread safe queue that uses atomics for a fast path.
+ * In case when there is no preallocated values it will fall back to using spin lock mutex to allocate a new bank of values.
+ * This queue is designed to be used in multi producer/multi consumer scenarios.
+ * @tparam T The type of the values to be stored in the queue.
+ * @tparam BlockSize The number of values to be preallocated in a single bank.
+ */
 template <typename T, uint32_t BlockSize = 64>
 class atomic_queue {
   union union_store {
@@ -43,8 +50,14 @@ class atomic_queue {
   };
 
  public:
+  /**
+   * @brief Construct a new atomic queue object
+   */
   atomic_queue() noexcept {}
 
+  /**
+   * @brief Destroy the atomic queue object and all the values that are still in it.
+   */
   ~atomic_queue() noexcept {
     unique_lock lock{_value_mutex};
 
@@ -58,6 +71,13 @@ class atomic_queue {
     }
   }
 
+  /**
+   * @brief Pushes a new value to the queue.
+   * In case when there is no preallocated values it will allocate a new bank of values.
+   * This can cause a small overhead.
+   * @tparam U The types of the arguments to be forwarded to the constructor of T.
+   * @param v The arguments to be forwarded to the constructor of T.
+   */
   template <typename... U>
   void push(U&&... v) {
     value* head;
@@ -86,6 +106,13 @@ class atomic_queue {
     _last = head;
   }
 
+  /**
+   * @brief Tries to push a new value to the queue.
+   * This method will not allocate a new bank of values if there are no preallocated values.
+   * @tparam U The types of the arguments to be forwarded to the constructor of T.
+   * @param v The arguments to be forwarded to the constructor of T.
+   * @return true if the value was pushed successfully, false otherwise.
+   */
   template <typename... U>
   bool try_push(U&&... v) noexcept(std::is_nothrow_constructible_v<T, U&&...>) {
     value* head;
@@ -114,6 +141,11 @@ class atomic_queue {
     _last = head;
   }
 
+  /**
+   * @brief Tries to pop a value from the queue.
+   * @param v The reference to the value where the popped value will be moved to.
+   * @return true if a value was popped successfully, false otherwise.
+   */
   bool try_pop(T& v) noexcept(std::is_nothrow_move_assignable_v<T>) {
     value* head;
 
@@ -146,6 +178,10 @@ class atomic_queue {
     return true;
   }
 
+  /**
+   * @brief Checks if the queue has any values.
+   * @return true if the queue has any values, false otherwise.
+   */
   bool has_value() const noexcept {
     return _head.load(std::memory_order::relaxed) != nullptr;
   }

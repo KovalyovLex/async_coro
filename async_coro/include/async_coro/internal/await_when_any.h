@@ -3,6 +3,7 @@
 #include <async_coro/base_handle.h>
 #include <async_coro/config.h>
 #include <async_coro/scheduler.h>
+#include <async_coro/task_handle.h>
 
 #include <atomic>
 #include <coroutine>
@@ -10,13 +11,6 @@
 #include <type_traits>
 #include <utility>
 #include <variant>
-
-namespace async_coro {
-
-template <typename R>
-class task_handle;
-
-}  // namespace async_coro
 
 namespace async_coro::internal {
 

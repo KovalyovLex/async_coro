@@ -4,6 +4,7 @@
 #include <async_coro/i_execution_system.h>
 #include <async_coro/internal/passkey.h>
 #include <async_coro/task.h>
+#include <async_coro/task_handle.h>
 #include <async_coro/thread_safety/analysis.h>
 #include <async_coro/thread_safety/mutex.h>
 #include <async_coro/unique_function.h>
@@ -17,13 +18,41 @@ struct task;
 
 class base_handle;
 
+/**
+ * @class scheduler
+ * @brief Manages coroutine execution and scheduling.
+ *
+ * The scheduler is responsible for starting tasks, continuing their execution,
+ * and managing the underlying execution system (e.g., thread pools).
+ * Each scheduler has its own execution system.
+ */
 class scheduler {
  public:
+  /**
+   * @brief Constructs a scheduler with a default execution system.
+   */
   scheduler();
+  /**
+   * @brief Constructs a scheduler with a provided execution system.
+   * @param system The execution system to use for scheduling tasks.
+   */
   explicit scheduler(i_execution_system::ptr system) noexcept;
+  /**
+   * @brief Destroys the scheduler, waiting for all managed coroutines to complete.
+   */
   ~scheduler();
 
-  // Schedules task and starts it execution
+  /**
+   * @brief Schedules a task and starts its execution.
+   *
+   * This function takes a coroutine task, assigns it to an execution queue,
+   * and begins its execution. If the task is already completed, it is freed immediately.
+   *
+   * @tparam R The return type of the task.
+   * @param coro The task to be executed.
+   * @param execution_queue The execution queue to run the task on. Defaults to the main queue.
+   * @return A handle to the started task.
+   */
   template <typename R>
   task_handle<R> start_task(task<R> coro,
                             execution_queue_mark execution_queue = execution_queues::main) {
@@ -38,6 +67,11 @@ class scheduler {
     return result;
   }
 
+  /**
+   * @brief Gets a reference to the execution system.
+   * @tparam T The type of the execution system, must derive from i_execution_system.
+   * @return A reference to the execution system.
+   */
   template <class T>
     requires(std::derived_from<T, i_execution_system>)
   T& get_execution_system() const noexcept {
@@ -49,13 +83,28 @@ class scheduler {
  public:
   // for internal api use
 
-  // If current thread the same as last executed - continues execution immediately or plans execution on queue
+  /**
+   * @brief Continues the execution of a coroutine.
+   * @details For internal use. This will either execute the coroutine immediately if the current
+   * thread is suitable, or schedule it for later execution.
+   * @param handle_impl The handle of the coroutine to continue.
+   */
   void continue_execution(base_handle& handle_impl);
 
-  // Only plans execution on thread that was assigned for the coro. So continue will be called later
+  /**
+   * @brief Schedules a coroutine for continued execution on its assigned thread.
+   * @details For internal use. Unlike `continue_execution`, this method always schedules
+   * the coroutine for later execution without attempting to run it immediately.
+   * @param handle_impl The handle of the coroutine to schedule.
+   */
   void plan_continue_execution(base_handle& handle_impl);
 
-  // Plans execution on execution_queue.
+  /**
+   * @brief Moves a coroutine to a different execution queue.
+   * @details For internal use. The coroutine's next execution will be on the new queue.
+   * @param handle_impl The handle of the coroutine to move.
+   * @param execution_queue The target execution queue.
+   */
   void change_execution_queue(base_handle& handle_impl, execution_queue_mark execution_queue);
 
   // Embed coroutine

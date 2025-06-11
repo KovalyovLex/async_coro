@@ -1,6 +1,7 @@
 #pragma once
 
 #include <async_coro/base_handle.h>
+#include <async_coro/internal/continue_function.h>
 #include <async_coro/internal/passkey.h>
 #include <async_coro/internal/promise_result_holder.h>
 
@@ -34,7 +35,13 @@ struct promise_type final : internal::promise_result_holder<R> {
   }
 
   // we dont want to destroy our result here
-  std::suspend_always final_suspend() noexcept;
+  std::suspend_always final_suspend() noexcept {
+    this->on_final_suspend();
+    if (auto* continue_with = static_cast<internal::continue_function<promise_result<R>&>*>(this->get_continuation_functor())) {
+      continue_with->execute(*this);
+    }
+    return {};
+  }
 
   template <typename T>
   constexpr decltype(auto) await_transform(T&& in) noexcept {

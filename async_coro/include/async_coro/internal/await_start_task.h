@@ -2,6 +2,8 @@
 
 #include <async_coro/base_handle.h>
 #include <async_coro/scheduler.h>
+#include <async_coro/task.h>
+#include <async_coro/task_handle.h>
 
 #include <concepts>
 #include <coroutine>

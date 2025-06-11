@@ -3,6 +3,7 @@
 #include <async_coro/base_handle.h>
 #include <async_coro/internal/remove_void_tuple.h>
 #include <async_coro/scheduler.h>
+#include <async_coro/task_handle.h>
 
 #include <algorithm>
 #include <atomic>
@@ -10,13 +11,6 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
-
-namespace async_coro {
-
-template <typename R>
-class task_handle;
-
-}  // namespace async_coro
 
 namespace async_coro::internal {
 
