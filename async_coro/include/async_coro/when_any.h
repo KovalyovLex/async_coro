@@ -17,7 +17,7 @@ namespace async_coro {
  * \code{.cpp}
  * auto result = co_await async_coro::when_any(
  *       co_await async_coro::start_task(task1()),
- *       co_await async_coro::start_task(task2(), async_coro::execution_thread::worker)
+ *       co_await async_coro::start_task(task2(), async_coro::execution_queues::worker)
  * );
  *
  * // This coroutine will resume execution after any one of the tasks has completed.

@@ -84,6 +84,8 @@ struct await_when_any {
   template <typename U>
     requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> h) {
+    h.promise().on_suspended();
+
     const auto continue_f = [&](auto& coro, auto index) noexcept {
       using result_t = decltype(coro.get());
 
@@ -97,7 +99,7 @@ struct await_when_any {
             new (&_result) result_type{index, std::monostate{}};
           }
           base_handle& handle = h.promise();
-          handle.get_scheduler().plan_continue_execution(handle);
+          handle.get_scheduler().continue_execution(handle);
         }
       });
     };

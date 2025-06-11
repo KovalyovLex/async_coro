@@ -1,9 +1,9 @@
 #pragma once
 
+#include <async_coro/config.h>
+
 #include <atomic>
 #include <cstdint>
-
-#include "async_coro/config.h"
 
 namespace async_coro {
 

@@ -9,7 +9,7 @@
 namespace async_coro::internal {
 
 struct await_switch {
-  explicit await_switch(execution_thread t) noexcept : thread(t) {}
+  explicit await_switch(execution_queue_mark queue) noexcept : execution_queue(queue) {}
   await_switch(const await_switch&) = delete;
   await_switch(await_switch&&) = delete;
 
@@ -21,19 +21,19 @@ struct await_switch {
   template <typename U>
     requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> h) {
-    if (need_switch) {
-      base_handle& handle = h.promise();
-      handle.get_scheduler().change_thread(handle, thread);
-    }
+    ASYNC_CORO_ASSERT(need_switch);
+
+    base_handle& handle = h.promise();
+    handle.switch_execution_queue(execution_queue);
   }
 
   void await_resume() const noexcept {}
 
   void embed_task(base_handle& parent) noexcept {
-    need_switch = !parent.get_scheduler().is_current_thread_fits(thread);
+    need_switch = parent.get_execution_queue() != execution_queue;
   }
 
-  execution_thread thread;
+  execution_queue_mark execution_queue;
   bool need_switch = true;
 };
 

@@ -118,7 +118,7 @@ class atomic_queue {
     value* head;
 
     {
-      // we use common lock here as  head->next can change unexpectedly
+      // we use common lock here as head->next can change unexpectedly
       unique_lock lock{_value_mutex};
 
       head = _head.load(std::memory_order::relaxed);

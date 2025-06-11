@@ -25,6 +25,8 @@ struct await_callback {
   template <typename U>
     requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> h) {
+    h.promise().on_suspended();
+
     _on_await([h, executed = false]() mutable {
       if (!executed) [[likely]] {
         executed = true;

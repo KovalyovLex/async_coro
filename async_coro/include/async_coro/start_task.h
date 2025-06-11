@@ -11,8 +11,8 @@ namespace async_coro {
  *
  * @tparam R The return type of the task.
  * @param task The task to be started.
- * @param thread (Optional) The thread on which the task should be executed.
- *               Defaults to execution_thread::main.
+ * @param execution_queue (Optional) The queue on which the task should be executed.
+ *               Defaults to execution_queues::main.
  * @return An awaitable of task_handle<R>
  *
  * @example
@@ -22,8 +22,8 @@ namespace async_coro {
  * \endcode
  */
 template <typename R>
-auto start_task(task<R> task, execution_thread thread = execution_thread::main) {
-  return internal::await_start_task(std::move(task), thread);
+auto start_task(task<R> task, execution_queue_mark execution_queue = execution_queues::main) {
+  return internal::await_start_task(std::move(task), execution_queue);
 }
 
 }  // namespace async_coro

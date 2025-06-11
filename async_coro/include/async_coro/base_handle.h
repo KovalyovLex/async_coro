@@ -1,17 +1,22 @@
 #pragma once
 
 #include <async_coro/config.h>
+#include <async_coro/execution_queue_mark.h>
+#include <async_coro/internal/continue_function.h>
 
+#include <atomic>
 #include <coroutine>
 #include <cstdint>
+#include <cstdlib>
 #include <thread>
 
 namespace async_coro {
 
 enum class coroutine_state : std::uint8_t {
-  created,
+  created = 0,
   running,
   suspended,
+  waiting_switch,
   finished
 };
 
@@ -23,9 +28,6 @@ class base_handle {
  public:
   base_handle() noexcept
       : _parent(nullptr),
-        _state(coroutine_state::created),
-        _is_embedded(false),
-        _has_handle(false),
         _is_initialized(false),
         _is_result(false) {}
   base_handle(const base_handle&) = delete;
@@ -46,72 +48,120 @@ class base_handle {
     return _execution_thread == std::this_thread::get_id();
   }
 
-  void on_child_coro_added(base_handle& child);
+  bool is_coro_embedded() const noexcept { return is_embedded(); }
 
-  bool is_coro_embedded() const noexcept { return _is_embedded; }
+  bool is_finished() const noexcept { return get_coroutine_state() == coroutine_state::finished; }
+
+  // Should be called on every await_suspend in child coroutines
+  void on_suspended() noexcept {
+    set_coroutine_state(coroutine_state::suspended);
+  }
+
+  // Should be called instead of on_suspended
+  void switch_execution_queue(execution_queue_mark execution_queue) noexcept {
+    set_coroutine_state(coroutine_state::waiting_switch);
+    _execution_queue = execution_queue;
+  }
+
+  execution_queue_mark get_execution_queue() const noexcept {
+    return _execution_queue;
+  }
 
  protected:
   void init_promise(std::coroutine_handle<> h) noexcept { _handle = h; }
 
   void on_final_suspend() noexcept {
-    _state = coroutine_state::finished;
+    set_coroutine_state(coroutine_state::finished);
   }
 
-  void try_free_task_impl() {
-    _ready_for_destroy.store(true, std::memory_order::relaxed);
-    if (is_coro_embedded() || get_task_handle<void>() == nullptr) {
-      destroy_impl();
-    }
+  void on_task_freed_by_scheduler();
+
+  void set_owning_by_task_handle(bool owning);
+
+  internal::continue_function_base* get_continuation_functor() const noexcept {
+    return get_has_continuation() ? _continuation.load(std::memory_order::acquire) : nullptr;
   }
 
-  void set_task_handle_impl(void* handle) {
-    ASYNC_CORO_ASSERT(!is_coro_embedded());
-
-    _has_handle = true;
-    _task_handle.store(handle, std::memory_order::release);
-
-    if (handle == nullptr) {
-      destroy_impl();
-    }
-  }
-
-  template <class T>
-  T* get_task_handle() const noexcept {
-    return _has_handle ? static_cast<T*>(_task_handle.load(std::memory_order::acquire)) : nullptr;
-  }
+  void set_continuation_functor(internal::continue_function_base* f) noexcept;
 
  private:
-  void destroy_impl() {
-    bool expected = true;
-    if (_ready_for_destroy.compare_exchange_strong(expected, false, std::memory_order::relaxed)) {
-      const auto handle = _handle;
-      _handle = {};
-      handle.destroy();
-    }
-  }
+  void try_destroy_if_ready();
+  void destroy_impl();
 
   base_handle* get_parent() const noexcept {
-    return _is_embedded ? _parent : nullptr;
+    return is_embedded() ? _parent : nullptr;
   }
 
   void set_parent(base_handle& parent) noexcept {
     _parent = &parent;
-    _is_embedded = true;
+    set_embedded(true);
+
+    ASYNC_CORO_ASSERT(get_has_handle() == false);
   }
 
  private:
+  bool is_ready_for_destroy() const noexcept {
+    return _atomic_state.load(std::memory_order::relaxed) & ready_for_destroy_mask;
+  }
+
+  void set_ready_for_destroy(bool value) noexcept {
+    update_value(value ? ready_for_destroy_mask : 0, ~ready_for_destroy_mask, std::memory_order::relaxed, std::memory_order::release);
+  }
+
+  bool get_has_handle() const noexcept {
+    return _atomic_state.load(std::memory_order::relaxed) & has_handle_mask;
+  }
+
+  void set_has_handle(bool value) noexcept {
+    update_value(value ? has_handle_mask : 0, ~has_handle_mask);
+  }
+
+  coroutine_state get_coroutine_state() const noexcept {
+    return static_cast<coroutine_state>(_atomic_state.load(std::memory_order::relaxed) & coroutine_state_mask);
+  }
+
+  void set_coroutine_state(coroutine_state value) noexcept {
+    update_value(static_cast<uint8_t>(value), ~coroutine_state_mask);
+  }
+
+  bool is_embedded() const noexcept {
+    return _atomic_state.load(std::memory_order::relaxed) & is_embedded_mask;
+  }
+
+  void set_embedded(bool value) noexcept {
+    update_value(value ? is_embedded_mask : 0, ~is_embedded_mask);
+  }
+
+  bool get_has_continuation() const noexcept {
+    return _atomic_state.load(std::memory_order::relaxed) & has_continuation_mask;
+  }
+
+  void set_has_continuation(bool value) noexcept {
+    update_value(value ? has_continuation_mask : 0, ~has_continuation_mask);
+  }
+
+  void update_value(const uint8_t value, const uint8_t mask, std::memory_order read = std::memory_order::relaxed, std::memory_order write = std::memory_order::relaxed) noexcept {
+    uint8_t expected = _atomic_state.load(read);
+    while (!_atomic_state.compare_exchange_weak(expected, (expected & mask) | value, write, read)) {
+    }
+  }
+
+  static constexpr uint8_t coroutine_state_mask = (1 << 0) | (1 << 1) | (1 << 2);
+  static constexpr uint8_t ready_for_destroy_mask = 1 << 3;
+  static constexpr uint8_t has_handle_mask = (1 << 4);
+  static constexpr uint8_t is_embedded_mask = (1 << 5);
+  static constexpr uint8_t has_continuation_mask = (1 << 6);
+
   union {
-    std::atomic<void*> _task_handle;
+    std::atomic<internal::continue_function_base*> _continuation;
     base_handle* _parent;
   };
 
   scheduler* _scheduler = nullptr;
   std::coroutine_handle<> _handle;
   std::thread::id _execution_thread = {};
-  std::atomic_bool _ready_for_destroy = false;
-  coroutine_state _state : 2;
-  bool _is_embedded : 1;
-  bool _has_handle : 1;
+  execution_queue_mark _execution_queue = execution_queues::main;
+  std::atomic<uint8_t> _atomic_state{0};
 
  protected:
   bool _is_initialized : 1;

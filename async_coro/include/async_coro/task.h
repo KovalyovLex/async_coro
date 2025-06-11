@@ -2,17 +2,24 @@
 
 #include <async_coro/base_handle.h>
 #include <async_coro/config.h>
+#include <async_coro/internal/continue_function.h>
 #include <async_coro/internal/passkey.h>
 #include <async_coro/internal/promise_type.h>
 #include <async_coro/unique_function.h>
 
 #include <concepts>
 #include <coroutine>
+#include <type_traits>
 #include <utility>
+
 
 namespace async_coro {
 
 class scheduler;
+
+struct task_base {
+  void on_child_coro_added(base_handle& parent, base_handle& child);
+};
 
 /**
  * @brief Default return type for asynchronous coroutines.
@@ -24,7 +31,7 @@ class scheduler;
  * @tparam R The result type produced by the coroutine.
  */
 template <typename R>
-struct task final {
+struct task final : private task_base {
   using promise_type = async_coro::internal::promise_type<R>;
   using handle_type = std::coroutine_handle<promise_type>;
   using return_type = R;
@@ -59,7 +66,10 @@ struct task final {
     bool await_ready() const noexcept { return t._handle.done(); }
 
     template <typename T>
-    void await_suspend(std::coroutine_handle<T>) const noexcept {}
+      requires(std::derived_from<T, base_handle>)
+    void await_suspend(std::coroutine_handle<T> h) const noexcept {
+      h.promise().on_suspended();
+    }
 
     R await_resume() {
       return t._handle.promise().move_result();
@@ -78,7 +88,7 @@ struct task final {
   bool done() const { return _handle.done(); }
 
   void embed_task(base_handle& parent) {
-    parent.on_child_coro_added(_handle.promise());
+    on_child_coro_added(parent, _handle.promise());
   }
 
   handle_type release_handle(internal::passkey_successors<scheduler>) {
@@ -87,6 +97,11 @@ struct task final {
 
  private:
   handle_type _handle{};
+};
+
+template <class T, class... TArgs>
+concept is_noexcept_runnable = requires(T a) {
+  { a(std::declval<TArgs>()...) } noexcept -> std::same_as<void>;
 };
 
 /**
@@ -118,57 +133,40 @@ class task_handle final {
       : _handle(std::move(h)) {
     ASYNC_CORO_ASSERT(_handle);
     if (_handle) [[likely]] {
-      _handle.promise().set_task_handle(this, internal::passkey{this});
+      _handle.promise().set_owning_by_task_handle(true, internal::passkey{this});
     }
   }
 
   task_handle(const task_handle&) = delete;
   task_handle(task_handle&& other) noexcept
-      : _handle(std::exchange(other._handle, nullptr)),
-        _continuation(std::move(other._continuation)) {
-    if (_handle) {
-      _handle.promise().set_task_handle(this, internal::passkey{this});
-    }
+      : _handle(std::exchange(other._handle, nullptr)) {
   }
 
   task_handle& operator=(const task_handle&) = delete;
   task_handle& operator=(task_handle&& other) noexcept {
-    if (_handle == other._handle) {
-      return *this;
-    }
-    if (_handle) {
-      _handle.promise().set_task_handle(nullptr, internal::passkey{this});
-    }
     _handle = std::exchange(other._handle, {});
-    _continuation = std::move(other._continuation);
-
-    if (_handle) {
-      _handle.promise().set_task_handle(this, internal::passkey{this});
-    }
-
     return *this;
   }
 
   ~task_handle() noexcept {
-    _continuation = nullptr;
     if (_handle) {
-      _handle.promise().set_task_handle(nullptr, internal::passkey{this});
+      _handle.promise().set_owning_by_task_handle(false, internal::passkey{this});
     }
   }
 
   // access for result
   decltype(auto) get() & {
-    ASYNC_CORO_ASSERT(_handle && _handle.done());
+    ASYNC_CORO_ASSERT(_handle && _handle.promise().is_finished());
     return _handle.promise().get_result_ref();
   }
 
   decltype(auto) get() const& {
-    ASYNC_CORO_ASSERT(_handle && _handle.done());
+    ASYNC_CORO_ASSERT(_handle && _handle.promise().is_finished());
     return _handle.promise().get_result_cref();
   }
 
   decltype(auto) get() && {
-    ASYNC_CORO_ASSERT(_handle && _handle.done());
+    ASYNC_CORO_ASSERT(_handle && _handle.promise().is_finished());
     return _handle.promise().move_result();
   }
 
@@ -177,55 +175,59 @@ class task_handle final {
   template <typename Y>
     requires(std::same_as<Y, R> && !std::same_as<R, void>)
   operator Y&() & {
-    ASYNC_CORO_ASSERT(_handle && _handle.done());
+    ASYNC_CORO_ASSERT(_handle && _handle.promise().is_finished());
     return _handle.promise().get_result_ref();
   }
 
   template <typename Y>
     requires(std::same_as<Y, R> && !std::same_as<R, void>)
   operator const Y&() const& {
-    ASYNC_CORO_ASSERT(_handle && _handle.done());
+    ASYNC_CORO_ASSERT(_handle && _handle.promise().is_finished());
     return _handle.promise().get_result_cref();
   }
 
   template <typename Y>
     requires(std::same_as<Y, R> && !std::same_as<R, void>)
   operator Y() && {
-    ASYNC_CORO_ASSERT(_handle && _handle.done());
+    ASYNC_CORO_ASSERT(_handle && _handle.promise().f);
     return _handle.promise().move_result();
   }
 
   // Checks if coroutine is finished.
   // If state is empty returns true as well
-  bool done() const { return !_handle || _handle.done(); }
+  bool done() const {
+    return !_handle || _handle.promise().is_finished();
+  }
 
   // Sets callback that will be called after coroutine finish
-  void continue_with(continuation_t f) {
-    ASYNC_CORO_ASSERT(!_continuation);
-    ASYNC_CORO_ASSERT(f);
+  template <class Fx>
+    requires(is_noexcept_runnable<Fx, promise_result<R>&>)
+  void continue_with(Fx&& f) {
     ASYNC_CORO_ASSERT(!_handle.promise().is_coro_embedded());
 
-    if (!f) {
+    if (!_handle) {
       return;
     }
 
     if (done()) {
       f(_handle.promise());
     } else {
-      _continuation = std::move(f);
-    }
-  }
+      struct callable : public internal::continue_function<promise_result<R>&> {
+        callable(Fx&& fx) : func(std::forward<Fx>(fx)) {}
 
-  void continue_impl(promise_type& promise, internal::passkey_any<promise_type>) noexcept {
-    const auto f = std::exchange(_continuation, {});
-    if (f) {
-      f(promise);
+        void execute(promise_result<R>& res) noexcept override {
+          func(res);
+        }
+
+        std::remove_cvref_t<Fx> func;
+      };
+      auto continue_f = new callable{std::forward<Fx>(f)};
+      _handle.promise().set_continuation_functor(continue_f, internal::passkey{this});
     }
   }
 
  private:
   handle_type _handle{};
-  continuation_t _continuation;
 };
 
 namespace internal {
@@ -233,8 +235,8 @@ namespace internal {
 template <typename R>
 std::suspend_always promise_type<R>::final_suspend() noexcept {
   this->on_final_suspend();
-  if (auto* continue_with = this->template get_task_handle<task_handle<R>>()) {
-    continue_with->continue_impl(*this, internal::passkey{this});
+  if (auto* continue_with = static_cast<internal::continue_function<promise_result<R>&>*>(this->get_continuation_functor())) {
+    continue_with->execute(*this);
   }
   return {};
 }

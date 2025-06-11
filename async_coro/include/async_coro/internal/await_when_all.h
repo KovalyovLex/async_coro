@@ -11,7 +11,6 @@
 #include <type_traits>
 #include <utility>
 
-
 namespace async_coro {
 
 template <typename R>
@@ -47,13 +46,15 @@ struct await_when_all {
   template <typename U>
     requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> h) {
+    h.promise().on_suspended();
+
     const auto continue_f = [&](auto& coro) {
       coro.continue_with([this, h](auto&) noexcept {
         if (this->_counter.fetch_sub(1, std::memory_order::relaxed) == 1) {
           // continue this coro
 
           base_handle& handle = h.promise();
-          handle.get_scheduler().plan_continue_execution(handle);
+          handle.get_scheduler().continue_execution(handle);
         }
       });
     };

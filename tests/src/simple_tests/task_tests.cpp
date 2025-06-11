@@ -1,14 +1,17 @@
 #include <async_coro/await_callback.h>
+#include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/start_task.h>
-#include <async_coro/switch_to_thread.h>
+#include <async_coro/switch_to_queue.h>
 #include <async_coro/task.h>
 #include <async_coro/when_all.h>
 #include <async_coro/when_any.h>
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <semaphore>
 #include <variant>
+
 
 namespace task_tests {
 struct coro_runner {
@@ -125,13 +128,13 @@ TEST(task, async_execution) {
   auto routine_1 = []() -> async_coro::task<float> {
     const auto current_th = std::this_thread::get_id();
 
-    co_await switch_to_thread(async_coro::execution_thread::worker);
+    co_await switch_to_queue(async_coro::execution_queues::worker);
 
     EXPECT_NE(current_th, std::this_thread::get_id());
 
     async_done = true;
 
-    co_await switch_to_thread(async_coro::execution_thread::main);
+    co_await switch_to_queue(async_coro::execution_queues::main);
 
     EXPECT_EQ(current_th, std::this_thread::get_id());
 
@@ -148,8 +151,9 @@ TEST(task, async_execution) {
     co_return (int) res;
   }(routine_1);
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(2);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"},
+                                           {"worker2"}}})};
 
   ASSERT_FALSE(routine.done());
   auto handle = scheduler.start_task(std::move(routine));
@@ -165,9 +169,7 @@ TEST(task, async_execution) {
 
   ASSERT_TRUE(async_done);
 
-  scheduler.get_working_queue().set_num_threads(1);
-
-  scheduler.update();
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   ASSERT_TRUE(handle.done());
 
@@ -180,19 +182,19 @@ TEST(task, async_no_switch) {
   auto routine_1 = []() -> async_coro::task<float> {
     const auto current_th = std::this_thread::get_id();
 
-    co_await switch_to_thread(async_coro::execution_thread::worker);
+    co_await switch_to_queue(async_coro::execution_queues::worker);
 
     EXPECT_NE(current_th, std::this_thread::get_id());
 
-    co_await switch_to_thread(async_coro::execution_thread::worker);
+    co_await switch_to_queue(async_coro::execution_queues::worker);
 
     async_done = true;
 
-    co_await switch_to_thread(async_coro::execution_thread::main);
+    co_await switch_to_queue(async_coro::execution_queues::main);
 
     EXPECT_EQ(current_th, std::this_thread::get_id());
 
-    co_await switch_to_thread(async_coro::execution_thread::main);
+    co_await switch_to_queue(async_coro::execution_queues::main);
 
     EXPECT_EQ(current_th, std::this_thread::get_id());
 
@@ -202,7 +204,7 @@ TEST(task, async_no_switch) {
   auto routine = [](auto start) -> async_coro::task<int> {
     const auto current_th = std::this_thread::get_id();
 
-    co_await switch_to_thread(async_coro::execution_thread::main);
+    co_await switch_to_queue(async_coro::execution_queues::main);
 
     EXPECT_EQ(current_th, std::this_thread::get_id());
 
@@ -213,8 +215,8 @@ TEST(task, async_no_switch) {
     co_return (int) res;
   }(routine_1);
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   ASSERT_FALSE(routine.done());
   auto handle = scheduler.start_task(std::move(routine));
@@ -230,7 +232,7 @@ TEST(task, async_no_switch) {
 
   ASSERT_TRUE(async_done);
 
-  scheduler.update();
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   ASSERT_TRUE(handle.done());
 
@@ -260,7 +262,7 @@ TEST(task, when_all) {
     auto results = co_await async_coro::when_all(
         co_await async_coro::start_task(routine1()),
         co_await async_coro::start_task(routine2()),
-        co_await async_coro::start_task(routine3(), async_coro::execution_thread::worker));
+        co_await async_coro::start_task(routine3(), async_coro::execution_queues::worker));
 
     const auto sum = std::apply(
         [&](auto... num) {
@@ -270,8 +272,8 @@ TEST(task, when_all) {
     co_return sum;
   };
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_FALSE(handle.done());
@@ -282,7 +284,7 @@ TEST(task, when_all) {
   std::this_thread::sleep_for(std::chrono::milliseconds{1});
 
   EXPECT_FALSE(handle.done());
-  scheduler.update();
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), 6);
@@ -310,16 +312,16 @@ TEST(task, when_all_void) {
   bool executed = false;
   auto routine = [&]() -> async_coro::task<void> {
     co_await async_coro::when_all(
-        co_await async_coro::start_task(routine1(), async_coro::execution_thread::worker),
+        co_await async_coro::start_task(routine1(), async_coro::execution_queues::worker),
         co_await async_coro::start_task(routine2()),
-        co_await async_coro::start_task(routine3(), async_coro::execution_thread::worker));
+        co_await async_coro::start_task(routine3(), async_coro::execution_queues::worker));
 
     executed = true;
     co_return;
   };
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_FALSE(handle.done());
@@ -334,7 +336,7 @@ TEST(task, when_all_void) {
   EXPECT_FALSE(executed);
 
   EXPECT_FALSE(handle.done());
-  scheduler.update();
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   ASSERT_TRUE(handle.done());
 }
@@ -361,9 +363,9 @@ TEST(task, when_all_with_void) {
   bool executed = false;
   auto routine = [&]() -> async_coro::task<int> {
     auto results = co_await async_coro::when_all(
-        co_await async_coro::start_task(routine1(), async_coro::execution_thread::worker),
+        co_await async_coro::start_task(routine1(), async_coro::execution_queues::worker),
         co_await async_coro::start_task(routine2()),
-        co_await async_coro::start_task(routine3(), async_coro::execution_thread::worker));
+        co_await async_coro::start_task(routine3(), async_coro::execution_queues::worker));
 
     executed = true;
     const auto sum = std::apply(
@@ -374,8 +376,8 @@ TEST(task, when_all_with_void) {
     co_return sum;
   };
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_FALSE(handle.done());
@@ -390,7 +392,7 @@ TEST(task, when_all_with_void) {
   EXPECT_FALSE(executed);
 
   EXPECT_FALSE(handle.done());
-  scheduler.update();
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), 5);
@@ -419,8 +421,8 @@ TEST(task, when_all_with_void_first) {
   auto routine = [&]() -> async_coro::task<int> {
     auto results = co_await async_coro::when_all(
         co_await async_coro::start_task(routine2()),
-        co_await async_coro::start_task(routine1(), async_coro::execution_thread::worker),
-        co_await async_coro::start_task(routine3(), async_coro::execution_thread::worker));
+        co_await async_coro::start_task(routine1(), async_coro::execution_queues::worker),
+        co_await async_coro::start_task(routine3(), async_coro::execution_queues::worker));
 
     executed = true;
     const auto sum = std::apply(
@@ -431,8 +433,8 @@ TEST(task, when_all_with_void_first) {
     co_return sum;
   };
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_FALSE(handle.done());
@@ -447,7 +449,7 @@ TEST(task, when_all_with_void_first) {
   EXPECT_FALSE(executed);
 
   EXPECT_FALSE(handle.done());
-  scheduler.update();
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), 5);
@@ -476,8 +478,8 @@ TEST(task, when_all_with_void_last) {
   auto routine = [&]() -> async_coro::task<int> {
     auto results = co_await async_coro::when_all(
         co_await async_coro::start_task(routine2()),
-        co_await async_coro::start_task(routine3(), async_coro::execution_thread::worker),
-        co_await async_coro::start_task(routine1(), async_coro::execution_thread::worker));
+        co_await async_coro::start_task(routine3(), async_coro::execution_queues::worker),
+        co_await async_coro::start_task(routine1(), async_coro::execution_queues::worker));
 
     executed = true;
     const auto sum = std::apply(
@@ -488,8 +490,8 @@ TEST(task, when_all_with_void_last) {
     co_return sum;
   };
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_FALSE(handle.done());
@@ -504,7 +506,7 @@ TEST(task, when_all_with_void_last) {
   EXPECT_FALSE(executed);
 
   EXPECT_FALSE(handle.done());
-  scheduler.update();
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), 5);
@@ -532,8 +534,8 @@ TEST(task, when_all_no_wait) {
     co_return sum;
   };
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
 
@@ -559,15 +561,15 @@ TEST(task, when_any_no_wait_sleep) {
   auto routine = [&]() -> async_coro::task<int> {
     auto result = co_await async_coro::when_any(
         co_await async_coro::start_task(routine1()),
-        co_await async_coro::start_task(routine3(), async_coro::execution_thread::worker));
+        co_await async_coro::start_task(routine3(), async_coro::execution_queues::worker));
 
     int sum = 0;
     std::visit([&](auto num) { return sum = int(num); }, result);
     co_return sum;
   };
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
@@ -577,7 +579,7 @@ TEST(task, when_any_no_wait_sleep) {
 
   std::this_thread::sleep_for(std::chrono::milliseconds{1});
 
-  scheduler.update();
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), 1);
@@ -611,15 +613,15 @@ TEST(task, when_any_no_wait) {
     co_return sum;
   };
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
 
   ASSERT_TRUE(continue_f);
 
-  scheduler.update();
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   continue_f();
 
@@ -650,15 +652,15 @@ TEST(task, when_any_void_all) {
     co_return;
   };
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
 
   ASSERT_TRUE(continue_f);
 
-  scheduler.update();
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   continue_f();
 
@@ -700,15 +702,15 @@ TEST(task, when_any_void_first) {
         result);
   };
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
 
   ASSERT_TRUE(continue_f);
 
-  scheduler.update();
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   continue_f();
 
@@ -751,15 +753,15 @@ TEST(task, when_any_void_last) {
         result);
   };
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
 
   ASSERT_TRUE(continue_f);
 
-  scheduler.update();
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   continue_f();
 
@@ -802,15 +804,15 @@ TEST(task, when_any_void_mid) {
         result);
   };
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
 
   ASSERT_TRUE(continue_f);
 
-  scheduler.update();
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   continue_f();
 
@@ -853,15 +855,15 @@ TEST(task, when_any_index_check) {
         result);
   };
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
 
   ASSERT_TRUE(continue_f);
 
-  scheduler.update();
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   continue_f();
 
@@ -907,8 +909,8 @@ TEST(task, when_any_index_check_last) {
         result);
   };
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
@@ -927,7 +929,8 @@ TEST(task, when_any_continue_after_parent_complete) {
   std::function<void()> continue_f1;
   std::function<void()> continue_f2;
 
-  async_coro::scheduler scheduler;
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   {
     auto routine1 = [&]() -> async_coro::task<int> {
@@ -961,8 +964,6 @@ TEST(task, when_any_continue_after_parent_complete) {
           },
           result);
     };
-
-    scheduler.get_working_queue().set_num_threads(1);
 
     auto handle = scheduler.start_task(routine());
     EXPECT_TRUE(handle.done());
@@ -1000,17 +1001,17 @@ TEST(task, when_any) {
 
   auto routine = [&]() -> async_coro::task<int> {
     auto result = co_await async_coro::when_any(
-        co_await async_coro::start_task(routine1(), async_coro::execution_thread::worker),
-        co_await async_coro::start_task(routine2(), async_coro::execution_thread::worker),
-        co_await async_coro::start_task(routine3(), async_coro::execution_thread::worker));
+        co_await async_coro::start_task(routine1(), async_coro::execution_queues::worker),
+        co_await async_coro::start_task(routine2(), async_coro::execution_queues::worker),
+        co_await async_coro::start_task(routine3(), async_coro::execution_queues::worker));
 
     int sum = 0;
     std::visit([&](auto num) { return sum = int(num); }, result);
     co_return sum;
   };
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
 
@@ -1019,7 +1020,7 @@ TEST(task, when_any) {
 
   std::this_thread::sleep_for(std::chrono::milliseconds{1});
 
-  scheduler.update();
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   ASSERT_TRUE(handle.done());
   EXPECT_LT(handle.get(), 4);
@@ -1065,15 +1066,15 @@ TEST(task, task_handle_move_to_thread) {
   std::atomic_bool ready = false;
 
   auto routine1 = [&]() -> async_coro::task<destructible> {
-    co_await switch_to_thread(async_coro::execution_thread::worker);
+    co_await switch_to_queue(async_coro::execution_queues::worker);
     ready = true;
-    co_await switch_to_thread(async_coro::execution_thread::main);
+    co_await switch_to_queue(async_coro::execution_queues::main);
 
     co_return destructible{};
   };
 
-  async_coro::scheduler scheduler;
-  scheduler.get_working_queue().set_num_threads(1);
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{{{"worker1"}}})};
 
   EXPECT_EQ(num_instances, 0);
 
@@ -1095,11 +1096,11 @@ TEST(task, task_handle_move_to_thread) {
 
     std::this_thread::sleep_for(std::chrono::milliseconds{1});
 
-    scheduler.update();
+    scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
     th.join();
 
-    scheduler.update();
+    scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
   }
 
   EXPECT_EQ(num_instances, 0);

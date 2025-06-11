@@ -48,12 +48,16 @@ struct promise_type final : internal::promise_result_holder<R> {
     return std::move(in);
   }
 
-  void set_task_handle(task_handle<R>* handle, internal::passkey_any<task_handle<R>>) {
-    this->set_task_handle_impl(handle);
+  void set_owning_by_task_handle(bool owning, internal::passkey_any<task_handle<R>>) {
+    base_handle::set_owning_by_task_handle(owning);
   }
 
   void try_free_task(internal::passkey_any<task<R>>) {
-    this->try_free_task_impl();
+    this->on_task_freed_by_scheduler();
+  }
+
+  void set_continuation_functor(internal::continue_function_base* f, internal::passkey_any<task_handle<R>>) noexcept {
+    base_handle::set_continuation_functor(f);
   }
 };
 
