@@ -111,7 +111,7 @@ class base_handle {
 
   uint8_t dec_num_owners() noexcept;
 
-  uint8_t inc_num_owners() noexcept;
+  void inc_num_owners() noexcept;
 
   coroutine_state get_coroutine_state(std::memory_order order = std::memory_order::relaxed) const noexcept {
     return static_cast<coroutine_state>(_atomic_state.load(order) & coroutine_state_mask);

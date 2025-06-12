@@ -11,7 +11,8 @@ base_handle::~base_handle() noexcept {
 }
 
 void base_handle::on_task_freed_by_scheduler() {
-  if (dec_num_owners() == 0) {
+  const auto num_owners = dec_num_owners();
+  if (num_owners == 0) {
     destroy_impl();
   }
 }
@@ -22,7 +23,8 @@ void base_handle::set_owning_by_task_handle(bool owning) {
   if (owning) {
     inc_num_owners();
   } else {
-    if (dec_num_owners() == 0) {
+    const auto num_owners = dec_num_owners();
+    if (num_owners == 0) {
       destroy_impl();
     }
   }
@@ -55,10 +57,10 @@ uint8_t base_handle::dec_num_owners() noexcept {
     new_value = (expected - num_owners_step);
     ASYNC_CORO_ASSERT(expected >= num_owners_step);
   }
-  return (expected & num_owners_mask) >> 4;
+  return (new_value & num_owners_mask) >> 4;
 }
 
-uint8_t base_handle::inc_num_owners() noexcept {
+void base_handle::inc_num_owners() noexcept {
   uint8_t expected = _atomic_state.load(std::memory_order::relaxed);
   uint8_t new_value = (expected + num_owners_step);
   ASYNC_CORO_ASSERT((expected & num_owners_mask) < num_owners_mask);
@@ -67,7 +69,6 @@ uint8_t base_handle::inc_num_owners() noexcept {
     new_value = (expected + num_owners_step);
     ASYNC_CORO_ASSERT((expected & num_owners_mask) < num_owners_mask);
   }
-  return (expected & num_owners_mask) >> 4;
 }
 
 }  // namespace async_coro
