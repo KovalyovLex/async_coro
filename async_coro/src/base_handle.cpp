@@ -55,7 +55,7 @@ uint8_t base_handle::dec_num_owners() noexcept {
   uint8_t new_value = (expected - step);
   ASYNC_CORO_ASSERT(expected >= step);
 
-  while (!_atomic_state.compare_exchange_strong(expected, new_value, std::memory_order::acquire, std::memory_order::release)) {
+  while (!_atomic_state.compare_exchange_strong(expected, new_value, std::memory_order::release, std::memory_order::acquire)) {
     new_value = (expected - step);
     ASYNC_CORO_ASSERT(expected >= step);
   }
