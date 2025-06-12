@@ -100,14 +100,14 @@ class task_handle final {
   template <typename Y>
     requires(std::same_as<Y, R> && !std::same_as<R, void>)
   operator Y() && {
-    ASYNC_CORO_ASSERT(_handle && _handle.promise().f);
+    ASYNC_CORO_ASSERT(_handle && _handle.promise().is_finished());
     return _handle.promise().move_result();
   }
 
   // Checks if coroutine is finished.
   // If state is empty returns true as well
   bool done() const {
-    return !_handle || _handle.promise().is_finished();
+    return !_handle || _handle.promise().is_finished_acquire();
   }
 
   // Sets callback that will be called after coroutine finish on thread that finished the coroutine.

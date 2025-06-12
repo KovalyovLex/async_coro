@@ -49,7 +49,9 @@ class base_handle {
 
   bool is_coro_embedded() const noexcept { return is_embedded(); }
 
-  bool is_finished() const noexcept { return get_coroutine_state() == coroutine_state::finished; }
+  bool is_finished_acquire() const noexcept { return get_coroutine_state(std::memory_order::acquire) == coroutine_state::finished; }
+
+  bool is_finished() const noexcept { return get_coroutine_state(std::memory_order::relaxed) == coroutine_state::finished; }
 
   bool is_suspended() const noexcept { return get_coroutine_state() == coroutine_state::suspended; }
 
@@ -72,7 +74,7 @@ class base_handle {
   void init_promise(std::coroutine_handle<> h) noexcept { _handle = h; }
 
   void on_final_suspend() noexcept {
-    set_coroutine_state(coroutine_state::finished);
+    set_coroutine_state(coroutine_state::finished, true);
   }
 
   void on_task_freed_by_scheduler();
@@ -131,12 +133,16 @@ class base_handle {
     }
   }
 
-  coroutine_state get_coroutine_state() const noexcept {
-    return static_cast<coroutine_state>(_atomic_state.load(std::memory_order::relaxed) & coroutine_state_mask);
+  coroutine_state get_coroutine_state(std::memory_order order = std::memory_order::relaxed) const noexcept {
+    return static_cast<coroutine_state>(_atomic_state.load(order) & coroutine_state_mask);
   }
 
-  void set_coroutine_state(coroutine_state value) noexcept {
-    update_value(static_cast<uint8_t>(value), get_inverted_mask(coroutine_state_mask));
+  void set_coroutine_state(coroutine_state value, bool release = false) noexcept {
+    if (release) {
+      update_value(static_cast<uint8_t>(value), get_inverted_mask(coroutine_state_mask), std::memory_order::relaxed, std::memory_order::release);
+    } else {
+      update_value(static_cast<uint8_t>(value), get_inverted_mask(coroutine_state_mask));
+    }
   }
 
   bool is_embedded() const noexcept {
