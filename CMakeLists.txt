@@ -70,6 +70,7 @@ file(GLOB_RECURSE long_tests_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "tests
 gtest_add_tests(TARGET      async_coro_tests
                 SOURCES     ${simple_tests_src}
                 TEST_LIST   simple_tests_list
+                EXTRA_ARGS  "--gtest_repeat=10"
 )
 gtest_add_tests(TARGET      async_coro_tests
                 SOURCES     ${long_tests_src}

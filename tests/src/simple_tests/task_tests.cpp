@@ -1027,6 +1027,7 @@ TEST(task, when_any) {
 
 TEST(task, task_handle_outlive) {
   static int num_instances = 0;
+  num_instances = 0;
 
   struct destructible {
     destructible() { num_instances++; }
@@ -1055,6 +1056,7 @@ TEST(task, task_handle_outlive) {
 
 TEST(task, task_handle_move_to_thread) {
   static int num_instances = 0;
+  num_instances = 0;
 
   struct destructible {
     destructible() { num_instances++; }
@@ -1107,6 +1109,7 @@ TEST(task, task_handle_move_to_thread) {
 
 TEST(task, task_ref_result) {
   static int num_instances = 0;
+  num_instances = 0;
 
   auto routine1 = []() -> async_coro::task<int&> {
     co_return num_instances;
@@ -1123,6 +1126,7 @@ TEST(task, task_ref_result) {
 
 TEST(task, task_const_ref_result) {
   static int num_instances = 0;
+  num_instances = 0;
 
   auto routine1 = []() -> async_coro::task<const int&> {
     co_return num_instances;
@@ -1139,6 +1143,7 @@ TEST(task, task_const_ref_result) {
 
 TEST(task, task_ptr_result) {
   static int num_instances = 0;
+  num_instances = 0;
 
   auto routine1 = []() -> async_coro::task<const int*> {
     co_return &num_instances;
@@ -1155,6 +1160,7 @@ TEST(task, task_ptr_result) {
 
 TEST(task, task_ref_result_await) {
   static int num_instances = 0;
+  num_instances = 0;
 
   auto routine1 = []() -> async_coro::task<int&> {
     co_return num_instances;
@@ -1176,6 +1182,7 @@ TEST(task, task_ref_result_await) {
 
 TEST(task, task_const_ref_result_await) {
   static int num_instances = 0;
+  num_instances = 0;
 
   auto routine1 = []() -> async_coro::task<const int&> {
     co_return num_instances;
@@ -1197,6 +1204,8 @@ TEST(task, task_const_ref_result_await) {
 
 TEST(task, lambda_lifetime) {
   static int num_instances = 0;
+  num_instances = 0;
+
   struct destructible {
     destructible() { num_instances++; }
     destructible(const destructible&) { num_instances++; }
