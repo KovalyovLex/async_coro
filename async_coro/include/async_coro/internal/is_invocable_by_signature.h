@@ -1,3 +1,4 @@
+#pragma once
 
 #include <async_coro/internal/always_false.h>
 

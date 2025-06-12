@@ -1,23 +1,15 @@
 #pragma once
 
+#include <async_coro/callback.h>
 #include <async_coro/config.h>
 #include <async_coro/internal/passkey.h>
 #include <async_coro/internal/promise_type.h>
-#include <async_coro/unique_function.h>
 
 #include <concepts>
 #include <coroutine>
 #include <utility>
 
 namespace async_coro {
-namespace internal {
-
-template <class T, class... TArgs>
-concept is_noexcept_runnable = requires(T a) {
-  { a(std::declval<TArgs>()...) } noexcept -> std::same_as<void>;
-};
-
-}  // namespace internal
 
 /**
  * @brief Handle for scheduled coroutine tasks.
@@ -31,8 +23,6 @@ concept is_noexcept_runnable = requires(T a) {
  * - Access the result of the coroutine once it completes.
  * - Attach a continuation function, enabling a reactive programming approach.
  *
- * To safely use a continuation, the `task_handle` must outlive the associated coroutine.
- *
  * @tparam R The result type produced by the coroutine.
  */
 template <typename R>
@@ -41,8 +31,6 @@ class task_handle final {
   using handle_type = std::coroutine_handle<promise_type>;
 
  public:
-  using continuation_t = unique_function<void(promise_result<R>&) noexcept>;
-
   task_handle() noexcept = default;
   explicit task_handle(handle_type h) noexcept
       : _handle(std::move(h)) {
@@ -59,6 +47,14 @@ class task_handle final {
 
   task_handle& operator=(const task_handle&) = delete;
   task_handle& operator=(task_handle&& other) noexcept {
+    if (&other == this) {
+      return *this;
+    }
+
+    if (_handle) {
+      _handle.promise().set_owning_by_task_handle(false, internal::passkey{this});
+    }
+
     _handle = std::exchange(other._handle, {});
     return *this;
   }
@@ -114,9 +110,10 @@ class task_handle final {
     return !_handle || _handle.promise().is_finished();
   }
 
-  // Sets callback that will be called after coroutine finish
+  // Sets callback that will be called after coroutine finish on thread that finished the coroutine.
+  // If coroutine is already finished, the callback will be called immediately.
   template <class Fx>
-    requires(internal::is_noexcept_runnable<Fx, promise_result<R>&>)
+    requires(internal::is_noexcept_runnable<Fx, void, promise_result<R>&>)
   void continue_with(Fx&& f) {
     ASYNC_CORO_ASSERT(!_handle.promise().is_coro_embedded());
 
@@ -127,16 +124,7 @@ class task_handle final {
     if (done()) {
       f(_handle.promise());
     } else {
-      struct callable : public internal::continue_function<promise_result<R>&> {
-        callable(Fx&& fx) : func(std::forward<Fx>(fx)) {}
-
-        void execute(promise_result<R>& res) noexcept override {
-          func(res);
-        }
-
-        std::remove_cvref_t<Fx> func;
-      };
-      auto continue_f = new callable{std::forward<Fx>(f)};
+      auto continue_f = callback_noexcept<void, promise_result<R>&>::allocate(std::forward<Fx>(f));
       _handle.promise().set_continuation_functor(continue_f, internal::passkey{this});
     }
   }

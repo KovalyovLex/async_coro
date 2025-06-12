@@ -1,13 +1,12 @@
 #pragma once
 
+#include <async_coro/callback.h>
 #include <async_coro/config.h>
 #include <async_coro/execution_queue_mark.h>
-#include <async_coro/internal/continue_function.h>
 
 #include <atomic>
 #include <coroutine>
 #include <cstdint>
-#include <cstdlib>
 #include <thread>
 
 namespace async_coro {
@@ -32,7 +31,7 @@ class base_handle {
         _is_result(false) {}
   base_handle(const base_handle&) = delete;
   base_handle(base_handle&&) = delete;
-  ~base_handle() noexcept = default;
+  ~base_handle() noexcept;
 
   scheduler& get_scheduler() noexcept {
     ASYNC_CORO_ASSERT(_scheduler != nullptr);
@@ -80,11 +79,11 @@ class base_handle {
 
   void set_owning_by_task_handle(bool owning);
 
-  internal::continue_function_base* get_continuation_functor() const noexcept {
+  callback_base* get_continuation_functor() const noexcept {
     return get_has_continuation() ? _continuation.load(std::memory_order::acquire) : nullptr;
   }
 
-  void set_continuation_functor(internal::continue_function_base* f) noexcept;
+  void set_continuation_functor(callback_base* f) noexcept;
 
  private:
   void try_destroy_if_ready();
@@ -164,10 +163,11 @@ class base_handle {
 
  private:
   union {
-    std::atomic<internal::continue_function_base*> _continuation;
+    std::atomic<callback_base*> _continuation;
     base_handle* _parent;
   };
 
+  callback_base::ptr _start_function;
   scheduler* _scheduler = nullptr;
   std::coroutine_handle<> _handle;
   std::thread::id _execution_thread = {};

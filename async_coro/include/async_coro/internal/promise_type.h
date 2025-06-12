@@ -1,7 +1,7 @@
 #pragma once
 
 #include <async_coro/base_handle.h>
-#include <async_coro/internal/continue_function.h>
+#include <async_coro/callback.h>
 #include <async_coro/internal/passkey.h>
 #include <async_coro/internal/promise_result_holder.h>
 
@@ -23,7 +23,7 @@ concept embeddable_task =
 
 template <typename R>
 struct promise_type final : internal::promise_result_holder<R> {
-  // construct my promise from me
+  // constructs promise from this
   constexpr auto get_return_object() noexcept {
     return std::coroutine_handle<promise_type>::from_promise(*this);
   }
@@ -37,7 +37,7 @@ struct promise_type final : internal::promise_result_holder<R> {
   // we dont want to destroy our result here
   std::suspend_always final_suspend() noexcept {
     this->on_final_suspend();
-    if (auto* continue_with = static_cast<internal::continue_function<promise_result<R>&>*>(this->get_continuation_functor())) {
+    if (auto* continue_with = static_cast<callback_noexcept<void, promise_result<R>&>*>(this->get_continuation_functor())) {
       continue_with->execute(*this);
     }
     return {};
@@ -63,7 +63,7 @@ struct promise_type final : internal::promise_result_holder<R> {
     this->on_task_freed_by_scheduler();
   }
 
-  void set_continuation_functor(internal::continue_function_base* f, internal::passkey_any<task_handle<R>>) noexcept {
+  void set_continuation_functor(callback_base* f, internal::passkey_any<task_handle<R>>) noexcept {
     base_handle::set_continuation_functor(f);
   }
 };

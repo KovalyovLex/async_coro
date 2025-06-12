@@ -1194,3 +1194,56 @@ TEST(task, task_const_ref_result_await) {
 
   EXPECT_EQ(&handle.get(), &num_instances);
 }
+
+TEST(task, lambda_lifetime) {
+  static int num_instances = 0;
+  struct destructible {
+    destructible() { num_instances++; }
+    destructible(const destructible&) { num_instances++; }
+    destructible(destructible&&) noexcept { num_instances++; }
+    ~destructible() { num_instances--; }
+  };
+
+  async_coro::scheduler scheduler;
+  std::function<void()> continue_f1;
+  std::function<void()> continue_f2;
+
+  async_coro::task_handle<void> handle;
+
+  {
+    destructible captured_arg;
+    EXPECT_EQ(num_instances, 1);
+
+    handle = scheduler.start_task(
+        [&, captured_arg = std::move(captured_arg)]() noexcept -> async_coro::task<void> {
+          EXPECT_LE(num_instances, 3);  // 2 or 3 because of no copy elision in captured arguments
+          {
+            destructible local_val;
+            EXPECT_LE(num_instances, 4);
+            co_await async_coro::await_callback(
+                [&continue_f1](auto f) { continue_f1 = std::move(f); });
+            EXPECT_EQ(num_instances, 2);
+          }
+          EXPECT_EQ(num_instances, 1);
+          co_await async_coro::await_callback(
+              [&continue_f2](auto f) { continue_f2 = std::move(f); });
+          EXPECT_EQ(num_instances, 1);
+        });
+  }
+
+  EXPECT_EQ(num_instances, 2);
+  ASSERT_TRUE(continue_f1);
+  EXPECT_FALSE(handle.done());
+
+  continue_f1();
+  EXPECT_EQ(num_instances, 1);
+  ASSERT_TRUE(continue_f2);
+  EXPECT_FALSE(handle.done());
+
+  continue_f2();
+  EXPECT_TRUE(handle.done());
+  EXPECT_EQ(num_instances, 1);
+
+  handle = {};
+  EXPECT_EQ(num_instances, 0);
+}

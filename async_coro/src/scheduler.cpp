@@ -25,6 +25,7 @@ scheduler::~scheduler() {
   auto coros = std::move(_managed_coroutines);
   _is_destroying = true;
   lock.unlock();
+  _execution_system = nullptr;
 
   for (auto& coro : coros) {
     if (coro) {
@@ -85,10 +86,13 @@ void scheduler::plan_continue_on_thread(base_handle& handle_impl, execution_queu
 }
 
 void scheduler::add_coroutine(base_handle& handle_impl,
+                              callback_base::ptr start_function,
                               execution_queue_mark execution_queue) {
   ASYNC_CORO_ASSERT(handle_impl._execution_thread == std::thread::id{});
   ASYNC_CORO_ASSERT(handle_impl.get_coroutine_state() == coroutine_state::created);
   ASYNC_CORO_ASSERT(handle_impl._handle);
+
+  handle_impl._start_function = std::move(start_function);
 
   {
     unique_lock lock{_mutex};

@@ -3,18 +3,15 @@
 #include <async_coro/config.h>
 #include <async_coro/i_execution_system.h>
 #include <async_coro/internal/passkey.h>
-#include <async_coro/task.h>
 #include <async_coro/task_handle.h>
+#include <async_coro/task_launcher.h>
 #include <async_coro/thread_safety/analysis.h>
 #include <async_coro/thread_safety/mutex.h>
-#include <async_coro/unique_function.h>
 
+#include <utility>
 #include <vector>
 
 namespace async_coro {
-
-template <typename R>
-struct task;
 
 class base_handle;
 
@@ -32,13 +29,15 @@ class scheduler {
    * @brief Constructs a scheduler with a default execution system.
    */
   scheduler();
+
   /**
    * @brief Constructs a scheduler with a provided execution system.
    * @param system The execution system to use for scheduling tasks.
    */
   explicit scheduler(i_execution_system::ptr system) noexcept;
+
   /**
-   * @brief Destroys the scheduler, waiting for all managed coroutines to complete.
+   * @brief Destroys the scheduler, destroying all managed coroutines.
    */
   ~scheduler();
 
@@ -54,17 +53,28 @@ class scheduler {
    * @return A handle to the started task.
    */
   template <typename R>
-  task_handle<R> start_task(task<R> coro,
-                            execution_queue_mark execution_queue = execution_queues::main) {
+  task_handle<R> start_task(task_launcher<R> launcher) {
+    auto coro = launcher.launch();
     auto handle = coro.release_handle(internal::passkey{this});
     task_handle<R> result{handle};
     if (!handle.done()) [[likely]] {
-      add_coroutine(handle.promise(), execution_queue);
+      add_coroutine(handle.promise(), launcher.get_start_function(), launcher.get_execution_queue());
       return result;
     }
     // free task as we released handle
     handle.promise().on_task_freed_by_scheduler();
     return result;
+  }
+
+  /**
+   * @brief Schedules a coroutine or function for execution.
+   * @tparam T The type of the coroutine or function.
+   * @param coroutine_or_function The coroutine or function to be executed.
+   * @return A handle to the started task.
+   */
+  template <typename T>
+  auto start_task(T&& coroutine_or_function, execution_queue_mark execution_queue = execution_queues::main) {
+    return start_task(task_launcher{std::forward<T>(coroutine_or_function), execution_queue});
   }
 
   /**
@@ -112,7 +122,7 @@ class scheduler {
 
  private:
   bool is_current_thread_fits(execution_queue_mark execution_queue) noexcept;
-  void add_coroutine(base_handle& handle_impl, execution_queue_mark execution_queue);
+  void add_coroutine(base_handle& handle_impl, callback_base::ptr start_function, execution_queue_mark execution_queue);
   void continue_execution_impl(base_handle& handle_impl);
   void plan_continue_on_thread(base_handle& handle_impl, execution_queue_mark execution_queue);
 

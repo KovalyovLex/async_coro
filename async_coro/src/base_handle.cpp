@@ -1,9 +1,12 @@
 #include <async_coro/base_handle.h>
-
-#include <atomic>
-#include <utility>
+#include <async_coro/callback.h>
+#include <async_coro/config.h>
 
 namespace async_coro {
+
+base_handle::~base_handle() noexcept {
+  ASYNC_CORO_ASSERT(!get_has_continuation());
+}
 
 void base_handle::on_task_freed_by_scheduler() {
   if (is_coro_embedded() || !get_has_handle()) {
@@ -22,7 +25,7 @@ void base_handle::set_owning_by_task_handle(bool owning) {
   }
 }
 
-void base_handle::set_continuation_functor(internal::continue_function_base* f) noexcept {
+void base_handle::set_continuation_functor(callback_base* f) noexcept {
   ASYNC_CORO_ASSERT(!is_embedded());
   ASYNC_CORO_ASSERT(!get_has_continuation());
 
@@ -54,10 +57,15 @@ void base_handle::try_destroy_if_ready() {
 void base_handle::destroy_impl() {
   auto continuation = get_continuation_functor();
 
+  _continuation.store(nullptr, std::memory_order::relaxed);
+  set_has_continuation(false);
+
   const auto handle = std::exchange(_handle, {});
   handle.destroy();
 
-  delete continuation;
+  if (continuation) {
+    continuation->destroy();
+  }
 }
 
 }  // namespace async_coro
