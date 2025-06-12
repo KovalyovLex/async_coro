@@ -128,9 +128,9 @@ class task_handle final {
       auto continue_f = callback_noexcept<void, promise_result<R>&>::allocate(std::forward<Fx>(f));
       promise.set_continuation_functor(continue_f, internal::passkey{this});
       if (done()) {
-        if (auto f = promise.get_continuation_functor(internal::passkey{this})) {
-          ASYNC_CORO_ASSERT(f == continue_f);
-          (void)f;
+        if (auto f_base = promise.get_continuation_functor(internal::passkey{this})) {
+          ASYNC_CORO_ASSERT(f_base == continue_f);
+          (void)f_base;
           continue_f->execute(promise);
           continue_f->destroy();
         }
