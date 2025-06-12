@@ -11,7 +11,6 @@
 #include <coroutine>
 #include <utility>
 
-
 namespace async_coro {
 
 class scheduler;
