@@ -37,8 +37,9 @@ struct promise_type final : internal::promise_result_holder<R> {
   // we dont want to destroy our result here
   std::suspend_always final_suspend() noexcept {
     this->on_final_suspend();
-    if (auto* continue_with = static_cast<callback_noexcept<void, promise_result<R>&>*>(this->get_continuation_functor())) {
+    if (auto* continue_with = static_cast<callback_noexcept<void, promise_result<R>&>*>(this->release_continuation_functor())) {
       continue_with->execute(*this);
+      continue_with->destroy();
     }
     return {};
   }
@@ -65,6 +66,10 @@ struct promise_type final : internal::promise_result_holder<R> {
 
   void set_continuation_functor(callback_base* f, internal::passkey_any<task_handle<R>>) noexcept {
     base_handle::set_continuation_functor(f);
+  }
+
+  callback_base* get_continuation_functor(internal::passkey_any<task_handle<R>>) noexcept {
+    return base_handle::release_continuation_functor();
   }
 };
 

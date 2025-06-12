@@ -81,8 +81,8 @@ class base_handle {
 
   void set_owning_by_task_handle(bool owning);
 
-  callback_base* get_continuation_functor() const noexcept {
-    return get_has_continuation() ? _continuation.load(std::memory_order::acquire) : nullptr;
+  callback_base* release_continuation_functor() noexcept {
+    return is_embedded() ? nullptr : _continuation.exchange(nullptr, std::memory_order::acquire);
   }
 
   void set_continuation_functor(callback_base* f) noexcept;
@@ -102,8 +102,8 @@ class base_handle {
  private:
   static constexpr uint8_t coroutine_state_mask = (1 << 0) | (1 << 1) | (1 << 2);
   static constexpr uint8_t is_embedded_mask = (1 << 3);
-  static constexpr uint8_t has_continuation_mask = (1 << 4);
-  static constexpr uint8_t num_owners_mask = (1 << 5) | (1 << 6);
+  static constexpr uint8_t num_owners_step = (1 << 4);
+  static constexpr uint8_t num_owners_mask = (1 << 4) | (1 << 5);
 
   static constexpr uint8_t get_inverted_mask(uint8_t mask) noexcept {
     return static_cast<uint8_t>(~mask);
@@ -133,14 +133,6 @@ class base_handle {
     update_value(value ? is_embedded_mask : 0, get_inverted_mask(is_embedded_mask));
   }
 
-  bool get_has_continuation() const noexcept {
-    return _atomic_state.load(std::memory_order::relaxed) & has_continuation_mask;
-  }
-
-  void set_has_continuation(bool value) noexcept {
-    update_value(value ? has_continuation_mask : 0, get_inverted_mask(has_continuation_mask));
-  }
-
   void update_value(const uint8_t value, const uint8_t mask, std::memory_order read = std::memory_order::relaxed, std::memory_order write = std::memory_order::relaxed) noexcept {
     uint8_t expected = _atomic_state.load(read);
     while (!_atomic_state.compare_exchange_weak(expected, (expected & mask) | value, write, read)) {
@@ -158,7 +150,7 @@ class base_handle {
   std::coroutine_handle<> _handle;
   std::thread::id _execution_thread = {};
   execution_queue_mark _execution_queue = execution_queues::main;
-  std::atomic<uint8_t> _atomic_state{(1 << 5)};  // 1 owner by default
+  std::atomic<uint8_t> _atomic_state{num_owners_step};  // 1 owner by default
 
  protected:
   bool _is_initialized : 1;

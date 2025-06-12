@@ -121,11 +121,20 @@ class task_handle final {
       return;
     }
 
+    auto& promise = _handle.promise();
     if (done()) {
-      f(_handle.promise());
+      f(promise);
     } else {
       auto continue_f = callback_noexcept<void, promise_result<R>&>::allocate(std::forward<Fx>(f));
-      _handle.promise().set_continuation_functor(continue_f, internal::passkey{this});
+      promise.set_continuation_functor(continue_f, internal::passkey{this});
+      if (done()) {
+        if (auto f = promise.get_continuation_functor(internal::passkey{this})) {
+          ASYNC_CORO_ASSERT(f == continue_f);
+          (void)f;
+          continue_f->execute(promise);
+          continue_f->destroy();
+        }
+      }
     }
   }
 
