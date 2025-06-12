@@ -95,5 +95,7 @@
     "coro",
     "coros",
     "COTHREAD"
-  ]
+  ],
+  "cmake.copyCompileCommands": "${workspaceFolder}/compile_commands.json",
+  "cmake.exportCompileCommandsFile": true
 }
