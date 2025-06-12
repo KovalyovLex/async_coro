@@ -88,7 +88,6 @@ class base_handle {
   void set_continuation_functor(callback_base* f) noexcept;
 
  private:
-  void try_destroy_if_ready();
   void destroy_impl();
 
   base_handle* get_parent() const noexcept {
@@ -98,40 +97,21 @@ class base_handle {
   void set_parent(base_handle& parent) noexcept {
     _parent = &parent;
     set_embedded(true);
-
-    ASYNC_CORO_ASSERT(get_has_handle() == false);
   }
 
  private:
   static constexpr uint8_t coroutine_state_mask = (1 << 0) | (1 << 1) | (1 << 2);
-  static constexpr uint8_t ready_for_destroy_mask = 1 << 3;
-  static constexpr uint8_t has_handle_mask = (1 << 4);
-  static constexpr uint8_t is_embedded_mask = (1 << 5);
-  static constexpr uint8_t has_continuation_mask = (1 << 6);
+  static constexpr uint8_t is_embedded_mask = (1 << 3);
+  static constexpr uint8_t has_continuation_mask = (1 << 4);
+  static constexpr uint8_t num_owners_mask = (1 << 5) | (1 << 6);
 
   static constexpr uint8_t get_inverted_mask(uint8_t mask) noexcept {
     return static_cast<uint8_t>(~mask);
   }
 
-  bool is_ready_for_destroy() const noexcept {
-    return _atomic_state.load(std::memory_order::relaxed) & ready_for_destroy_mask;
-  }
+  uint8_t dec_num_owners() noexcept;
 
-  void set_ready_for_destroy() noexcept {
-    update_value(ready_for_destroy_mask, get_inverted_mask(ready_for_destroy_mask), std::memory_order::relaxed, std::memory_order::release);
-  }
-
-  bool get_has_handle() const noexcept {
-    return _atomic_state.load(std::memory_order::relaxed) & has_handle_mask;
-  }
-
-  void set_has_handle(bool value) noexcept {
-    if (value) {
-      update_value(has_handle_mask, get_inverted_mask(has_handle_mask));
-    } else {
-      update_value(0, get_inverted_mask(has_handle_mask), std::memory_order::relaxed, std::memory_order::release);
-    }
-  }
+  uint8_t inc_num_owners() noexcept;
 
   coroutine_state get_coroutine_state(std::memory_order order = std::memory_order::relaxed) const noexcept {
     return static_cast<coroutine_state>(_atomic_state.load(order) & coroutine_state_mask);
@@ -178,7 +158,7 @@ class base_handle {
   std::coroutine_handle<> _handle;
   std::thread::id _execution_thread = {};
   execution_queue_mark _execution_queue = execution_queues::main;
-  std::atomic<uint8_t> _atomic_state{0};
+  std::atomic<uint8_t> _atomic_state{(1 << 5)};  // 1 owner by default
 
  protected:
   bool _is_initialized : 1;

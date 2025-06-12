@@ -34,7 +34,8 @@ struct task final : private task_base {
   using handle_type = std::coroutine_handle<promise_type>;
   using return_type = R;
 
-  task(handle_type h) noexcept : _handle(std::move(h)) {}
+  task(handle_type h) noexcept : _handle(std::move(h)) {
+  }
 
   task(const task&) = delete;
   task(task&& other) noexcept

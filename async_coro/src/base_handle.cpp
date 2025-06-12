@@ -9,19 +9,20 @@ base_handle::~base_handle() noexcept {
 }
 
 void base_handle::on_task_freed_by_scheduler() {
-  if (is_coro_embedded() || !get_has_handle()) {
+  if (is_coro_embedded() || dec_num_owners() == 0) {
     destroy_impl();
-  } else {
-    set_ready_for_destroy();
   }
 }
 
 void base_handle::set_owning_by_task_handle(bool owning) {
   ASYNC_CORO_ASSERT(!is_coro_embedded());
 
-  set_has_handle(owning);
-  if (!owning) {
-    try_destroy_if_ready();
+  if (owning) {
+    inc_num_owners();
+  } else {
+    if (dec_num_owners() == 0) {
+      destroy_impl();
+    }
   }
 }
 
@@ -31,27 +32,6 @@ void base_handle::set_continuation_functor(callback_base* f) noexcept {
 
   _continuation.store(f, std::memory_order::release);
   set_has_continuation(true);
-}
-
-void base_handle::try_destroy_if_ready() {
-  uint8_t expected_state = _atomic_state.load(std::memory_order::acquire);
-  if ((expected_state & ready_for_destroy_mask) == 0) {
-    // was not ready for destroy
-    return;
-  }
-
-  bool can_destroy = true;
-  while (!_atomic_state.compare_exchange_strong(expected_state, expected_state & ~ready_for_destroy_mask, std::memory_order::relaxed)) {
-    if ((expected_state & ready_for_destroy_mask) == 0) {
-      // was not ready for destroy
-      can_destroy = false;
-      break;
-    }
-  }
-
-  if (can_destroy) {
-    destroy_impl();
-  }
 }
 
 void base_handle::destroy_impl() {
@@ -66,6 +46,34 @@ void base_handle::destroy_impl() {
   if (continuation) {
     continuation->destroy();
   }
+}
+
+uint8_t base_handle::dec_num_owners() noexcept {
+  constexpr auto step = uint8_t(1 << 5);
+
+  uint8_t expected = _atomic_state.load(std::memory_order::acquire);
+  uint8_t new_value = (expected - step);
+  ASYNC_CORO_ASSERT(expected >= step);
+
+  while (!_atomic_state.compare_exchange_strong(expected, new_value, std::memory_order::acquire, std::memory_order::release)) {
+    new_value = (expected - step);
+    ASYNC_CORO_ASSERT(expected >= step);
+  }
+  return (expected & num_owners_mask) >> 5;
+}
+
+uint8_t base_handle::inc_num_owners() noexcept {
+  constexpr auto step = uint8_t(1 << 5);
+
+  uint8_t expected = _atomic_state.load(std::memory_order::relaxed);
+  uint8_t new_value = (expected + step);
+  ASYNC_CORO_ASSERT((expected & num_owners_mask) < num_owners_mask);
+
+  while (!_atomic_state.compare_exchange_strong(expected, new_value, std::memory_order::relaxed)) {
+    new_value = (expected + step);
+    ASYNC_CORO_ASSERT((expected & num_owners_mask) < num_owners_mask);
+  }
+  return (expected & num_owners_mask) >> 5;
 }
 
 }  // namespace async_coro
