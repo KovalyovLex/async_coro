@@ -17,6 +17,11 @@ concept is_noexcept_runnable = requires(T a) {
   { a(std::declval<TArgs>()...) } noexcept -> std::same_as<R>;
 };
 
+template <class T, class R, class... TArgs>
+concept is_runnable = requires(T a) {
+  { a(std::declval<TArgs>()...) } -> std::same_as<R>;
+};
+
 template <typename T>
 struct is_task : std::false_type {};
 

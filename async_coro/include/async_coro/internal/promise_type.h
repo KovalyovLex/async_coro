@@ -37,10 +37,6 @@ struct promise_type final : internal::promise_result_holder<R> {
   // we dont want to destroy our result here
   std::suspend_always final_suspend() noexcept {
     this->on_final_suspend();
-    if (auto* continue_with = static_cast<callback_noexcept<void, promise_result<R>&>*>(this->release_continuation_functor())) {
-      continue_with->execute(*this);
-      continue_with->destroy();
-    }
     return {};
   }
 

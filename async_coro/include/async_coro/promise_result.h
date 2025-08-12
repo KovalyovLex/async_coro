@@ -40,6 +40,14 @@ struct promise_result : internal::promise_result_base<T> {
   using internal::promise_result_base<T>::has_result;
 
   using internal::promise_result_base<T>::check_exception;
+
+ protected:
+  void execute_continuation() override {
+    if (auto* continue_with = static_cast<callback<void, promise_result<T>&>*>(this->release_continuation_functor())) {
+      continue_with->execute(*this);
+      continue_with->destroy();
+    }
+  }
 };
 
 /**
@@ -70,6 +78,14 @@ struct promise_result<void> : internal::promise_result_base<void> {
   using internal::promise_result_base<void>::has_result;
 
   using internal::promise_result_base<void>::check_exception;
+
+ protected:
+  void execute_continuation() override {
+    if (auto* continue_with = static_cast<callback<void, promise_result<void>&>*>(this->release_continuation_functor())) {
+      continue_with->execute(*this);
+      continue_with->destroy();
+    }
+  }
 };
 
 }  // namespace async_coro

@@ -29,7 +29,7 @@ namespace async_coro {
  */
 template <typename T>
 auto await_callback(T continuation) {
-  return internal::await_callback{std::move(continuation)};
+  return internal::await_callback<T>{std::move(continuation)};
 }
 
 }  // namespace async_coro

@@ -55,6 +55,8 @@ void scheduler::continue_execution_impl(base_handle& handle_impl) {
       // wake up parent coroutine
       continue_execution(*handle_impl._parent);
     } else if (!parent) {
+      handle_impl.execute_continuation();
+
       // cleanup coroutine
       {
         // remove from managed

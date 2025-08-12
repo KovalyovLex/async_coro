@@ -7,6 +7,7 @@
 
 #include <concepts>
 #include <coroutine>
+#include <type_traits>
 #include <utility>
 
 namespace async_coro {
@@ -113,8 +114,8 @@ class task_handle final {
   // Sets callback that will be called after coroutine finish on thread that finished the coroutine.
   // If coroutine is already finished, the callback will be called immediately.
   template <class Fx>
-    requires(internal::is_noexcept_runnable<Fx, void, promise_result<R>&>)
-  void continue_with(Fx&& f) {
+    requires(internal::is_runnable<std::remove_cvref_t<Fx>, void, promise_result<R>&>)
+  void continue_with(Fx&& f) noexcept(internal::is_noexcept_runnable<std::remove_cvref_t<Fx>, void, promise_result<R>&>) {
     ASYNC_CORO_ASSERT(!_handle.promise().is_coro_embedded());
 
     if (!_handle) {
@@ -125,7 +126,7 @@ class task_handle final {
     if (done()) {
       f(promise);
     } else {
-      auto continue_f = callback_noexcept<void, promise_result<R>&>::allocate(std::forward<Fx>(f));
+      auto continue_f = callback<void, promise_result<R>&>::allocate(std::forward<Fx>(f));
       promise.set_continuation_functor(continue_f, internal::passkey{this});
       if (done()) {
         if (auto f_base = promise.get_continuation_functor(internal::passkey{this})) {

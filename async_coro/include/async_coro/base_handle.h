@@ -85,7 +85,7 @@ class base_handle {
    *
    * @note This destructor is noexcept and will not throw exceptions
    */
-  ~base_handle() noexcept;
+  virtual ~base_handle() noexcept;
 
   /**
    * @brief Returns a reference to the associated scheduler
@@ -243,6 +243,8 @@ class base_handle {
   }
 
  protected:
+  virtual void execute_continuation() = 0;
+
   void init_promise(std::coroutine_handle<> h) noexcept { _handle = h; }
 
   void on_final_suspend() noexcept {
