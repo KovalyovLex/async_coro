@@ -69,6 +69,8 @@ struct await_when_any {
   }
 
   bool await_ready() noexcept {
+    ASYNC_CORO_ASSERT(_suspended.load(std::memory_order::relaxed) == false);
+
     const auto store_result = [this](auto& coro, auto index) noexcept -> bool {
       bool expected = false;
       if (this->_has_result.compare_exchange_strong(expected, true, std::memory_order::relaxed)) {
@@ -90,12 +92,11 @@ struct await_when_any {
   void await_suspend(std::coroutine_handle<U> h) {
     h.promise().on_suspended();
 
-    const auto continue_f = [&](auto& coro, auto index) noexcept {
+    const auto continue_f = [&](auto& coro, auto index) {
       using result_t = decltype(coro.get());
 
-      coro.continue_with([this, h, index](auto& res) noexcept {
-        bool expected = false;
-        if (this->_has_result.compare_exchange_strong(expected, true, std::memory_order::relaxed)) {
+      coro.continue_with([this, h, index](auto& res) {
+        if (!_has_result.exchange(true, std::memory_order::relaxed)) {
           // continue this coro
           if constexpr (!std::is_void_v<result_t>) {
             new (&_result) result_type{index, res.move_result()};
@@ -103,12 +104,18 @@ struct await_when_any {
             new (&_result) result_type{index, std::monostate{}};
           }
           base_handle& handle = h.promise();
-          handle.get_scheduler().plan_continue_execution(handle);
+          if (_suspended.load(std::memory_order::acquire)) {
+            handle.get_scheduler().continue_execution(handle);
+          } else {
+            handle.get_scheduler().plan_continue_execution(handle);
+          }
         }
       });
     };
 
     call_functor(continue_f, std::index_sequence_for<TArgs...>{});
+
+    _suspended.store(true, std::memory_order::release);
   }
 
   result_type await_resume() {
@@ -129,12 +136,13 @@ struct await_when_any {
   }
 
  private:
-  std::atomic_bool _has_result = false;
   std::tuple<task_launcher<TArgs>...> _launchers;
   std::tuple<task_handle<TArgs>...> _coroutines;
   union {
     result_type _result;
   };
+  std::atomic_bool _has_result{false};
+  std::atomic_bool _suspended{false};
 };
 
 template <typename... TArgs>

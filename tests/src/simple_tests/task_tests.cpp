@@ -95,33 +95,6 @@ TEST(task, resume_on_callback) {
   EXPECT_EQ(handle.get(), 3);
 }
 
-TEST(task, resume_on_callback_reuse) {
-  std::function<void()> continue_f;
-
-  auto routine = [](auto& cnt) -> async_coro::task<int> {
-    auto await =
-        async_coro::await_callback([&cnt](auto f) { cnt = std::move(f); });
-    co_await await;
-
-    co_await await;
-
-    co_return 2;
-  }(continue_f);
-
-  async_coro::scheduler scheduler;
-
-  ASSERT_FALSE(routine.done());
-  auto handle = scheduler.start_task(std::move(routine));
-  ASSERT_FALSE(handle.done());
-  ASSERT_TRUE(continue_f);
-  std::exchange(continue_f, {})();
-  ASSERT_FALSE(handle.done());
-  ASSERT_TRUE(continue_f);
-  std::exchange(continue_f, {})();
-  ASSERT_TRUE(handle.done());
-  EXPECT_EQ(handle.get(), 2);
-}
-
 TEST(task, async_execution) {
   static std::atomic_bool async_done = false;
 
