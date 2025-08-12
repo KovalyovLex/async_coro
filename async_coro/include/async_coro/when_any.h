@@ -5,29 +5,30 @@
 namespace async_coro {
 
 /**
- * @brief Waits for all the given tasks to complete.
+ * @brief Waits for any of the given tasks to complete.
  *
- * This function suspends current coroutine and waits for all the specified tasks to complete before proceeding.
+ * This function suspends current coroutine and waits for any one of the specified tasks to complete before proceeding.
+ * The function returns as soon as the first task completes, with the result of that task.
  *
  * @tparam TArgs The argument types of the tasks.
  * @param coroutines The task handles representing the tasks to wait for.
- * @return An awaitable of std::variant<TArgs>
+ * @return An awaitable of std::variant<TArgs> containing the result of the first completed task.
  *
  * @example
  * \code{.cpp}
  * auto result = co_await async_coro::when_any(
- *       co_await async_coro::start_task(task1()),
- *       co_await async_coro::start_task(task2(), async_coro::execution_queues::worker)
+ *       async_coro::task_launcher{task1},
+ *       async_coro::task_launcher{task2(), async_coro::execution_queues::worker}
  * );
  *
  * // This coroutine will resume execution after any one of the tasks has completed.
  *
  * int sum = 0;
- * std::visit([&](auto num) { return sum = int(num); }, result);
+ * std::visit([&](auto num) { sum = int(num); }, result);
  * \endcode
  */
 template <typename... TArgs>
-auto when_any(task_handle<TArgs>... coroutines) {
+auto when_any(task_launcher<TArgs>... coroutines) {
   return internal::await_when_any(std::move(coroutines)...);
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <async_coro/internal/await_start_task.h>
+#include <async_coro/task_launcher.h>
 
 namespace async_coro {
 
@@ -11,8 +12,6 @@ namespace async_coro {
  *
  * @tparam R The return type of the task.
  * @param task The task to be started.
- * @param execution_queue (Optional) The queue on which the task should be executed.
- *               Defaults to execution_queues::main.
  * @return An awaitable of task_handle<R>
  *
  * @example
@@ -22,8 +21,8 @@ namespace async_coro {
  * \endcode
  */
 template <typename R>
-auto start_task(task<R> task, execution_queue_mark execution_queue = execution_queues::main) {
-  return internal::await_start_task(std::move(task), execution_queue);
+auto start_task(task_launcher<R> launcher) {
+  return internal::await_start_task(std::move(launcher));
 }
 
 }  // namespace async_coro

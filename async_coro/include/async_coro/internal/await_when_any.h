@@ -4,6 +4,7 @@
 #include <async_coro/config.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/task_handle.h>
+#include <async_coro/task_launcher.h>
 
 #include <atomic>
 #include <coroutine>
@@ -41,8 +42,8 @@ template <typename... TArgs>
 struct await_when_any {
   using result_type = decltype(get_filtered_variant(get_filtered_variant_types(types_container<>{}, types_container<TArgs...>{})));
 
-  explicit await_when_any(task_handle<TArgs>... coroutines) noexcept
-      : _coroutines(std::move(coroutines)...) {
+  explicit await_when_any(task_launcher<TArgs>... launchers) noexcept
+      : _launchers(std::move(launchers)...) {
     static_assert(sizeof...(TArgs) > 0);
   }
 
@@ -52,10 +53,19 @@ struct await_when_any {
   await_when_any& operator=(await_when_any&&) = delete;
   await_when_any& operator=(const await_when_any&) = delete;
 
-  ~await_when_any() {
-    if (_has_result.load(std::memory_order_relaxed)) {
+  ~await_when_any() noexcept(std::is_nothrow_destructible_v<result_type>) {
+    if (_has_result.load(std::memory_order::relaxed)) {
       std::destroy_at(&_result);
     }
+  }
+
+  void embed_task(base_handle& parent) noexcept {
+    scheduler& scheduler = parent.get_scheduler();
+    std::apply(
+        [&](auto&... launcher) {
+          _coroutines = std::tuple<task_handle<TArgs>...>{scheduler.start_task(std::move(launcher))...};
+        },
+        _launchers);
   }
 
   bool await_ready() noexcept {
@@ -102,7 +112,7 @@ struct await_when_any {
   }
 
   result_type await_resume() {
-    ASYNC_CORO_ASSERT(_has_result.load(std::memory_order_relaxed));
+    ASYNC_CORO_ASSERT(_has_result.load(std::memory_order::relaxed));
 
     return std::move(_result);
   }
@@ -120,6 +130,7 @@ struct await_when_any {
 
  private:
   std::atomic_bool _has_result = false;
+  std::tuple<task_launcher<TArgs>...> _launchers;
   std::tuple<task_handle<TArgs>...> _coroutines;
   union {
     result_type _result;

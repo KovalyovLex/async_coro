@@ -2,8 +2,8 @@
 
 #include <async_coro/base_handle.h>
 #include <async_coro/scheduler.h>
-#include <async_coro/task.h>
 #include <async_coro/task_handle.h>
+#include <async_coro/task_launcher.h>
 
 #include <concepts>
 #include <coroutine>
@@ -12,9 +12,8 @@ namespace async_coro::internal {
 
 template <typename R>
 struct await_start_task {
-  explicit await_start_task(task<R> tsk, execution_queue_mark execution_queue) noexcept
-      : _task(std::move(tsk)),
-        _execution_queue(execution_queue) {}
+  explicit await_start_task(task_launcher<R> tsk) noexcept
+      : _task(std::move(tsk)) {}
 
   await_start_task(const await_start_task&) = delete;
   await_start_task(await_start_task&&) = delete;
@@ -35,16 +34,15 @@ struct await_start_task {
   }
 
   void embed_task(base_handle& parent) noexcept {
-    _handle = parent.get_scheduler().start_task(std::move(_task), _execution_queue);
+    _handle = parent.get_scheduler().start_task(std::move(_task));
   }
 
  private:
-  task<R> _task;
+  task_launcher<R> _task;
   task_handle<R> _handle;
-  execution_queue_mark _execution_queue;
 };
 
 template <typename R>
-await_start_task(task<R>, execution_queue_mark) -> await_start_task<R>;
+await_start_task(task_launcher<R>) -> await_start_task<R>;
 
 }  // namespace async_coro::internal

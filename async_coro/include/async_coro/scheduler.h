@@ -48,8 +48,7 @@ class scheduler {
    * and begins its execution. If the task is already completed, it is freed immediately.
    *
    * @tparam R The return type of the task.
-   * @param coro The task to be executed.
-   * @param execution_queue The execution queue to run the task on. Defaults to the main queue.
+   * @param launcher The task wrapped to task_launcher to be executed..
    * @return A handle to the started task.
    */
   template <typename R>

@@ -212,7 +212,7 @@ struct callback_noexcept : public callback_base {
  */
 template <class Fx>
 auto allocate_callback(Fx&& fx) {
-  using callback_type = typename internal::deduce_function_signature<Fx>::callback_type;
+  using callback_type = typename internal::deduce_function_signature<std::remove_cvref_t<Fx>>::callback_type;
 
   return typename callback_type::ptr{callback_type::allocate(std::forward<Fx>(fx))};
 }

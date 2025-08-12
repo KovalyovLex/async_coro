@@ -4,6 +4,7 @@
 #include <async_coro/internal/remove_void_tuple.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/task_handle.h>
+#include <async_coro/task_launcher.h>
 
 #include <algorithm>
 #include <atomic>
@@ -18,8 +19,8 @@ template <typename... TArgs>
 struct await_when_all {
   using result_type = remove_void_tuple_t<TArgs...>;
 
-  explicit await_when_all(task_handle<TArgs>... coroutines) noexcept
-      : _coroutines(std::move(coroutines)...) {
+  explicit await_when_all(task_launcher<TArgs>... launchers) noexcept
+      : _launchers(std::move(launchers)...) {
     static_assert(sizeof...(TArgs) > 0);
   }
 
@@ -28,6 +29,15 @@ struct await_when_all {
 
   await_when_all& operator=(await_when_all&&) = delete;
   await_when_all& operator=(const await_when_all&) = delete;
+
+  void embed_task(base_handle& parent) noexcept {
+    scheduler& scheduler = parent.get_scheduler();
+    std::apply(
+        [&](auto&... launcher) {
+          _coroutines = std::tuple<task_handle<TArgs>...>{scheduler.start_task(std::move(launcher))...};
+        },
+        _launchers);
+  }
 
   bool await_ready() const noexcept {
     return std::apply(
@@ -92,10 +102,11 @@ struct await_when_all {
 
  private:
   std::atomic_size_t _counter = sizeof...(TArgs);
+  std::tuple<task_launcher<TArgs>...> _launchers;
   std::tuple<task_handle<TArgs>...> _coroutines;
 };
 
 template <typename... TArgs>
-await_when_all(task_handle<TArgs>...) -> await_when_all<TArgs...>;
+await_when_all(task_launcher<TArgs>...) -> await_when_all<TArgs...>;
 
 }  // namespace async_coro::internal
