@@ -7,13 +7,14 @@
 #include <atomic>
 #include <concepts>
 #include <coroutine>
+#include <type_traits>
 #include <utility>
 
 namespace async_coro::internal {
 
 template <typename T>
 struct await_callback {
-  explicit await_callback(T&& callback)
+  explicit await_callback(T&& callback) noexcept(std::is_nothrow_constructible_v<T, T&&>)
       : _on_await(std::forward<T>(callback)) {}
   await_callback(const await_callback&) = delete;
   await_callback(await_callback&&) = delete;
@@ -35,6 +36,10 @@ struct await_callback {
         const_cast<bool&>(done) = true;  // we intensionally breaks constant here to keep callback immutable
 
         base_handle& handle = h.promise();
+        if (handle.is_finished()) [[unlikely]] {
+          // some exception happened before callback call
+          return;
+        }
         if (_suspended.load(std::memory_order::acquire)) {
           handle.get_scheduler().continue_execution(handle);
         } else {

@@ -33,7 +33,7 @@ struct await_start_task {
     return std::move(_handle);
   }
 
-  void embed_task(base_handle& parent) noexcept {
+  void embed_task(base_handle& parent) {
     _handle = parent.get_scheduler().start_task(std::move(_task));
   }
 

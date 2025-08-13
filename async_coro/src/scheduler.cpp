@@ -55,8 +55,6 @@ void scheduler::continue_execution_impl(base_handle& handle_impl) {
       // wake up parent coroutine
       continue_execution(*handle_impl._parent);
     } else if (!parent) {
-      handle_impl.execute_continuation();
-
       // cleanup coroutine
       {
         // remove from managed
@@ -70,6 +68,27 @@ void scheduler::continue_execution_impl(base_handle& handle_impl) {
           _managed_coroutines.resize(_managed_coroutines.size() - 1);
         }
       }
+
+#if ASYNC_CORO_WITH_EXCEPTIONS && ASYNC_CORO_COMPILE_WITH_EXCEPTIONS
+      try {
+        // try to handle exception by external api
+        if (!handle_impl.execute_continuation()) {
+          handle_impl.check_exception_base();
+        }
+      } catch (...) {
+        decltype(_exception_handler) handler_copy;
+        {
+          unique_lock lock{_mutex};
+          handler_copy = _exception_handler;
+        }
+        if (handler_copy) {
+          (*handler_copy)(std::current_exception());
+        }
+      }
+#else
+      handle_impl.execute_continuation();
+#endif
+
       handle_impl.on_task_freed_by_scheduler();
     }
   }
@@ -120,6 +139,15 @@ void scheduler::add_coroutine(base_handle& handle_impl,
     change_execution_queue(handle_impl, execution_queue);
   }
 }
+
+#if ASYNC_CORO_WITH_EXCEPTIONS && ASYNC_CORO_COMPILE_WITH_EXCEPTIONS
+void scheduler::set_unhandled_exception_handler(unique_function<void(std::exception_ptr)> handler) noexcept {
+  auto ptr = std::make_shared<unique_function<void(std::exception_ptr)>>(std::move(handler));
+
+  unique_lock lock{_mutex};
+  _exception_handler = std::move(ptr);
+}
+#endif
 
 void scheduler::continue_execution(base_handle& handle_impl) {
   ASYNC_CORO_ASSERT(handle_impl._execution_thread != std::thread::id{});

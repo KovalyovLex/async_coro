@@ -8,6 +8,9 @@
 #include <async_coro/thread_safety/analysis.h>
 #include <async_coro/thread_safety/mutex.h>
 
+#if ASYNC_CORO_WITH_EXCEPTIONS
+#include <exception>
+#endif
 #include <utility>
 #include <vector>
 
@@ -60,6 +63,7 @@ class scheduler {
       add_coroutine(handle.promise(), launcher.get_start_function(), launcher.get_execution_queue());
       return result;
     }
+    handle.promise().check_exception();
     // free task as we released handle
     handle.promise().on_task_freed_by_scheduler();
     return result;
@@ -88,6 +92,10 @@ class scheduler {
 
     return *static_cast<T*>(_execution_system.get());
   }
+
+#if ASYNC_CORO_WITH_EXCEPTIONS && ASYNC_CORO_COMPILE_WITH_EXCEPTIONS
+  void set_unhandled_exception_handler(unique_function<void(std::exception_ptr)> handler) noexcept;
+#endif
 
  public:
   // for internal api use
@@ -130,6 +138,10 @@ class scheduler {
   i_execution_system::ptr _execution_system;
   std::vector<base_handle*> CORO_THREAD_GUARDED_BY(_mutex) _managed_coroutines;
   bool _is_destroying CORO_THREAD_GUARDED_BY(_mutex) = false;
+
+#if ASYNC_CORO_WITH_EXCEPTIONS && ASYNC_CORO_COMPILE_WITH_EXCEPTIONS
+  std::shared_ptr<unique_function<void(std::exception_ptr)>> _exception_handler CORO_THREAD_GUARDED_BY(_mutex);
+#endif
 };
 
 }  // namespace async_coro

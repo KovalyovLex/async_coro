@@ -243,7 +243,12 @@ class base_handle {
   }
 
  protected:
-  virtual void execute_continuation() = 0;
+  // returns true if continuation was executed
+  virtual bool execute_continuation() = 0;
+
+#if ASYNC_CORO_WITH_EXCEPTIONS
+  virtual void check_exception_base() = 0;
+#endif
 
   void init_promise(std::coroutine_handle<> h) noexcept { _handle = h; }
 

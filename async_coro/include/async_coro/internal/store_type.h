@@ -4,7 +4,7 @@
 
 #include <memory>
 #include <type_traits>
-#if !ASYNC_CORO_NO_EXCEPTIONS
+#if ASYNC_CORO_WITH_EXCEPTIONS
 #include <exception>
 #endif
 
@@ -68,34 +68,8 @@ struct result_coro_type<T&> {
   void destroy() noexcept {}
 };
 
-#if ASYNC_CORO_NO_EXCEPTIONS
-template <typename T>
-struct store_type {
-  static inline constexpr bool nothrow_destructible =
-      std::is_nothrow_destructible_v<T>;
+#if ASYNC_CORO_WITH_EXCEPTIONS
 
-  union {
-    result_coro_type<T> result;
-  };
-
-  store_type() noexcept {}
-  ~store_type() noexcept {}
-  void destroy_exception() {}
-  void destroy_result() noexcept(noexcept(std::is_reference_v<T> || std::is_nothrow_destructible_v<T>)) {
-    result.destroy();
-  }
-};
-
-template <>
-struct store_type<void> {
-  static inline constexpr bool nothrow_destructible = true;
-
-  store_type() noexcept {}
-  ~store_type() noexcept {}
-  void destroy_exception() noexcept {}
-  void destroy_result() noexcept {}
-};
-#else
 template <typename T>
 struct store_type {
   static inline constexpr bool nothrow_destructible =
@@ -109,9 +83,11 @@ struct store_type {
 
   store_type() noexcept {}
   ~store_type() noexcept {}
+
   void destroy_exception() noexcept(std::is_nothrow_destructible_v<std::exception_ptr>) {
     std::destroy_at(&exception);
   }
+
   void destroy_result() noexcept(noexcept(std::is_reference_v<T> || std::is_nothrow_destructible_v<T>)) {
     result.destroy();
   }
@@ -128,11 +104,46 @@ struct store_type<void> {
 
   store_type() noexcept {}
   ~store_type() noexcept {}
-  void destroy_exception() noexcept(
-      std::is_nothrow_destructible_v<std::exception_ptr>) {
+
+  void destroy_exception() noexcept(std::is_nothrow_destructible_v<std::exception_ptr>) {
     std::destroy_at(&exception);
   }
+
   void destroy_result() noexcept {}
 };
+
+#else
+
+template <typename T>
+struct store_type {
+  static inline constexpr bool nothrow_destructible =
+      std::is_nothrow_destructible_v<T>;
+
+  union {
+    result_coro_type<T> result;
+  };
+
+  store_type() noexcept {}
+  ~store_type() noexcept {}
+
+  void destroy_exception() {}
+
+  void destroy_result() noexcept(noexcept(std::is_reference_v<T> || std::is_nothrow_destructible_v<T>)) {
+    result.destroy();
+  }
+};
+
+template <>
+struct store_type<void> {
+  static inline constexpr bool nothrow_destructible = true;
+
+  store_type() noexcept {}
+  ~store_type() noexcept {}
+
+  void destroy_exception() noexcept {}
+
+  void destroy_result() noexcept {}
+};
+
 #endif
 }  // namespace async_coro::internal

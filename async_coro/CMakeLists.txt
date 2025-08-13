@@ -21,6 +21,6 @@ target_compile_options(async_coro PRIVATE
 
 if(ASYNC_CORO_NO_EXCEPTIONS)
   target_compile_definitions(async_coro PUBLIC
-    ASYNC_CORO_NO_EXCEPTIONS=1
+    ASYNC_CORO_WITH_EXCEPTIONS=0
   )
 endif()

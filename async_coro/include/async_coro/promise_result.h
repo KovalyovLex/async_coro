@@ -17,21 +17,21 @@ namespace async_coro {
 template <typename T>
 struct promise_result : internal::promise_result_base<T> {
   // Returns result reference
-  auto& get_result_ref() noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
+  auto& get_result_ref() noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
     this->check_exception();
     ASYNC_CORO_ASSERT(this->has_result());
     return this->result.get_ref();
   }
 
   // Returns result const reference
-  const auto& get_result_cref() const noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
+  const auto& get_result_cref() const noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
     this->check_exception();
     ASYNC_CORO_ASSERT(this->has_result());
     return this->result.get_cref();
   }
 
   // Moves result
-  decltype(auto) move_result() noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
+  decltype(auto) move_result() noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
     this->check_exception();
     ASYNC_CORO_ASSERT(this->has_result());
     return this->result.move();
@@ -42,11 +42,13 @@ struct promise_result : internal::promise_result_base<T> {
   using internal::promise_result_base<T>::check_exception;
 
  protected:
-  void execute_continuation() override {
+  bool execute_continuation() override {
     if (auto* continue_with = static_cast<callback<void, promise_result<T>&>*>(this->release_continuation_functor())) {
       continue_with->execute(*this);
       continue_with->destroy();
+      return true;
     }
+    return false;
   }
 };
 
@@ -58,19 +60,19 @@ struct promise_result : internal::promise_result_base<T> {
 template <>
 struct promise_result<void> : internal::promise_result_base<void> {
   // Returns result reference (backward compatibility for void result)
-  void get_result_ref() noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
+  void get_result_ref() noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
     this->check_exception();
     ASYNC_CORO_ASSERT(this->has_result());
   }
 
   // Returns result const reference (backward compatibility for void result)
-  void get_result_cref() const noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
+  void get_result_cref() const noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
     this->check_exception();
     ASYNC_CORO_ASSERT(this->has_result());
   }
 
   // Moves result (backward compatibility for void result)
-  void move_result() noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
+  void move_result() noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
     this->check_exception();
     ASYNC_CORO_ASSERT(this->has_result());
   }
@@ -80,11 +82,13 @@ struct promise_result<void> : internal::promise_result_base<void> {
   using internal::promise_result_base<void>::check_exception;
 
  protected:
-  void execute_continuation() override {
+  bool execute_continuation() override {
     if (auto* continue_with = static_cast<callback<void, promise_result<void>&>*>(this->release_continuation_functor())) {
       continue_with->execute(*this);
       continue_with->destroy();
+      return true;
     }
+    return false;
   }
 };
 

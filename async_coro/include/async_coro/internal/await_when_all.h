@@ -30,7 +30,7 @@ struct await_when_all {
   await_when_all& operator=(await_when_all&&) = delete;
   await_when_all& operator=(const await_when_all&) = delete;
 
-  void embed_task(base_handle& parent) noexcept {
+  void embed_task(base_handle& parent) {
     scheduler& scheduler = parent.get_scheduler();
     std::apply(
         [&](auto&... launcher) {
@@ -79,6 +79,12 @@ struct await_when_all {
   }
 
   result_type await_resume() {
+    std::apply(
+        [&](auto&... coros) {
+          (coros.check_exception(), ...);
+        },
+        _coroutines);
+
     return [&]<size_t... Ints>(std::integer_sequence<size_t, Ints...>) -> result_type {
       if constexpr (std::is_same_v<result_type, std::tuple<>>) {
         return {};

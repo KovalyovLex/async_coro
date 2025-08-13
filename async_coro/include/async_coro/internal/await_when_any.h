@@ -59,7 +59,7 @@ struct await_when_any {
     }
   }
 
-  void embed_task(base_handle& parent) noexcept {
+  void embed_task(base_handle& parent) {
     scheduler& scheduler = parent.get_scheduler();
     std::apply(
         [&](auto&... launcher) {
@@ -68,16 +68,16 @@ struct await_when_any {
         _launchers);
   }
 
-  bool await_ready() noexcept {
+  bool await_ready() {
     ASYNC_CORO_ASSERT(_suspended.load(std::memory_order::relaxed) == false);
 
-    const auto store_result = [this](auto& coro, auto index) noexcept -> bool {
-      bool expected = false;
-      if (this->_has_result.compare_exchange_strong(expected, true, std::memory_order::relaxed)) {
+    const auto store_result = [this](auto& coro, auto index) -> bool {
+      if (!this->_has_result.exchange(true, std::memory_order::relaxed)) {
         using result_t = decltype(coro.get());
         if constexpr (!std::is_void_v<result_t>) {
           new (&_result) result_type{index, std::move(coro.get())};
         } else {
+          coro.get();
           new (&_result) result_type{index, std::monostate{}};
         }
       }
@@ -118,7 +118,7 @@ struct await_when_any {
     _suspended.store(true, std::memory_order::release);
   }
 
-  result_type await_resume() {
+  result_type await_resume() noexcept(std::is_nothrow_move_constructible_v<result_type>) {
     ASYNC_CORO_ASSERT(_has_result.load(std::memory_order::relaxed));
 
     return std::move(_result);

@@ -139,6 +139,10 @@ class task_handle final {
     }
   }
 
+  void check_exception() const noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
+    _handle.promise().check_exception();
+  }
+
  private:
   handle_type _handle{};
 };

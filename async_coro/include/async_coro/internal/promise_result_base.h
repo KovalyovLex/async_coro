@@ -25,8 +25,10 @@ struct promise_result_base : base_handle, protected store_type<T> {
 #if ASYNC_CORO_COMPILE_WITH_EXCEPTIONS
   void unhandled_exception() noexcept {
     ASYNC_CORO_ASSERT(!_is_initialized);
-#if !ASYNC_CORO_NO_EXCEPTIONS
+#if ASYNC_CORO_WITH_EXCEPTIONS
     new (&this->exception) std::exception_ptr(std::current_exception());
+#else
+    ASYNC_CORO_ASSERT(false);
 #endif
     _is_initialized = true;
     _is_result = false;
@@ -34,13 +36,19 @@ struct promise_result_base : base_handle, protected store_type<T> {
 #endif
 
   // If exception was caught in coroutine rethrows it
-  void check_exception() const noexcept(ASYNC_CORO_NO_EXCEPTIONS) {
-#if !ASYNC_CORO_NO_EXCEPTIONS && ASYNC_CORO_COMPILE_WITH_EXCEPTIONS
-    if (_is_initialized && !_is_result) {
+  void check_exception() const noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
+#if ASYNC_CORO_WITH_EXCEPTIONS
+    if (_is_initialized && !_is_result) [[unlikely]] {
       std::rethrow_exception(this->exception);
     }
 #endif
   }
+
+#if ASYNC_CORO_WITH_EXCEPTIONS
+  void check_exception_base() override {
+    check_exception();
+  }
+#endif
 };
 
 }  // namespace async_coro::internal
