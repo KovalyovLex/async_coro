@@ -21,7 +21,7 @@ namespace async_coro::internal {
 
 template <typename T>
 concept await_transformable =
-    requires(T a) { static_cast<T&&>(a).coro_await_transform(std::declval<async_coro::base_handle&>()); };
+    requires(T a) { std::forward<T>(a).coro_await_transform(std::declval<async_coro::base_handle&>()); };
 
 template <typename R>
 struct promise_type final : internal::promise_result_holder<R> {
