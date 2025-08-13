@@ -16,7 +16,7 @@ namespace async_coro {
 class scheduler;
 
 struct task_base {
-  void on_child_coro_added(base_handle& parent, base_handle& child);
+  bool on_child_coro_added(base_handle& parent, base_handle& child);
 };
 
 /**
@@ -56,13 +56,14 @@ struct task final : private task_base {
 
   struct awaiter {
     task& t;
+    bool was_done;
 
-    awaiter(task& tas) noexcept : t(tas) {}
+    awaiter(task& tas, bool done) noexcept : t(tas), was_done(done) {}
     awaiter(const awaiter&) = delete;
     awaiter(awaiter&&) = delete;
     ~awaiter() noexcept = default;
 
-    bool await_ready() const noexcept { return t._handle.done(); }
+    bool await_ready() const noexcept { return was_done; }
 
     template <typename T>
       requires(std::derived_from<T, base_handle>)
@@ -75,19 +76,13 @@ struct task final : private task_base {
     }
   };
 
-  // coroutine should be moved to become embedded
-  auto operator co_await() && {
-    return awaiter(*this);
-  }
-
-  auto operator co_await() & = delete;
-  auto operator co_await() const& = delete;
-  auto operator co_await() const&& = delete;
-
   bool done() const noexcept { return _handle.done(); }
 
-  void embed_task(base_handle& parent) {
-    on_child_coro_added(parent, _handle.promise());
+  // task should be moved to become embedded
+  void await_ready() = delete;
+
+  awaiter coro_await_transform(base_handle& parent) && {
+    return {*this, on_child_coro_added(parent, _handle.promise())};
   }
 
   handle_type release_handle(internal::passkey_successors<scheduler>) noexcept {

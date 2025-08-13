@@ -116,22 +116,15 @@ class scheduler {
    */
   void plan_continue_execution(base_handle& handle_impl);
 
-  /**
-   * @brief Moves a coroutine to a different execution queue.
-   * @details For internal use. The coroutine's next execution will be on the new queue.
-   * @param handle_impl The handle of the coroutine to move.
-   * @param execution_queue The target execution queue.
-   */
-  void change_execution_queue(base_handle& handle_impl, execution_queue_mark execution_queue);
-
-  // Embed coroutine
-  void on_child_coro_added(base_handle& parent, base_handle& child, internal::passkey<task_base>);
+  // Embed coroutine. Returns true if coroutine was finished
+  bool on_child_coro_added(base_handle& parent, base_handle& child, internal::passkey<task_base>);
 
  private:
   bool is_current_thread_fits(execution_queue_mark execution_queue) noexcept;
   void add_coroutine(base_handle& handle_impl, callback_base::ptr start_function, execution_queue_mark execution_queue);
-  void continue_execution_impl(base_handle& handle_impl);
+  bool continue_execution_impl(base_handle& handle_impl);
   void plan_continue_on_thread(base_handle& handle_impl, execution_queue_mark execution_queue);
+  void change_execution_queue(base_handle& handle_impl, execution_queue_mark execution_queue);
 
  private:
   mutex _mutex;

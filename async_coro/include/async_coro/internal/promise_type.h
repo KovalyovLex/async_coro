@@ -5,6 +5,8 @@
 #include <async_coro/internal/passkey.h>
 #include <async_coro/internal/promise_result_holder.h>
 
+#include <utility>
+
 namespace async_coro {
 
 template <typename R>
@@ -18,8 +20,8 @@ struct task;
 namespace async_coro::internal {
 
 template <typename T>
-concept embeddable_task =
-    requires(T a) { a.embed_task(std::declval<async_coro::base_handle&>()); };
+concept await_transformable =
+    requires(T a) { static_cast<T&&>(a).coro_await_transform(std::declval<async_coro::base_handle&>()); };
 
 template <typename R>
 struct promise_type final : internal::promise_result_holder<R> {
@@ -46,10 +48,9 @@ struct promise_type final : internal::promise_result_holder<R> {
     return std::move(in);
   }
 
-  template <embeddable_task T>
+  template <await_transformable T>
   constexpr decltype(auto) await_transform(T&& in) {
-    in.embed_task(*this);
-    return std::move(in);
+    return std::forward<T>(in).coro_await_transform(*this);
   }
 
   void set_owning_by_task_handle(bool owning, internal::passkey_any<task_handle<R>>) {

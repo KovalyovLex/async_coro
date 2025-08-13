@@ -29,8 +29,9 @@ struct await_switch {
 
   void await_resume() const noexcept {}
 
-  void embed_task(base_handle& parent) noexcept {
+  await_switch& coro_await_transform(base_handle& parent) noexcept {
     need_switch = parent.get_execution_queue() != execution_queue;
+    return *this;
   }
 
   execution_queue_mark execution_queue;

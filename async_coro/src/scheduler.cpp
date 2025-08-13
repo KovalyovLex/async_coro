@@ -5,6 +5,7 @@
 #include <async_coro/thread_safety/unique_lock.h>
 
 #include <algorithm>
+#include <atomic>
 #include <memory>
 #include <thread>
 #include <utility>
@@ -38,7 +39,7 @@ bool scheduler::is_current_thread_fits(execution_queue_mark execution_queue) noe
   return _execution_system->is_current_thread_fits(execution_queue);
 }
 
-void scheduler::continue_execution_impl(base_handle& handle_impl) {
+bool scheduler::continue_execution_impl(base_handle& handle_impl) {
   ASYNC_CORO_ASSERT(handle_impl.is_current_thread_same());
 
   handle_impl.set_coroutine_state(coroutine_state::running);
@@ -91,7 +92,11 @@ void scheduler::continue_execution_impl(base_handle& handle_impl) {
 
       handle_impl.on_task_freed_by_scheduler();
     }
+
+    return true;
   }
+
+  return false;
 }
 
 void scheduler::plan_continue_on_thread(base_handle& handle_impl, execution_queue_mark execution_queue) {
@@ -175,7 +180,7 @@ void scheduler::change_execution_queue(base_handle& handle_impl,
   plan_continue_on_thread(handle_impl, execution_queue);
 }
 
-void scheduler::on_child_coro_added(base_handle& parent, base_handle& child, internal::passkey<task_base>) {
+bool scheduler::on_child_coro_added(base_handle& parent, base_handle& child, internal::passkey<task_base>) {
   ASYNC_CORO_ASSERT(parent._scheduler == this);
   ASYNC_CORO_ASSERT(child._execution_thread == std::thread::id{});
   ASYNC_CORO_ASSERT(child.get_coroutine_state() == coroutine_state::created);
@@ -187,7 +192,7 @@ void scheduler::on_child_coro_added(base_handle& parent, base_handle& child, int
   child.set_coroutine_state(coroutine_state::suspended);
 
   // start execution of internal coroutine
-  continue_execution_impl(child);
+  return continue_execution_impl(child);
 }
 
 }  // namespace async_coro

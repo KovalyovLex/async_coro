@@ -59,12 +59,14 @@ struct await_when_any {
     }
   }
 
-  void embed_task(base_handle& parent) {
+  await_when_any& coro_await_transform(base_handle& parent) {
     scheduler& scheduler = parent.get_scheduler();
 
     [&]<size_t... Ints>(std::integer_sequence<size_t, Ints...>) {
       ((std::get<Ints>(_coroutines) = scheduler.start_task(std::move(std::get<Ints>(_launchers)))), ...);
     }(std::make_index_sequence<sizeof...(TArgs)>{});
+
+    return *this;
   }
 
   bool await_ready() {
