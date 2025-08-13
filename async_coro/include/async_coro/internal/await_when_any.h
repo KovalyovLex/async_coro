@@ -61,11 +61,10 @@ struct await_when_any {
 
   void embed_task(base_handle& parent) {
     scheduler& scheduler = parent.get_scheduler();
-    std::apply(
-        [&](auto&... launcher) {
-          _coroutines = std::tuple<task_handle<TArgs>...>{scheduler.start_task(std::move(launcher))...};
-        },
-        _launchers);
+
+    [&]<size_t... Ints>(std::integer_sequence<size_t, Ints...>) {
+      ((std::get<Ints>(_coroutines) = scheduler.start_task(std::move(std::get<Ints>(_launchers)))), ...);
+    }(std::make_index_sequence<sizeof...(TArgs)>{});
   }
 
   bool await_ready() {

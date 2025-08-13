@@ -74,7 +74,7 @@ template <typename T>
 struct store_type {
   static inline constexpr bool nothrow_destructible =
       std::is_nothrow_destructible_v<std::exception_ptr> &&
-      std::is_nothrow_destructible_v<T>;
+      (std::is_reference_v<T> || std::is_nothrow_destructible_v<T>);
 
   union {
     std::exception_ptr exception;

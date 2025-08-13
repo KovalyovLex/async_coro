@@ -7,9 +7,11 @@ namespace async_coro::internal {
 
 template <typename T>
 struct promise_result_base : base_handle, protected store_type<T> {
+  static_assert(store_type<T>::nothrow_destructible, "T should be noexcept destructible to be able to return it as result");
+
   promise_result_base() noexcept = default;
 
-  ~promise_result_base() noexcept(store_type<T>::nothrow_destructible) {
+  ~promise_result_base() noexcept override {
     if (_is_initialized) {
       if (_is_result) {
         this->destroy_result();
