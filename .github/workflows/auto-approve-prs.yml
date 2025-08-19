@@ -15,14 +15,16 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const numChecks = 2;
+            const numChecks = 3;
             const retryDelay = 15; // 15 sec
             const sha = context.payload.client_payload.sha;
             const prNumber = context.payload.client_payload.pr;
 
+            console.log(`Checking status for PR: ${prNumber}, commit: ${sha}`);
+
             if (!prNumber) {
               console.log("🚫 No PR number found — skipping");
-              return;
+              return false;
             }
 
             const { data: pr } = await github.rest.pulls.get({
@@ -41,22 +43,31 @@ jobs:
             if (perm.permission === "admin" || perm.permission === "write") {
               let allGreen = false;
               for (let attempt = 0; attempt < numChecks; attempt++) {
-                const { data: checks } = await github.rest.checks.listForRef({
+                const { data: runsForRepo } = await github.rest.actions.listWorkflowRunsForRepo({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  ref: sha
+                  head_sha: sha,
+                  per_page: 30
                 });
 
+                // Filter for the specific commit
+                const runs = runsForRepo.workflow_runs.filter(r => r.head_sha === sha);
+
+                if (!runs || runs.length == 0) {
+                  console.log("❌ No workflow runs found for this commit");
+                  return false;
+                }
+                
                 console.log("Check runs:");
-                hecks.check_runs.forEach(c => {
+                checks.check_runs.forEach(c => {
                   console.log(`- ${c.name}: ${c.status}, ${c.conclusion}`);
                 });
 
                 // Filter out only completed checks
-                const completedChecks = checks.check_runs.filter(c => c.status === "completed");
+                const completedChecks = checks.filter(c => c.status === "completed");
 
                 // Filter out only completed checks
-                const notCompletedChecks = checks.check_runs.filter(c => c.status !== "completed");
+                const notCompletedChecks = checks.filter(c => c.status !== "completed");
 
                 // Separate passed/skipped vs failed/cancelled
                 const failedOrCancelled = completedChecks.filter(c =>
@@ -68,11 +79,12 @@ jobs:
                   failedOrCancelled.forEach(c => {
                     console.log(`- ${c.name}: ${c.conclusion}`);
                   });
-                  return; // stop here, do not approve PR
+                  return false; // stop here, do not approve PR
                 }
 
-                if (notCompletedChecks.length == 0 && false) {
-                  allGreen = true;
+                if (notCompletedChecks.length == 0) {
+                  //allGreen = true;
+                  console.log("✅ All checks passed!");
                   break;
                 }
                 
