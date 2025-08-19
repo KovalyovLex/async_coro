@@ -22,3 +22,19 @@ jobs:
       with:
         clang-format-version: '20'
         check-path: ${{ matrix.path }}
+
+  dispatch-pr:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Trigger gatekeeper for PR approval
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          event-type: check-finished
+          client-payload: |
+            {
+              "sha": "${{ github.sha }}",
+              "pr": "${{ github.event.pull_request.number }}"
+            }
