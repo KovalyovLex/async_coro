@@ -59,15 +59,15 @@ jobs:
                 }
                 
                 console.log("Check runs:");
-                checks.check_runs.forEach(c => {
+                runs.forEach(c => {
                   console.log(`- ${c.name}: ${c.status}, ${c.conclusion}`);
                 });
 
                 // Filter out only completed checks
-                const completedChecks = checks.filter(c => c.status === "completed");
+                const completedChecks = runs.filter(c => c.status === "completed");
 
                 // Filter out only completed checks
-                const notCompletedChecks = checks.filter(c => c.status !== "completed");
+                const notCompletedChecks = runs.filter(c => c.status !== "completed");
 
                 // Separate passed/skipped vs failed/cancelled
                 const failedOrCancelled = completedChecks.filter(c =>
