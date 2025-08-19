@@ -646,8 +646,12 @@ TEST(exception_handling, exception_propagation_across_queues) {
 
   auto handle = scheduler.start_task(main_coroutine());
 
+  EXPECT_FALSE(handle.done());
+
   // Wait for worker thread to process
-  std::this_thread::sleep_for(std::chrono::milliseconds{10});
+  std::this_thread::sleep_for(std::chrono::milliseconds{30});
+
+  EXPECT_FALSE(handle.done());
 
   scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
