@@ -45,16 +45,38 @@ jobs:
             if (perm.permission === "write" || perm.permission === "admin") {
               let allGreen = false;
               for (let attempt = 0; attempt < numChecks; attempt++) {
-                const { data: combined } = await github.rest.repos.getCombinedStatusForRef({
+                const { data: checks } = await github.rest.checks.listForRef({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   ref: sha
                 });
-                console.log(`Attempt ${attempt+1}: combined state = ${combined.state}`);
-                if (combined.state === "success") {
+
+                // Filter out only completed checks
+                const completedChecks = checks.check_runs.filter(c => c.status === "completed");
+
+                // Filter out only completed checks
+                const notCompletedChecks = checks.check_runs.filter(c => c.status !== "completed");
+
+                // Separate passed/skipped vs failed/cancelled
+                const failedOrCancelled = completedChecks.filter(c =>
+                  c.conclusion === "failure" || c.conclusion === "cancelled"
+                );
+
+                if (failedOrCancelled.length > 0) {
+                  console.log("❌ Some checks failed or were cancelled:");
+                  failedOrCancelled.forEach(c => {
+                    console.log(`- ${c.name}: ${c.conclusion}`);
+                  });
+                  return; // stop here, do not approve PR
+                }
+
+                if (notCompletedChecks.length == 0) {
                   allGreen = true;
                   break;
-                }
+                } 
+                
+                console.log(`Attempt ${attempt+1}: not all checks were completed. Waiting for ${notCompletedChecks.length} check(s)`);
+
                 // wait before next poll
                 await new Promise(r => setTimeout(r, 1000 * retryDelay));
               }
