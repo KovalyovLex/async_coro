@@ -653,6 +653,7 @@ TEST(exception_handling, exception_propagation_across_queues) {
   // Wait for worker thread to process
   while (!handle.done() && tryCount++ < 1000000) {
     scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
+    std::this_thread::yield();
   }
 
   ASSERT_TRUE(handle.done());
