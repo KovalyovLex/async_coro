@@ -53,6 +53,7 @@ execution_system::execution_system(const execution_system_config& config, const 
     }
 
     thread_data.mask = worker_config.allowed_tasks;
+    thread_data.num_loops_before_sleep = worker_config.num_loops_before_sleep;
 
     if (!thread_data.task_queues.empty()) {
       num_threads_to_wait_start->fetch_add(1, std::memory_order::release);
@@ -190,7 +191,7 @@ void execution_system::worker_loop(worker_thread_data& data) {
     }
 
     if (is_empty_loop) {
-      if (++num_empty_loops > 10) {
+      if (++num_empty_loops > data.num_loops_before_sleep) {
         data.notifier.sleep();
         num_empty_loops = 0;
       }
