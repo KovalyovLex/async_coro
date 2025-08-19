@@ -54,7 +54,7 @@ jobs:
                 const runs = runsForRepo.workflow_runs.filter(r => r.head_sha === sha);
 
                 if (!runs || runs.length == 0) {
-                  console.log("❌ No workflow runs found for this commit");
+                  console.log(`❌ No workflow runs found for commit ${sha}`);
                   return false;
                 }
                 

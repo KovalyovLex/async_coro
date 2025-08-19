@@ -325,7 +325,8 @@ jobs:
           event-type: check-finished
           client-payload: |
             {
-              "sha": "${{ github.sha }}",
+              "sha": "${{ github.event.pull_request.head.sha }}",
+              "future_sha": "${{ github.sha }}",
               "pr": "${{ github.event.pull_request.number }}"
             }
 
