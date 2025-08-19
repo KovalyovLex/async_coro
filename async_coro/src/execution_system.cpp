@@ -37,7 +37,7 @@ execution_system::execution_system(const execution_system_config& config, const 
 
   _tasks_queues = std::make_unique<task_queue[]>(max_queue.get_value() + 1);
 
-  std::atomic<size_t> num_threads_to_wait_start{0};
+  auto num_threads_to_wait_start = std::make_shared<std::atomic<size_t>>(0);
 
   for (uint32_t i = 0; i < _num_workers; i++) {
     auto& worker_config = config.worker_configs[i];
@@ -55,10 +55,12 @@ execution_system::execution_system(const execution_system_config& config, const 
     thread_data.mask = worker_config.allowed_tasks;
 
     if (!thread_data.task_queues.empty()) {
-      num_threads_to_wait_start.fetch_add(1, std::memory_order::relaxed);
-      thread_data.thread = std::thread([this, &thread_data, &num_threads_to_wait_start]() {
-        num_threads_to_wait_start.fetch_sub(1, std::memory_order::relaxed);
-        num_threads_to_wait_start.notify_one();
+      num_threads_to_wait_start->fetch_add(1, std::memory_order::release);
+      thread_data.thread = std::thread([this, &thread_data, num_threads_to_wait_start]() mutable {
+        num_threads_to_wait_start->fetch_sub(1, std::memory_order::release);
+        num_threads_to_wait_start->notify_one();
+        num_threads_to_wait_start = nullptr;
+
         worker_loop(thread_data);
       });
       set_thread_name(thread_data.thread, worker_config.name);
@@ -72,9 +74,9 @@ execution_system::execution_system(const execution_system_config& config, const 
     }
   }
 
-  for (auto numToWait = num_threads_to_wait_start.load(std::memory_order::relaxed); numToWait != 0;) {
-    num_threads_to_wait_start.wait(numToWait, std::memory_order::relaxed);
-    numToWait = num_threads_to_wait_start.load(std::memory_order::relaxed);
+  for (auto numToWait = num_threads_to_wait_start->load(std::memory_order::relaxed); numToWait != 0;) {
+    num_threads_to_wait_start->wait(numToWait, std::memory_order::relaxed);
+    numToWait = num_threads_to_wait_start->load(std::memory_order::relaxed);
   }
 }
 
