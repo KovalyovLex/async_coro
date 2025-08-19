@@ -48,7 +48,7 @@ jobs:
                 });
 
                 console.log("Check runs:");
-                hecks.check_runs.forEach(c => {
+                checks.check_runs.forEach(c => {
                   console.log(`- ${c.name}: ${c.status}, ${c.conclusion}`);
                 });
 
