@@ -13,6 +13,8 @@ jobs:
         with:
           github-token: ${{ secrets.PR_APPROVER_TOKEN }}
           script: |
+            const numChecks = 5;
+            const retryDelay = 15; // 15 sec
             const sha = context.payload.client_payload.sha;
             const prNumber = context.payload.client_payload.pr;
 
@@ -41,23 +43,34 @@ jobs:
             console.log(`Permission level for ${prAuthor}: ${perm.permission}`);
 
             if (perm.permission === "write" || perm.permission === "admin") {
-              const combined = await github.rest.repos.getCombinedStatusForRef({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                ref: sha
-              });
-
-              if (combined.data.state === "success") {
-                console.log("✅ All checks passed & PR author is maintainer — approving PR");
-                await github.rest.pulls.createReview({
+              let allGreen = false;
+              for (let attempt = 0; attempt < numChecks; attempt++) {
+                const { data: combined } = await github.rest.repos.getCombinedStatusForRef({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  pull_number: prNumber,
-                  event: "APPROVE"
+                  ref: sha
                 });
-              } else {
-                console.log("⏳ Checks not all passed yet");
+                console.log(`Attempt ${attempt+1}: combined state = ${combined.state}`);
+                if (combined.state === "success") {
+                  allGreen = true;
+                  break;
+                }
+                // wait before next poll
+                await new Promise(r => setTimeout(r, 1000 * retryDelay));
               }
+
+              if (!allGreen) {
+                console.log("⏳ Not all checks passed after retries — skipping");
+                return;
+              }
+
+              console.log("✅ All checks passed & PR author is maintainer — approving PR");
+              await github.rest.pulls.createReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                event: "APPROVE"
+              });
             } else {
               console.log("👥 PR author is not a maintainer — skipping auto-approve");
             }
