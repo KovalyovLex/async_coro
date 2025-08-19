@@ -126,8 +126,8 @@ TEST(lambda_lifetime, start_task_with_scheduler) {
   EXPECT_EQ(lifetime_tracker::num_instances, 1);  // 1 captured in lambda
   EXPECT_EQ(handle.get(), 42);
 
-  handle = {};
   continue_f = {};
+  handle = {};
 
   // After task completion, captured argument should be destroyed
   EXPECT_EQ(lifetime_tracker::num_instances, 0);
