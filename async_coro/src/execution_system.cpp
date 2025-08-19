@@ -2,6 +2,7 @@
 #include <async_coro/execution_system.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <thread>
@@ -37,6 +38,8 @@ execution_system::execution_system(const execution_system_config& config, const 
 
   _tasks_queues = std::make_unique<task_queue[]>(max_queue.get_value() + 1);
 
+  std::atomic<size_t> num_threads_to_wait_start = 0;
+
   for (uint32_t i = 0; i < _num_workers; i++) {
     auto& worker_config = config.worker_configs[i];
     auto& thread_data = _thread_data[i];
@@ -51,9 +54,13 @@ execution_system::execution_system(const execution_system_config& config, const 
     }
 
     thread_data.mask = worker_config.allowed_tasks;
+    thread_data.num_loops_before_sleep = worker_config.num_loops_before_sleep;
 
     if (!thread_data.task_queues.empty()) {
-      thread_data.thread = std::thread([this, &thread_data]() {
+      num_threads_to_wait_start.fetch_add(1, std::memory_order::release);
+      thread_data.thread = std::thread([this, &thread_data, &num_threads_to_wait_start]() {
+        num_threads_to_wait_start.fetch_sub(1, std::memory_order::release);
+
         worker_loop(thread_data);
       });
       set_thread_name(thread_data.thread, worker_config.name);
@@ -65,6 +72,16 @@ execution_system::execution_system(const execution_system_config& config, const 
     if (mask.allowed(_main_thread_mask)) {
       _main_thread_queues.push_back(std::addressof(_tasks_queues[q].queue));
     }
+  }
+
+  size_t num_spins = 0;
+  while (num_threads_to_wait_start.load(std::memory_order::acquire) != 0) {
+    if (num_spins++ > 1000000) {
+      // this platform\libc probably dont support yield
+      std::this_thread::sleep_for(std::chrono::milliseconds{1});
+      num_spins = 0;
+    }
+    std::this_thread::yield();
   }
 }
 
@@ -178,7 +195,7 @@ void execution_system::worker_loop(worker_thread_data& data) {
     }
 
     if (is_empty_loop) {
-      if (++num_empty_loops > 10) {
+      if (++num_empty_loops > data.num_loops_before_sleep) {
         data.notifier.sleep();
         num_empty_loops = 0;
       }

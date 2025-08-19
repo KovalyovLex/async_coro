@@ -124,7 +124,6 @@ TEST(lambda_lifetime, start_task_with_scheduler) {
   ASSERT_TRUE(handle.done());
 
   EXPECT_EQ(lifetime_tracker::num_instances, 1);  // 1 captured in lambda
-
   EXPECT_EQ(handle.get(), 42);
 
   handle = {};

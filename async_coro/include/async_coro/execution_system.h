@@ -47,6 +47,9 @@ struct execution_thread_config {
 
   /** @brief Bit mask defining which execution queues this thread is allowed to process */
   execution_thread_mask allowed_tasks = execution_queues::worker | execution_queues::any;
+
+  /** @brief Num empty worker loops to do before going to sleep on notifier */
+  std::uint32_t num_loops_before_sleep = 30;
 };
 
 /**
@@ -241,6 +244,9 @@ class execution_system : public i_execution_system {
 
     /** @brief Notification mechanism for waking up the worker thread */
     thread_notifier notifier;
+
+    /** @brief Num empty worker loops to do before going to sleep on notifier */
+    std::uint32_t num_loops_before_sleep = 0;
   };
 
   /**

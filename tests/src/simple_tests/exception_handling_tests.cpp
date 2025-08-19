@@ -627,6 +627,8 @@ TEST(exception_handling, exception_propagation_across_queues) {
   auto worker_throwing_task = []() -> async_coro::task<int> {
     co_await async_coro::switch_to_queue(async_coro::execution_queues::worker);
 
+    std::cout << "going to throw exception at " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count() << std::endl;
+
     throw test_exception("Worker queue exception");
     co_return 42;
   };
@@ -636,6 +638,7 @@ TEST(exception_handling, exception_propagation_across_queues) {
       auto result = co_await worker_throwing_task();
       co_return result;
     } catch (const test_exception& e) {
+      std::cout << "exception caught at " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count() << std::endl;
       EXPECT_STREQ(e.what(), "Worker queue exception");
       co_return -1;
     }
@@ -646,10 +649,15 @@ TEST(exception_handling, exception_propagation_across_queues) {
 
   auto handle = scheduler.start_task(main_coroutine());
 
-  // Wait for worker thread to process
-  std::this_thread::sleep_for(std::chrono::milliseconds{10});
+  EXPECT_FALSE(handle.done());
 
-  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
+  int tryCount = 0;
+
+  // Wait for worker thread to process
+  while (!handle.done() && tryCount++ < 1000000) {
+    scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
+    std::this_thread::yield();
+  }
 
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), -1);
