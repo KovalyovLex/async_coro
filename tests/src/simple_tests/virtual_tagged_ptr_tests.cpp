@@ -8,7 +8,7 @@
 namespace tagged_ptrs {
 
 template <class TValue>
-class virtual_ptr_test : public ::testing::Test {
+class virtual_ptr : public ::testing::Test {
  public:
   using value_type = TValue;
 };
@@ -28,9 +28,9 @@ class virtual_name_generator {
 };
 
 using test_virtual_types = ::testing::Types<uint16_t, int32_t, unsigned int, uint64_t, float, double, long double>;
-TYPED_TEST_SUITE(virtual_ptr_test, test_virtual_types, virtual_name_generator);
+TYPED_TEST_SUITE(virtual_ptr, test_virtual_types, virtual_name_generator);
 
-TEST(virtual_ptr_test, int_ptr_stack) {
+TEST(virtual_ptr, int_ptr_stack) {
   using value_type = int;
 
   using tagged_ptr = async_coro::internal::virtual_tagged_ptr<value_type>;
@@ -64,7 +64,7 @@ TEST(virtual_ptr_test, int_ptr_stack) {
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, tagged_ptr::max_tag_num);
 }
 
-TYPED_TEST(virtual_ptr_test, ptr_stack) {
+TYPED_TEST(virtual_ptr, ptr_stack) {
   using value_type = typename TestFixture::value_type;
 
   using tagged_ptr = async_coro::internal::virtual_tagged_ptr<value_type>;
@@ -102,7 +102,7 @@ TYPED_TEST(virtual_ptr_test, ptr_stack) {
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, tagged_ptr::max_tag_num);
 }
 
-TYPED_TEST(virtual_ptr_test, ptr_heap) {
+TYPED_TEST(virtual_ptr, ptr_heap) {
   using value_type = typename TestFixture::value_type;
 
   using tagged_ptr = async_coro::internal::virtual_tagged_ptr<value_type>;
