@@ -627,7 +627,7 @@ TEST(exception_handling, exception_propagation_across_queues) {
   auto worker_throwing_task = []() -> async_coro::task<int> {
     co_await async_coro::switch_to_queue(async_coro::execution_queues::worker);
 
-    std::cout << "going to throw exception" << std::endl;
+    std::cout << "going to throw exception at " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count() << std::endl;
 
     throw test_exception("Worker queue exception");
     co_return 42;
@@ -638,7 +638,7 @@ TEST(exception_handling, exception_propagation_across_queues) {
       auto result = co_await worker_throwing_task();
       co_return result;
     } catch (const test_exception& e) {
-      std::cout << "exception caught" << std::endl;
+      std::cout << "exception caught at " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count() << std::endl;
       EXPECT_STREQ(e.what(), "Worker queue exception");
       co_return -1;
     }
