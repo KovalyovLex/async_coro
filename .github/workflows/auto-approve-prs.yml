@@ -51,6 +51,11 @@ jobs:
                   ref: sha
                 });
 
+                console.log("Check runs:");
+                hecks.check_runs.forEach(c => {
+                  console.log(`- ${c.name}: ${c.status}, ${c.conclusion}`);
+                });
+
                 // Filter out only completed checks
                 const completedChecks = checks.check_runs.filter(c => c.status === "completed");
 
@@ -70,7 +75,7 @@ jobs:
                   return; // stop here, do not approve PR
                 }
 
-                if (notCompletedChecks.length == 0) {
+                if (notCompletedChecks.length == 0 && false) {
                   allGreen = true;
                   break;
                 } 
