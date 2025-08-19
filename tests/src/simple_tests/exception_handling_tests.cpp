@@ -624,8 +624,12 @@ TEST(exception_handling, mixed_success_and_failure_scenarios) {
 
 // Exception propagation with different execution queues
 TEST(exception_handling, exception_propagation_across_queues) {
-  auto worker_throwing_task = []() -> async_coro::task<int> {
+  std::atomic_bool executed{false};
+
+  auto worker_throwing_task = [&executed]() -> async_coro::task<int> {
     co_await async_coro::switch_to_queue(async_coro::execution_queues::worker);
+
+    executed = true;
 
     throw test_exception("Worker queue exception");
     co_return 42;
@@ -648,8 +652,12 @@ TEST(exception_handling, exception_propagation_across_queues) {
 
   EXPECT_FALSE(handle.done());
 
+  while (!executed) {
+    std::this_thread::yield();
+  }
+
   // Wait for worker thread to process
-  std::this_thread::sleep_for(std::chrono::milliseconds{30});
+  std::this_thread::sleep_for(std::chrono::milliseconds{10});
 
   EXPECT_FALSE(handle.done());
 
