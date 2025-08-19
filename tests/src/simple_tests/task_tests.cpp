@@ -205,6 +205,8 @@ TEST(task, async_no_switch) {
 
   ASSERT_TRUE(async_done);
 
+  std::this_thread::sleep_for(std::chrono::milliseconds{1});
+
   scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   ASSERT_TRUE(handle.done());
