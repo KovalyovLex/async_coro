@@ -8,7 +8,7 @@
 namespace tagged_ptrs {
 
 template <class TValue>
-class aligned_ptr_test : public ::testing::Test {
+class aligned_ptr : public ::testing::Test {
  public:
   using value_type = TValue;
 };
@@ -28,7 +28,7 @@ class aligned_name_generator {
 };
 
 using test_aligned_types = ::testing::Types<uint16_t, int32_t, unsigned int, uint64_t, float, double, long double>;
-TYPED_TEST_SUITE(aligned_ptr_test, test_aligned_types, aligned_name_generator);
+TYPED_TEST_SUITE(aligned_ptr, test_aligned_types, aligned_name_generator);
 
 struct malloc_deleter {
   template <class T>
@@ -37,7 +37,7 @@ struct malloc_deleter {
   }
 };
 
-TEST(aligned_ptr_test, int_ptr_stack) {
+TEST(aligned_ptr, int_ptr_stack) {
   using value_type = int;
 
   using tagged_ptr = async_coro::internal::aligned_tagged_ptr<value_type, false>;
@@ -62,7 +62,7 @@ TEST(aligned_ptr_test, int_ptr_stack) {
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 1);
 }
 
-TEST(aligned_ptr_test, int_ptr_heap) {
+TEST(aligned_ptr, int_ptr_heap) {
   using value_type = int;
 
   using tagged_ptr = async_coro::internal::aligned_tagged_ptr<value_type, true>;
@@ -91,7 +91,7 @@ TEST(aligned_ptr_test, int_ptr_heap) {
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 3);
 }
 
-TYPED_TEST(aligned_ptr_test, ptr_stack) {
+TYPED_TEST(aligned_ptr, ptr_stack) {
   using value_type = typename TestFixture::value_type;
 
   using tagged_ptr = async_coro::internal::aligned_tagged_ptr<value_type, false>;
@@ -118,7 +118,7 @@ TYPED_TEST(aligned_ptr_test, ptr_stack) {
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, tagged_ptr::max_tag_num);
 }
 
-TYPED_TEST(aligned_ptr_test, ptr_heap) {
+TYPED_TEST(aligned_ptr, ptr_heap) {
   using value_type = typename TestFixture::value_type;
 
   using tagged_ptr = async_coro::internal::aligned_tagged_ptr<value_type, true>;
