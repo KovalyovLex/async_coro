@@ -313,6 +313,7 @@ jobs:
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
 
   dispatch-pr:
+    needs: [build-gcc, build-clang, build-msvc, build-mac]
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:

@@ -13,7 +13,7 @@ jobs:
         with:
           github-token: ${{ secrets.PR_APPROVER_TOKEN }}
           script: |
-            const numChecks = 5;
+            const numChecks = 2;
             const retryDelay = 15; // 15 sec
             const sha = context.payload.client_payload.sha;
             const prNumber = context.payload.client_payload.pr;
