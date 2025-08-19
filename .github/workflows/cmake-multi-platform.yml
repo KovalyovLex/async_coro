@@ -312,4 +312,20 @@ jobs:
         name: ${{matrix.os}}-run-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
 
+  dispatch-pr:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Trigger gatekeeper for PR approval
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          event-type: check-finished
+          client-payload: |
+            {
+              "sha": "${{ github.sha }}",
+              "pr": "${{ github.event.pull_request.number }}"
+            }
+
         
