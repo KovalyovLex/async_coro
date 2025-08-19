@@ -22,7 +22,7 @@ jobs:
             }
 
             // Get PR info
-            const { data: pr } = await github.pulls.get({
+            const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: prNumber
@@ -31,37 +31,33 @@ jobs:
             const prAuthor = pr.user.login;
             console.log(`PR author: ${prAuthor}`);
 
-            // Check if PR author is a collaborator with write/admin permissions
-            try {
-              const { data: perm } = await github.repos.getCollaboratorPermissionLevel({
+            // Check collaborator permissions
+            const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: prAuthor
+            });
+
+            console.log(`Permission level for ${prAuthor}: ${perm.permission}`);
+
+            if (perm.permission === "write" || perm.permission === "admin") {
+              const combined = await github.rest.repos.getCombinedStatusForRef({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                username: prAuthor
+                ref: sha
               });
 
-              console.log(`Permission level for ${prAuthor}: ${perm.permission}`);
-
-              if (perm.permission === "write" || perm.permission === "admin") {
-                const combined = await github.repos.getCombinedStatusForRef({
+              if (combined.data.state === "success") {
+                console.log("✅ All checks passed & PR author is maintainer — approving PR");
+                await github.rest.pulls.createReview({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  ref: sha
+                  pull_number: prNumber,
+                  event: "APPROVE"
                 });
-
-                if (combined.data.state === "success") {
-                  console.log("✅ All checks passed & PR author is maintainer — approving PR");
-                  await github.pulls.createReview({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    pull_number: prNumber,
-                    event: "APPROVE"
-                  });
-                } else {
-                  console.log("⏳ Checks not all passed yet");
-                }
               } else {
-                console.log("👥 PR author is not a maintainer — skipping auto-approve");
+                console.log("⏳ Checks not all passed yet");
               }
-            } catch (err) {
-              console.log("⚠️ Could not check collaborator permissions:", err.message);
+            } else {
+              console.log("👥 PR author is not a maintainer — skipping auto-approve");
             }
