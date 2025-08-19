@@ -5,15 +5,16 @@ on:
     types: [check-finished]
 
 jobs:
-  check-maintainer:
+  check-status-and-maintainer:
     runs-on: ubuntu-latest
     outputs:
-      isMaintainer: ${{ steps.check.outputs.needApprove }}
+      needApprove: ${{ steps.check.outputs.result }}
     steps:
       - name: Check if PR author is a maintainer
         id: check
         uses: actions/github-script@v7
         with:
+          result-encoding: string
           script: |
             const numChecks = 3;
             const retryDelay = 15; // 15 sec
@@ -106,8 +107,8 @@ jobs:
             return false;
 
   approve-pr:
-    needs: check-maintainer
-    if: needs.check-maintainer.outputs.needApprove == 'true'
+    needs: check-status-and-maintainer
+    if: needs.check-status-and-maintainer.outputs.needApprove == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Approve PR using bot
