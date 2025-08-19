@@ -18,9 +18,9 @@ class CORO_THREAD_CAPABILITY("mutex") spin_lock_mutex {
 
   void lock() noexcept CORO_THREAD_ACQUIRE() {
     // Optimistically assume the lock is free on first the try
-    while (_lock.exchange(true, std::memory_order_acquire)) {
+    while (_lock.exchange(true, std::memory_order::acquire)) {
       // Wait for lock to be released without generating cache misses
-      while (_lock.load(std::memory_order_relaxed)) {
+      while (_lock.load(std::memory_order::relaxed)) {
         std::this_thread::yield();
       }
     }
@@ -29,11 +29,11 @@ class CORO_THREAD_CAPABILITY("mutex") spin_lock_mutex {
   bool try_lock() noexcept CORO_THREAD_TRY_ACQUIRE(true) {
     // First do a relaxed load to check if lock is free in order to prevent
     // unnecessary cache misses if someone does while(!try_lock())
-    return !_lock.load(std::memory_order_relaxed) && !_lock.exchange(true, std::memory_order_acquire);
+    return !_lock.load(std::memory_order::relaxed) && !_lock.exchange(true, std::memory_order::acquire);
   }
 
   void unlock() noexcept CORO_THREAD_RELEASE() {
-    _lock.store(false, std::memory_order_release);
+    _lock.store(false, std::memory_order::release);
   }
 
  private:
