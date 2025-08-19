@@ -4,16 +4,15 @@
 
 #include <atomic>
 #include <chrono>
-#include <string>
 #include <thread>
 #include <vector>
 
 #include "memory_hooks.h"
 
-class atomic_queue_tests : public ::testing::TestWithParam<std::tuple<uint32_t, uint32_t>> {
+class atomic_collections : public ::testing::TestWithParam<std::tuple<uint32_t, uint32_t>> {
 };
 
-TEST_P(atomic_queue_tests, int_queue) {
+TEST_P(atomic_collections, int_queue) {
   constexpr uint32_t num_values = 1000000;
 
   std::atomic_int sum = 0;
@@ -104,7 +103,7 @@ TEST_P(atomic_queue_tests, int_queue) {
   EXPECT_EQ(sum.load(), sum_pushed.load());
 }
 
-TEST_P(atomic_queue_tests, int_stack) {
+TEST_P(atomic_collections, int_stack) {
   constexpr uint32_t num_values = 1000000;
 
   std::atomic_int sum = 0;
@@ -196,8 +195,8 @@ TEST_P(atomic_queue_tests, int_stack) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    atomic_queue,
-    atomic_queue_tests,
+    atomic_collections,
+    atomic_collections,
     ::testing::Values(
         std::make_tuple(1u, 1u),
         std::make_tuple(1u, 2u),
@@ -225,6 +224,6 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(8u, 3u),
         std::make_tuple(8u, 4u),
         std::make_tuple(8u, 8u)),
-    [](const testing::TestParamInfo<atomic_queue_tests::ParamType>& info) {
+    [](const testing::TestParamInfo<atomic_collections::ParamType>& info) {
       return "consumers_" + std::to_string(std::get<0>(info.param)) + "_producers_" + std::to_string(std::get<1>(info.param));
     });
