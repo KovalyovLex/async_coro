@@ -110,6 +110,8 @@ jobs:
     needs: check-status-and-maintainer
     if: needs.check-status-and-maintainer.outputs.needApprove == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
       - name: Approve PR using bot
         uses: actions/github-script@v7
