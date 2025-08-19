@@ -97,7 +97,8 @@ class atomic_queue {
 
     unique_lock lock{_value_mutex};
 
-    _head.store(head, std::memory_order::relaxed);
+    value* expected_to_set = nullptr;
+    _head.compare_exchange_strong(expected_to_set, head, std::memory_order::relaxed);
     if (_last) {
       _last->next = head;
     }
@@ -131,7 +132,8 @@ class atomic_queue {
 
     unique_lock lock{_value_mutex};
 
-    _head.store(head, std::memory_order::relaxed);
+    value* expected_to_set = nullptr;
+    _head.compare_exchange_strong(expected_to_set, head, std::memory_order::relaxed);
     if (_last) {
       _last->next = head;
     }
