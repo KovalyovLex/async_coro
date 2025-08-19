@@ -313,7 +313,7 @@ jobs:
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
 
   dispatch-pr:
-    if: false # ${{ github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
