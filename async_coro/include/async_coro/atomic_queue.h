@@ -61,8 +61,7 @@ class atomic_queue {
   ~atomic_queue() noexcept {
     unique_lock lock{_value_mutex};
 
-    auto head = _head.load(std::memory_order::relaxed);
-    _head.store(nullptr, std::memory_order::relaxed);
+    auto head = _head.exchange(nullptr, std::memory_order::relaxed);
     _last = nullptr;
 
     while (head) {
@@ -98,8 +97,7 @@ class atomic_queue {
 
     unique_lock lock{_value_mutex};
 
-    value* expected_to_set = nullptr;
-    _head.compare_exchange_strong(expected_to_set, head, std::memory_order::relaxed);
+    _head.store(head, std::memory_order::relaxed);
     if (_last) {
       _last->next = head;
     }
@@ -133,8 +131,7 @@ class atomic_queue {
 
     unique_lock lock{_value_mutex};
 
-    value* expected_to_set = nullptr;
-    _head.compare_exchange_strong(expected_to_set, head, std::memory_order::relaxed);
+    _head.store(head, std::memory_order::relaxed);
     if (_last) {
       _last->next = head;
     }
@@ -155,9 +152,7 @@ class atomic_queue {
 
       head = _head.load(std::memory_order::relaxed);
       if (head) {
-        if (!_head.compare_exchange_strong(head, head->next, std::memory_order::relaxed)) {
-          ASYNC_CORO_ASSERT(false);
-        }
+        _head.store(head->next, std::memory_order::relaxed);
         if (_last == head) {
           _last = head->next;
         }
