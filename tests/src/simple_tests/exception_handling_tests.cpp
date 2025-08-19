@@ -648,11 +648,14 @@ TEST(exception_handling, exception_propagation_across_queues) {
 
   EXPECT_FALSE(handle.done());
 
+  int tryCount = 0;
+
   // Wait for worker thread to process
-  while (!handle.done()) {
+  while (!handle.done() && tryCount++ < 1000000) {
     scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
   }
 
+  ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), -1);
 }
 
