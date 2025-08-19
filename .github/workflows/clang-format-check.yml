@@ -24,6 +24,7 @@ jobs:
         check-path: ${{ matrix.path }}
 
   dispatch-pr:
+    needs: formatting-check
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:
