@@ -83,8 +83,7 @@ jobs:
                 }
 
                 if (notCompletedChecks.length == 0) {
-                  //allGreen = true;
-                  console.log("✅ All checks passed!");
+                  allGreen = true;
                   break;
                 }
                 
