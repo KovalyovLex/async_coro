@@ -71,6 +71,7 @@ execution_system::execution_system(const execution_system_config& config, const 
   for (uint8_t q = 0; q <= max_queue.get_value(); q++) {
     execution_thread_mask mask{execution_queue_mark{q}};
     if (mask.allowed(_main_thread_mask)) {
+      std::cout << "main_thread_queues: " << q << std::endl;
       _main_thread_queues.push_back(std::addressof(_tasks_queues[q].queue));
     }
   }
@@ -106,6 +107,8 @@ void execution_system::plan_execution(task_function f, execution_queue_mark exec
     return;
   }
 
+  std::cout << "Plan execution on: " << execution_queue.get_value() << std::endl;
+
   auto& task_q = _tasks_queues[execution_queue.get_value()];
   task_q.queue.push(std::move(f));
 
@@ -125,6 +128,8 @@ void execution_system::execute_or_plan_execution(task_function f, execution_queu
   }
 
   // plan execution
+  std::cout << "(Execute) Plan execution on: " << execution_queue.get_value() << std::endl;
+
   auto& task_q = _tasks_queues[execution_queue.get_value()];
   task_q.queue.push(std::move(f));
 
