@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <memory>
@@ -71,7 +72,7 @@ execution_system::execution_system(const execution_system_config& config, const 
   for (uint8_t q = 0; q <= max_queue.get_value(); q++) {
     execution_thread_mask mask{execution_queue_mark{q}};
     if (mask.allowed(_main_thread_mask)) {
-      std::cout << "main_thread_queues: " << q << std::endl;
+      std::cout << "main_thread_queues: " << size_t(q) << std::endl;
       _main_thread_queues.push_back(std::addressof(_tasks_queues[q].queue));
     }
   }
@@ -104,10 +105,11 @@ execution_system::~execution_system() noexcept {
 void execution_system::plan_execution(task_function f, execution_queue_mark execution_queue) {
   ASYNC_CORO_ASSERT(execution_queue.get_value() <= _max_q.get_value());
   if (!f) [[unlikely]] {
+    std::cout << "plan_execution: f empty" << std::endl;
     return;
   }
 
-  std::cout << "Plan execution on: " << execution_queue.get_value() << std::endl;
+  std::cout << "Plan execution on: " << size_t(execution_queue.get_value()) << std::endl;
 
   auto& task_q = _tasks_queues[execution_queue.get_value()];
   task_q.queue.push(std::move(f));
@@ -119,16 +121,18 @@ void execution_system::plan_execution(task_function f, execution_queue_mark exec
 
 void execution_system::execute_or_plan_execution(task_function f, execution_queue_mark execution_queue) {
   if (!f) [[unlikely]] {
+    std::cout << "execute_or_plan_execution: f empty" << std::endl;
     return;
   }
 
   if (execution_system::is_current_thread_fits(execution_queue)) {
+    std::cout << "Execute as thread fits on: " << size_t(execution_queue.get_value()) << std::endl;
     f();
     return;
   }
 
   // plan execution
-  std::cout << "(Execute) Plan execution on: " << execution_queue.get_value() << std::endl;
+  std::cout << "(Execute) Plan execution on: " << size_t(execution_queue.get_value()) << std::endl;
 
   auto& task_q = _tasks_queues[execution_queue.get_value()];
   task_q.queue.push(std::move(f));
