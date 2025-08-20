@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <atomic>
-#include <iostream>
 #include <memory>
 #include <thread>
 #include <utility>
@@ -43,8 +42,6 @@ bool scheduler::is_current_thread_fits(execution_queue_mark execution_queue) noe
 bool scheduler::continue_execution_impl(base_handle& handle_impl) {
   ASYNC_CORO_ASSERT(handle_impl.is_current_thread_same());
 
-  std::cout << "Coroutine continue execution: " << &handle_impl << std::endl;
-
   handle_impl.set_coroutine_state(coroutine_state::running);
   handle_impl._handle.resume();
 
@@ -53,16 +50,13 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl) {
   ASYNC_CORO_ASSERT(state != coroutine_state::running);
 
   if (state == coroutine_state::waiting_switch) {
-    std::cout << "Coroutine queue switch: " << &handle_impl << std::endl;
     change_execution_queue(handle_impl, handle_impl._execution_queue);
   } else if (state == coroutine_state::finished) {
     if (auto* parent = handle_impl.get_parent(); parent && parent->get_coroutine_state() == coroutine_state::suspended) {
       // wake up parent coroutine
-      std::cout << "Coroutine wake up parent: " << handle_impl._parent << std::endl;
       continue_execution(*handle_impl._parent);
     } else if (!parent) {
       // cleanup coroutine
-      std::cout << "Coroutine cleanup: " << &handle_impl << std::endl;
       {
         // remove from managed
         unique_lock lock{_mutex};
@@ -107,8 +101,6 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl) {
 
 void scheduler::plan_continue_on_thread(base_handle& handle_impl, execution_queue_mark execution_queue) {
   ASYNC_CORO_ASSERT(handle_impl._scheduler == this);
-
-  std::cout << "Coroutine pan continue: " << &handle_impl << std::endl;
 
   _execution_system->plan_execution(
       [this, handle_base = &handle_impl, execution_queue]() {
