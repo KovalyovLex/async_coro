@@ -39,7 +39,7 @@ bool scheduler::is_current_thread_fits(execution_queue_mark execution_queue) noe
   return _execution_system->is_current_thread_fits(execution_queue);
 }
 
-bool scheduler::continue_execution_impl(base_handle& handle_impl) {
+bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_parent_on_finish) {
   ASYNC_CORO_ASSERT(handle_impl.is_current_thread_same());
 
   handle_impl.set_coroutine_state(coroutine_state::running);
@@ -52,7 +52,7 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl) {
   if (state == coroutine_state::waiting_switch) {
     change_execution_queue(handle_impl, handle_impl._execution_queue);
   } else if (state == coroutine_state::finished) {
-    if (auto* parent = handle_impl.get_parent(); parent && parent->get_coroutine_state() == coroutine_state::suspended) {
+    if (auto* parent = handle_impl.get_parent(); continue_parent_on_finish && parent && parent->get_coroutine_state() == coroutine_state::suspended) {
       // wake up parent coroutine
       continue_execution(*handle_impl._parent);
     } else if (!parent) {
@@ -185,9 +185,12 @@ void scheduler::change_execution_queue(base_handle& handle_impl,
 }
 
 bool scheduler::on_child_coro_added(base_handle& parent, base_handle& child, internal::passkey<task_base>) {
+  ASYNC_CORO_ASSERT(parent.get_coroutine_state() == coroutine_state::running);
   ASYNC_CORO_ASSERT(parent._scheduler == this);
   ASYNC_CORO_ASSERT(child._execution_thread == std::thread::id{});
   ASYNC_CORO_ASSERT(child.get_coroutine_state() == coroutine_state::created);
+
+  parent.set_coroutine_state(coroutine_state::suspended);
 
   child._scheduler = this;
   child._execution_thread = parent._execution_thread;
@@ -196,7 +199,13 @@ bool scheduler::on_child_coro_added(base_handle& parent, base_handle& child, int
   child.set_coroutine_state(coroutine_state::suspended);
 
   // start execution of internal coroutine
-  return continue_execution_impl(child);
+  bool was_done = continue_execution_impl(child, false);
+
+  if (was_done) {
+    parent.set_coroutine_state(coroutine_state::running);
+  }
+
+  return was_done;
 }
 
 }  // namespace async_coro

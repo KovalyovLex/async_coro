@@ -67,8 +67,7 @@ struct task final : private task_base {
 
     template <typename T>
       requires(std::derived_from<T, base_handle>)
-    void await_suspend(std::coroutine_handle<T> h) const noexcept {
-      h.promise().on_suspended();
+    void await_suspend(std::coroutine_handle<T>) const noexcept {
     }
 
     R await_resume() {
