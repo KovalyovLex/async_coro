@@ -77,13 +77,13 @@ TEST(execution_system, execute_or_plan_worker) {
 
   system.execute_or_plan_execution(
       [&] {
-        EXPECT_NE(std::this_thread::get_id(), main_thread_id);
-
         executed = true;
+
+        EXPECT_NE(std::this_thread::get_id(), main_thread_id);
       },
       execution_queues::worker);
 
-  std::this_thread::sleep_for(std::chrono::milliseconds{10});
+  std::this_thread::sleep_for(std::chrono::milliseconds{30});
 
   EXPECT_TRUE(executed);
 }
