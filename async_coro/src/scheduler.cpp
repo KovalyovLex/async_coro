@@ -5,7 +5,6 @@
 #include <async_coro/thread_safety/unique_lock.h>
 
 #include <algorithm>
-#include <atomic>
 #include <memory>
 #include <thread>
 #include <utility>
