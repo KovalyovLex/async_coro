@@ -122,7 +122,7 @@ class scheduler {
  private:
   bool is_current_thread_fits(execution_queue_mark execution_queue) noexcept;
   void add_coroutine(base_handle& handle_impl, callback_base::ptr start_function, execution_queue_mark execution_queue);
-  bool continue_execution_impl(base_handle& handle_impl);
+  bool continue_execution_impl(base_handle& handle_impl, bool continue_parent_on_finish = true);
   void plan_continue_on_thread(base_handle& handle_impl, execution_queue_mark execution_queue);
   void change_execution_queue(base_handle& handle_impl, execution_queue_mark execution_queue);
 

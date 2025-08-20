@@ -177,9 +177,11 @@ uint32_t execution_system::get_num_workers_for_queue(execution_queue_mark execut
 }
 
 void execution_system::worker_loop(worker_thread_data& data) {
-  std::uint32_t num_empty_loops = 0;
+  std::size_t num_empty_loops = 0;
 
   while (!_is_stopping.load(std::memory_order::relaxed)) {
+    data.notifier.reset_notification();
+
     task_function f;
     bool is_empty_loop = true;
     for (auto* task_q : data.task_queues) {
