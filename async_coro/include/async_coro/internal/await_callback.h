@@ -24,6 +24,11 @@ struct await_callback {
 
   bool await_ready() const noexcept { return false; }
 
+#if defined _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4702)
+#endif
+
   template <typename U>
     requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> h) {
@@ -39,6 +44,10 @@ struct await_callback {
 
     _suspension.try_to_continue_immediately();
   }
+
+#if defined _MSC_VER
+#pragma warning(pop)
+#endif
 
   void await_resume() const noexcept {}
 
