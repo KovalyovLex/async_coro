@@ -56,12 +56,13 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
       continue_execution(*handle_impl._parent, internal::passkey{this});
     } else if (!parent) {
       // cleanup coroutine
+      bool was_managed = false;
       {
         // remove from managed
         unique_lock lock{_mutex};
         auto it = std::find(_managed_coroutines.begin(), _managed_coroutines.end(), &handle_impl);
-        ASYNC_CORO_ASSERT(it != _managed_coroutines.end());
         if (it != _managed_coroutines.end()) {
+          was_managed = true;
           if (*it != _managed_coroutines.back()) {
             std::swap(*it, _managed_coroutines.back());
           }
@@ -89,7 +90,9 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
       handle_impl.execute_continuation();
 #endif
 
-      handle_impl.on_task_freed_by_scheduler();
+      if (was_managed) {
+        handle_impl.on_task_freed_by_scheduler();
+      }
     }
 
     return true;
