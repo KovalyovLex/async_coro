@@ -227,6 +227,11 @@ class execution_system : public i_execution_system {
   /** @brief Type alias for the task queue using atomic_queue */
   using tasks = atomic_queue<task_function>;
 
+#if defined _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4324)
+#endif
+
   /**
    * @brief Data structure containing information for each worker thread
    *
@@ -249,6 +254,10 @@ class execution_system : public i_execution_system {
     /** @brief Num empty worker loops to do before going to sleep on notifier */
     std::size_t num_loops_before_sleep = 0;
   };
+
+#if defined _MSC_VER
+#pragma warning(pop)
+#endif
 
   /**
    * @brief Data structure for managing a single execution queue
