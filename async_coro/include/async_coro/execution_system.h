@@ -2,6 +2,7 @@
 
 #include <async_coro/atomic_queue.h>
 #include <async_coro/i_execution_system.h>
+#include <async_coro/internal/hardware_interference_size.h>
 #include <async_coro/thread_notifier.h>
 #include <async_coro/unique_function.h>
 
@@ -11,6 +12,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+
 
 namespace async_coro {
 
