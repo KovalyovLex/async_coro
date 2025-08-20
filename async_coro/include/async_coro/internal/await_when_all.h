@@ -41,8 +41,6 @@ struct await_when_all {
   }
 
   bool await_ready() const noexcept {
-    ASYNC_CORO_ASSERT(_suspended.load(std::memory_order::relaxed) == false);
-
     return std::apply(
         [&](const auto&... coros) {
           return (coros.done() && ...);
@@ -53,20 +51,11 @@ struct await_when_all {
   template <typename U>
     requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> h) {
-    h.promise().on_suspended();
+    _suspension = h.promise().suspend(sizeof...(TArgs) + 1);
 
     const auto continue_f = [&](auto& coro) {
-      coro.continue_with([this, h](auto&) noexcept {
-        if (this->_counter.fetch_sub(1, std::memory_order::relaxed) == 1) {
-          // continue this coro
-
-          base_handle& handle = h.promise();
-          if (_suspended.load(std::memory_order::acquire)) {
-            handle.continue_execution();
-          } else {
-            handle.plan_continue_execution();
-          }
-        }
+      coro.continue_with([this](auto&) noexcept {
+        _suspension.try_to_continue_on_any_thread();
       });
     };
 
@@ -76,7 +65,7 @@ struct await_when_all {
         },
         _coroutines);
 
-    _suspended.store(true, std::memory_order::release);
+    _suspension.try_to_continue_immediately();
   }
 
   result_type await_resume() {
@@ -118,8 +107,7 @@ struct await_when_all {
  private:
   std::tuple<task_launcher<TArgs>...> _launchers;
   std::tuple<task_handle<TArgs>...> _coroutines;
-  std::atomic_size_t _counter{sizeof...(TArgs)};
-  std::atomic_bool _suspended{false};
+  coroutine_suspender _suspension;
 };
 
 template <typename... TArgs>

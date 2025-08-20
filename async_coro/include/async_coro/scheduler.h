@@ -17,6 +17,7 @@
 namespace async_coro {
 
 class base_handle;
+class coroutine_suspender;
 
 /**
  * @class scheduler
@@ -107,15 +108,7 @@ class scheduler {
    * thread is suitable, or schedule it for later execution.
    * @param handle_impl The handle of the coroutine to continue.
    */
-  void continue_execution(base_handle& handle_impl, internal::passkey_any<base_handle, scheduler>);
-
-  /**
-   * @brief Schedules a coroutine for continued execution on its assigned thread.
-   * @details For internal use. Unlike `continue_execution`, this method always schedules
-   * the coroutine for later execution without attempting to run it immediately.
-   * @param handle_impl The handle of the coroutine to schedule.
-   */
-  void plan_continue_execution(base_handle& handle_impl, internal::passkey_any<base_handle, scheduler>);
+  void continue_execution(base_handle& handle_impl, internal::passkey_any<coroutine_suspender, scheduler>);
 
   // Embed coroutine. Returns true if coroutine was finished
   bool on_child_coro_added(base_handle& parent, base_handle& child, internal::passkey<task_base>);

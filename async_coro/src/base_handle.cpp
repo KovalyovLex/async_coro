@@ -73,12 +73,4 @@ void base_handle::inc_num_owners() noexcept {
   }
 }
 
-void base_handle::continue_execution() {
-  get_scheduler().continue_execution(*this, internal::passkey{this});
-}
-
-void base_handle::plan_continue_execution() {
-  get_scheduler().plan_continue_execution(*this, internal::passkey{this});
-}
-
 }  // namespace async_coro
