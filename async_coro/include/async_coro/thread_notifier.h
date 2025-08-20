@@ -17,41 +17,42 @@ class thread_notifier {
   // Notifies sleeping thread or will force to skip next sleep of the thread
   void notify() noexcept {
     auto expected = state_sleeping;
-    if (_state.compare_exchange_strong(expected, state_signalled, std::memory_order::relaxed)) {
-      _state.notify_one();
-    } else if (expected == state_idle) {
-      if (_state.compare_exchange_strong(expected, state_signalled, std::memory_order::relaxed)) {
-        _state.notify_one();
+    while (true) {
+      if ((expected == state_sleeping || expected == state_idle)) {
+        if (_state.compare_exchange_strong(expected, state_signalled, std::memory_order::release, std::memory_order::relaxed)) {
+          _state.notify_one();
+          break;
+        }
+      } else {
+        // already signalled
+        break;
       }
-    } else {
-      ASYNC_CORO_ASSERT(expected == state_signalled);
     }
   }
 
-  // Puts current thread in sleep until receive notification. If we get notification before sleep, this sleep will be ignored
+  // Puts current thread in sleep until receive notification.
+  // If we got notification after reset_notification but before sleep, this sleep will be ignored.
   void sleep() noexcept {
     auto expected = state_idle;
-    if (_state.compare_exchange_strong(expected, state_sleeping, std::memory_order::relaxed)) {
+    if (_state.compare_exchange_strong(expected, state_sleeping, std::memory_order::release, std::memory_order::relaxed)) {
       do {
         _state.wait(state_sleeping, std::memory_order::relaxed);
       } while (_state.load(std::memory_order::relaxed) == state_sleeping);
 
-      _state.store(state_idle, std::memory_order::release);
+      reset_notification();
+    } else if (expected == state_signalled) {
+      reset_notification();
     } else {
-      if (expected == state_signalled) {
-        if (_state.compare_exchange_strong(expected, state_idle, std::memory_order::relaxed)) {
-          return;
-        }
-      }
       ASYNC_CORO_ASSERT(false && "Unexpected state");
     }
   }
 
-  // Can be called by owning thread (who calls sleep) to reset any previous notifications
+  // Can be called by owning thread (who calls sleep) to reset any previous notifications.
   void reset_notification() noexcept {
     ASYNC_CORO_ASSERT(_state.load(std::memory_order::relaxed) != state_sleeping);
 
-    _state.store(state_idle, std::memory_order::relaxed);
+    std::atomic_signal_fence(std::memory_order::acquire);
+    _state.store(state_idle, std::memory_order::release);
   }
 
  private:

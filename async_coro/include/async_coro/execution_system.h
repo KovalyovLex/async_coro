@@ -49,7 +49,7 @@ struct execution_thread_config {
   execution_thread_mask allowed_tasks = execution_queues::worker | execution_queues::any;
 
   /** @brief Num empty worker loops to do before going to sleep on notifier */
-  std::uint32_t num_loops_before_sleep = 30;
+  std::size_t num_loops_before_sleep = 30;
 };
 
 /**
@@ -232,7 +232,10 @@ class execution_system : public i_execution_system {
    * This struct holds all the per-thread data needed to manage worker threads,
    * including the thread object, assigned task queues, permissions, and notification mechanism.
    */
-  struct worker_thread_data {
+  struct alignas(std::hardware_constructive_interference_size) worker_thread_data {
+    /** @brief Notification mechanism for waking up the worker thread */
+    thread_notifier notifier;
+
     /** @brief The actual thread object */
     std::thread thread;
 
@@ -242,11 +245,8 @@ class execution_system : public i_execution_system {
     /** @brief Bit mask defining which execution queues this worker can process */
     execution_thread_mask mask;
 
-    /** @brief Notification mechanism for waking up the worker thread */
-    thread_notifier notifier;
-
     /** @brief Num empty worker loops to do before going to sleep on notifier */
-    std::uint32_t num_loops_before_sleep = 0;
+    std::size_t num_loops_before_sleep = 0;
   };
 
   /**
