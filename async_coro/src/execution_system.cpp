@@ -4,6 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <iostream>
 #include <memory>
 #include <thread>
 
@@ -162,6 +163,7 @@ void execution_system::update_from_main() {
   // trying to execute one task from each q
   for (auto* task_q : _main_thread_queues) {
     if (task_q->try_pop(f)) {
+      std::cout << "Update from main task" << std::endl;
       f();
       f = nullptr;
     }
