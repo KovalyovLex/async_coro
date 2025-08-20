@@ -242,6 +242,22 @@ class base_handle {
     return _execution_queue;
   }
 
+  /**
+   * @brief Continues the execution of a coroutine.
+   * @details For internal use. This will either execute the coroutine immediately if the current
+   * thread is suitable, or schedule it for later execution.
+   * @param handle_impl The handle of the coroutine to continue.
+   */
+  void continue_execution();
+
+  /**
+   * @brief Schedules a coroutine for continued execution on its assigned thread.
+   * @details For internal use. Unlike `continue_execution`, this method always schedules
+   * the coroutine for later execution without attempting to run it immediately.
+   * @param handle_impl The handle of the coroutine to schedule.
+   */
+  void plan_continue_execution();
+
  protected:
   // returns true if continuation was executed
   virtual bool execute_continuation() = 0;

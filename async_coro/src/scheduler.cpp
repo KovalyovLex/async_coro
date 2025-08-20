@@ -53,7 +53,7 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
   } else if (state == coroutine_state::finished) {
     if (auto* parent = handle_impl.get_parent(); continue_parent_on_finish && parent && parent->get_coroutine_state() == coroutine_state::suspended) {
       // wake up parent coroutine
-      continue_execution(*handle_impl._parent);
+      continue_execution(*handle_impl._parent, internal::passkey{this});
     } else if (!parent) {
       // cleanup coroutine
       {
@@ -153,7 +153,7 @@ void scheduler::set_unhandled_exception_handler(unique_function<void(std::except
 }
 #endif
 
-void scheduler::continue_execution(base_handle& handle_impl) {
+void scheduler::continue_execution(base_handle& handle_impl, internal::passkey_any<base_handle, scheduler>) {
   ASYNC_CORO_ASSERT(handle_impl._execution_thread != std::thread::id{});
   ASYNC_CORO_ASSERT(handle_impl.get_coroutine_state() == coroutine_state::suspended);
 
@@ -165,7 +165,7 @@ void scheduler::continue_execution(base_handle& handle_impl) {
   }
 }
 
-void scheduler::plan_continue_execution(base_handle& handle_impl) {
+void scheduler::plan_continue_execution(base_handle& handle_impl, internal::passkey_any<base_handle, scheduler>) {
   ASYNC_CORO_ASSERT(handle_impl._execution_thread != std::thread::id{});
   ASYNC_CORO_ASSERT(handle_impl.get_coroutine_state() == coroutine_state::suspended);
 

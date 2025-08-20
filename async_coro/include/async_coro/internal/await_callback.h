@@ -41,9 +41,9 @@ struct await_callback {
           return;
         }
         if (_suspended.load(std::memory_order::acquire)) {
-          handle.get_scheduler().continue_execution(handle);
+          handle.continue_execution();
         } else {
-          handle.get_scheduler().plan_continue_execution(handle);
+          handle.plan_continue_execution();
         }
       }
     });

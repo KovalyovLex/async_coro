@@ -1,4 +1,5 @@
 #include <async_coro/await_callback.h>
+#include <async_coro/execution_queue_mark.h>
 #include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/start_task.h>
@@ -1311,4 +1312,67 @@ TEST(task, lambda_lifetime) {
 
   handle = {};
   EXPECT_EQ(num_instances, 0);
+}
+
+TEST(task, multiple_workers_async_execution) {
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{
+          .worker_configs = {{"worker1", async_coro::execution_queues::worker},
+                             {"worker2", async_coro::execution_queues::worker},
+                             {"worker3", async_coro::execution_queues::worker},
+                             {"worker4", async_coro::execution_queues::worker},
+                             {"worker5", async_coro::execution_queues::worker}},
+          .main_thread_allowed_tasks = async_coro::execution_queues::main})};
+
+  auto routine = []() -> async_coro::task<float> {
+    auto handle_void = co_await async_coro::start_task(
+        []() -> async_coro::task<void> {
+          co_return;
+        },
+        async_coro::execution_queues::worker);
+
+    co_await handle_void;
+
+    auto handle_int = co_await async_coro::start_task(
+        []() -> async_coro::task<int> {
+          co_return 3;
+        },
+        async_coro::execution_queues::worker);
+
+    auto handle_float = co_await async_coro::start_task(
+        []() -> async_coro::task<float> {
+          co_return 2.34f;
+        },
+        async_coro::execution_queues::worker);
+
+    auto handle_double = co_await async_coro::start_task(
+        []() -> async_coro::task<double> {
+          co_return 3.1415;
+        },
+        async_coro::execution_queues::main);
+
+    const auto res_int = co_await handle_int;
+    EXPECT_EQ(res_int, 3);
+
+    const auto res_double = co_await handle_double;
+    EXPECT_DOUBLE_EQ(res_double, 3.1415);
+
+    const auto res_float = co_await handle_float;
+    EXPECT_FLOAT_EQ(res_float, 2.34f);
+
+    co_return res_float;
+  };
+
+  auto handle = scheduler.start_task(routine, async_coro::execution_queues::worker);
+  ASSERT_FALSE(handle.done());
+
+  size_t num_repeats = 0;
+  while (!handle.done() && num_repeats++ < 1000000) {
+    scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
+  }
+
+  ASSERT_TRUE(handle.done());
+  EXPECT_FLOAT_EQ(handle.get(), 2.34f);
+
+  handle = {};
 }

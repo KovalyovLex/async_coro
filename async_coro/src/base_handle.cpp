@@ -1,6 +1,8 @@
 #include <async_coro/base_handle.h>
 #include <async_coro/callback.h>
 #include <async_coro/config.h>
+#include <async_coro/internal/passkey.h>
+#include <async_coro/scheduler.h>
 
 #include <atomic>
 
@@ -69,6 +71,14 @@ void base_handle::inc_num_owners() noexcept {
     new_value = (expected + num_owners_step);
     ASYNC_CORO_ASSERT((expected & num_owners_mask) < num_owners_mask);
   }
+}
+
+void base_handle::continue_execution() {
+  get_scheduler().continue_execution(*this, internal::passkey{this});
+}
+
+void base_handle::plan_continue_execution() {
+  get_scheduler().plan_continue_execution(*this, internal::passkey{this});
 }
 
 }  // namespace async_coro

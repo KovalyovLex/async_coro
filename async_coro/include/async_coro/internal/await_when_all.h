@@ -62,9 +62,9 @@ struct await_when_all {
 
           base_handle& handle = h.promise();
           if (_suspended.load(std::memory_order::acquire)) {
-            handle.get_scheduler().continue_execution(handle);
+            handle.continue_execution();
           } else {
-            handle.get_scheduler().plan_continue_execution(handle);
+            handle.plan_continue_execution();
           }
         }
       });

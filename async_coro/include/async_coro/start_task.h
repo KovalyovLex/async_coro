@@ -3,6 +3,9 @@
 #include <async_coro/internal/await_start_task.h>
 #include <async_coro/task_launcher.h>
 
+#include <utility>
+
+
 namespace async_coro {
 
 /**
@@ -23,6 +26,12 @@ namespace async_coro {
 template <typename R>
 auto start_task(task_launcher<R> launcher) {
   return internal::await_start_task(std::move(launcher));
+}
+
+template <typename... RArgs>
+  requires(is_task_launchable<RArgs...>)
+auto start_task(RArgs&&... launcher_args) {
+  return internal::await_start_task(task_launcher{std::forward<RArgs>(launcher_args)...});
 }
 
 }  // namespace async_coro

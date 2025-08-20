@@ -167,4 +167,7 @@ template <typename T>
   requires(std::is_invocable_v<T> && internal::is_task_v<std::invoke_result_t<T>>)
 task_launcher(T&&, execution_queue_mark) -> task_launcher<internal::unwrap_task_t<std::invoke_result_t<T>>>;
 
+template <typename... TArgs>
+concept is_task_launchable = requires(TArgs&&... t) { task_launcher{std::forward<TArgs>(t)...}; };
+
 }  // namespace async_coro
