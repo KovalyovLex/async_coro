@@ -5,7 +5,6 @@
 
 #include <utility>
 
-
 namespace async_coro {
 
 /**

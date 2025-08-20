@@ -4,8 +4,6 @@
 #include <async_coro/promise_result.h>
 #include <async_coro/scheduler.h>
 
-#include <atomic>
-
 namespace async_coro {
 
 template <class R>
