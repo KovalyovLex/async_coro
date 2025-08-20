@@ -46,6 +46,7 @@ void coroutine_suspender::try_to_continue_immediately() {
     if (was_coro_suspended) {
       // return flag as continue execution may throw exception that should be handled in finalizer
       *was_coro_suspended = false;
+      _handle->_was_coro_suspended = was_coro_suspended;
     }
 
     if (_handle->is_finished()) [[unlikely]] {

@@ -42,16 +42,19 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
   ASYNC_CORO_ASSERT(handle_impl.is_current_thread_same());
 
   bool was_coro_suspended = false;
+  auto ptr_was_coro_suspended = handle_impl._was_coro_suspended ? handle_impl._was_coro_suspended : &was_coro_suspended;
   handle_impl.set_coroutine_state(coroutine_state::running);
-  handle_impl._was_coro_suspended = &was_coro_suspended;
+  handle_impl._was_coro_suspended = ptr_was_coro_suspended;
+
+  ASYNC_CORO_ASSERT(!*ptr_was_coro_suspended);
 
   handle_impl._handle.resume();
 
-  if (was_coro_suspended) {
+  if (*ptr_was_coro_suspended) {
     return false;
   }
 
-  ASYNC_CORO_ASSERT(handle_impl._was_coro_suspended == nullptr || handle_impl._was_coro_suspended == &was_coro_suspended);
+  ASYNC_CORO_ASSERT(handle_impl._was_coro_suspended == nullptr || handle_impl._was_coro_suspended == ptr_was_coro_suspended);
 
   handle_impl._was_coro_suspended = nullptr;
 
@@ -67,6 +70,8 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
       continue_execution(*handle_impl._parent, internal::passkey{this});
     } else if (!parent) {
       // cleanup coroutine
+      *ptr_was_coro_suspended = true;
+
       bool was_managed = false;
       {
         // remove from managed
