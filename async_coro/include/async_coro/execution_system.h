@@ -13,7 +13,6 @@
 #include <thread>
 #include <vector>
 
-
 namespace async_coro {
 
 /**
