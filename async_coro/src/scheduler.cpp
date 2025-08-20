@@ -5,7 +5,6 @@
 #include <async_coro/thread_safety/unique_lock.h>
 
 #include <algorithm>
-#include <iostream>
 #include <memory>
 #include <thread>
 #include <utility>
@@ -56,8 +55,6 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
       // wake up parent coroutine
       continue_execution(*handle_impl._parent);
     } else if (!parent) {
-      std::cout << "cleanup coro: " << &handle_impl << std::endl;
-
       // cleanup coroutine
       {
         // remove from managed
@@ -96,8 +93,6 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
     }
 
     return true;
-  } else {
-    std::cout << "coro not finished: " << &handle_impl << " state: " << size_t(state) << std::endl;
   }
 
   return false;

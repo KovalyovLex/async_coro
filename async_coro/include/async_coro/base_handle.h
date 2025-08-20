@@ -7,7 +7,6 @@
 #include <atomic>
 #include <coroutine>
 #include <cstdint>
-#include <iostream>
 #include <thread>
 
 namespace async_coro {
@@ -298,7 +297,6 @@ class base_handle {
   }
 
   void set_coroutine_state(coroutine_state value, bool release = false) noexcept {
-    std::cout << "set_coroutine_state: " << size_t(value) << std::endl;
     if (release) {
       update_value(static_cast<uint8_t>(value), get_inverted_mask(coroutine_state_mask), std::memory_order::relaxed, std::memory_order::release);
     } else {
