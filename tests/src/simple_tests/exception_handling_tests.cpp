@@ -29,6 +29,13 @@ struct test_exception : std::runtime_error {
   explicit test_exception(const std::string& message) : std::runtime_error(message) {}
 };
 
+struct test_exception_with_time : test_exception {
+  test_exception_with_time(const std::string& message, std::chrono::steady_clock::time_point t = std::chrono::steady_clock::now())
+      : test_exception(message), raise_time(t) {}
+
+  std::chrono::steady_clock::time_point raise_time;
+};
+
 struct nested_exception : std::runtime_error {
   explicit nested_exception(const std::string& message) : std::runtime_error(message) {}
 };
@@ -627,9 +634,9 @@ TEST(exception_handling, exception_propagation_across_queues) {
   auto worker_throwing_task = []() -> async_coro::task<int> {
     co_await async_coro::switch_to_queue(async_coro::execution_queues::worker);
 
-    std::cout << "going to throw exception at " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count() << std::endl;
+    std::cout << "Going to throw exception" << std::endl;
 
-    throw test_exception("Worker queue exception");
+    throw test_exception_with_time("Worker queue exception");
     co_return 42;
   };
 
@@ -637,8 +644,8 @@ TEST(exception_handling, exception_propagation_across_queues) {
     try {
       auto result = co_await worker_throwing_task();
       co_return result;
-    } catch (const test_exception& e) {
-      std::cout << "exception caught at " << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count() << std::endl;
+    } catch (const test_exception_with_time& e) {
+      std::cout << "Exception caught. Delay (us):" << std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - e.raise_time).count() << std::endl;
       EXPECT_STREQ(e.what(), "Worker queue exception");
       co_return -1;
     }
