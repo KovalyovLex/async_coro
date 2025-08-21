@@ -39,7 +39,7 @@ void coroutine_suspender::try_to_continue_immediately() {
     }
   }
 
-  const auto prev_count = _suspend_count.fetch_sub(1, std::memory_order::release);
+  const auto prev_count = _suspend_count.fetch_sub(1, std::memory_order::acq_rel);
   ASYNC_CORO_ASSERT(prev_count != 0);
 
   if (prev_count == 1) {
