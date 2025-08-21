@@ -1,10 +1,12 @@
 #include <async_coro/base_handle.h>
 #include <async_coro/config.h>
 #include <async_coro/execution_system.h>
+#include <async_coro/internal/scheduled_run_data.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/thread_safety/unique_lock.h>
 
 #include <algorithm>
+#include <atomic>
 #include <memory>
 #include <thread>
 #include <utility>
@@ -41,22 +43,27 @@ bool scheduler::is_current_thread_fits(execution_queue_mark execution_queue) noe
 bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_parent_on_finish) {
   ASYNC_CORO_ASSERT(handle_impl.is_current_thread_same());
 
-  bool was_coro_suspended = false;
-  auto ptr_was_coro_suspended = handle_impl._was_coro_suspended ? handle_impl._was_coro_suspended : &was_coro_suspended;
+  internal::scheduled_run_data local_run_data{};
+  internal::scheduled_run_data* curren_data{nullptr};
+
+  if (handle_impl._run_data.compare_exchange_strong(curren_data, &local_run_data, std::memory_order::relaxed)) {
+    curren_data = &local_run_data;
+  }
+
   handle_impl.set_coroutine_state(coroutine_state::running);
-  handle_impl._was_coro_suspended = ptr_was_coro_suspended;
 
-  ASYNC_CORO_ASSERT(!*ptr_was_coro_suspended);
+  ASYNC_CORO_ASSERT(!curren_data->external_continuation_request);
 
-  handle_impl._handle.resume();
+  handle_impl.get_handle().resume();
 
-  if (*ptr_was_coro_suspended) {
+  if (curren_data->external_continuation_request) {
+    // this coroutine could be managed by another thread and it could be even destroyed so return immediately
     return false;
   }
 
-  ASYNC_CORO_ASSERT(handle_impl._was_coro_suspended == nullptr || handle_impl._was_coro_suspended == ptr_was_coro_suspended);
-
-  handle_impl._was_coro_suspended = nullptr;
+  if (curren_data == &local_run_data) {
+    handle_impl._run_data.store(nullptr, std::memory_order::relaxed);
+  }
 
   const auto state = handle_impl.get_coroutine_state();
 
@@ -70,7 +77,7 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
       continue_execution(*handle_impl._parent, internal::passkey{this});
     } else if (!parent) {
       // cleanup coroutine
-      *ptr_was_coro_suspended = true;
+      curren_data->external_continuation_request = true;
 
       bool was_managed = false;
       {
@@ -134,7 +141,7 @@ void scheduler::add_coroutine(base_handle& handle_impl,
                               execution_queue_mark execution_queue) {
   ASYNC_CORO_ASSERT(handle_impl._execution_thread == std::thread::id{});
   ASYNC_CORO_ASSERT(handle_impl.get_coroutine_state() == coroutine_state::created);
-  ASYNC_CORO_ASSERT(handle_impl._handle);
+  ASYNC_CORO_ASSERT(handle_impl.get_handle());
 
   handle_impl._start_function = std::move(start_function);
 

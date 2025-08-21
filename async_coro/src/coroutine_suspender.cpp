@@ -2,7 +2,10 @@
 #include <async_coro/config.h>
 #include <async_coro/coroutine_suspender.h>
 #include <async_coro/internal/passkey.h>
+#include <async_coro/internal/scheduled_run_data.h>
 #include <async_coro/scheduler.h>
+
+#include <atomic>
 
 namespace async_coro {
 
@@ -25,17 +28,17 @@ void coroutine_suspender::try_to_continue_on_any_thread() {
 void coroutine_suspender::try_to_continue_immediately() {
   ASYNC_CORO_ASSERT(_handle);
 
-  bool* was_coro_suspended = nullptr;
+  internal::scheduled_run_data* run_data = nullptr;
 
   if (!_was_continued_immediately) {
     _was_continued_immediately = true;
 
     _handle->set_coroutine_state(coroutine_state::suspended);
-    was_coro_suspended = std::exchange(_handle->_was_coro_suspended, nullptr);
-    if (was_coro_suspended) {
-      ASYNC_CORO_ASSERT(*was_coro_suspended == false);
+    run_data = _handle->_run_data.exchange(nullptr, std::memory_order::relaxed);
+    if (run_data) {
+      ASYNC_CORO_ASSERT(run_data->external_continuation_request == false);
 
-      *was_coro_suspended = true;
+      run_data->external_continuation_request = true;
     }
   }
 
@@ -43,10 +46,10 @@ void coroutine_suspender::try_to_continue_immediately() {
   ASYNC_CORO_ASSERT(prev_count != 0);
 
   if (prev_count == 1) {
-    if (was_coro_suspended) {
+    if (run_data) {
       // return flag as continue execution may throw exception that should be handled in finalizer
-      *was_coro_suspended = false;
-      _handle->_was_coro_suspended = was_coro_suspended;
+      run_data->external_continuation_request = false;
+      _handle->_run_data.store(run_data, std::memory_order::release);
     }
 
     if (_handle->is_finished()) [[unlikely]] {

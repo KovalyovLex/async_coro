@@ -32,6 +32,9 @@ enum class coroutine_state : std::uint8_t {
 };
 
 class scheduler;
+namespace internal {
+class scheduled_run_data;
+}
 
 /**
  * @brief Base class for coroutine handle management
@@ -242,6 +245,7 @@ class base_handle {
 #endif
 
   void init_promise(std::coroutine_handle<> h) noexcept { _handle = h; }
+  std::coroutine_handle<> get_handle() noexcept { return _handle; }
 
   void on_final_suspend() noexcept {
     set_coroutine_state(coroutine_state::finished, true);
@@ -315,8 +319,8 @@ class base_handle {
     base_handle* _parent;
   };
 
+  std::atomic<internal::scheduled_run_data*> _run_data{nullptr};
   callback_base::ptr _start_function;
-  bool* _was_coro_suspended = nullptr;
   scheduler* _scheduler = nullptr;
   std::coroutine_handle<> _handle;
   std::thread::id _execution_thread = {};

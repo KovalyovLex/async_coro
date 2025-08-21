@@ -42,8 +42,7 @@ void base_handle::set_continuation_functor(callback_base* f) noexcept {
 void base_handle::destroy_impl() {
   auto continuation = release_continuation_functor();
 
-  const auto handle = std::exchange(_handle, {});
-  handle.destroy();
+  get_handle().destroy();
 
   if (continuation) {
     continuation->destroy();
