@@ -24,39 +24,36 @@ struct await_callback {
 
   bool await_ready() const noexcept { return false; }
 
+#if defined _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4702)
+#endif
+
   template <typename U>
     requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> h) {
-    ASYNC_CORO_ASSERT(_suspended.load(std::memory_order::relaxed) == false);
+    _suspension = h.promise().suspend(2);
 
-    h.promise().on_suspended();
-
-    _on_await([h, done = false, this]() {
-      if (!done && !_was_continued.exchange(true, std::memory_order::relaxed)) [[likely]] {
+    _on_await([done = false, this]() {
+      if (!done) [[likely]] {
         const_cast<bool&>(done) = true;  // we intensionally breaks constant here to keep callback immutable
 
-        base_handle& handle = h.promise();
-        if (handle.is_finished()) [[unlikely]] {
-          // some exception happened before callback call
-          return;
-        }
-        if (_suspended.load(std::memory_order::acquire)) {
-          handle.get_scheduler().continue_execution(handle);
-        } else {
-          handle.get_scheduler().plan_continue_execution(handle);
-        }
+        _suspension.try_to_continue_on_any_thread();
       }
     });
 
-    _suspended.store(true, std::memory_order::release);
+    _suspension.try_to_continue_immediately();
   }
+
+#if defined _MSC_VER
+#pragma warning(pop)
+#endif
 
   void await_resume() const noexcept {}
 
  private:
   T _on_await;
-  std::atomic_bool _suspended{false};
-  std::atomic_bool _was_continued{false};
+  coroutine_suspender _suspension;
 };
 
 template <typename T>

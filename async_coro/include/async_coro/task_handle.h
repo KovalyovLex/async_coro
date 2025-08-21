@@ -4,6 +4,7 @@
 #include <async_coro/config.h>
 #include <async_coro/internal/passkey.h>
 #include <async_coro/internal/promise_type.h>
+#include <async_coro/internal/task_handle_awaiter.h>
 
 #include <concepts>
 #include <coroutine>
@@ -141,6 +142,10 @@ class task_handle final {
 
   void check_exception() const noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
     _handle.promise().check_exception();
+  }
+
+  internal::task_handle_awaiter<R> coro_await_transform(base_handle&) & {
+    return internal::task_handle_awaiter<R>{*this};
   }
 
  private:

@@ -2,6 +2,7 @@
 
 #include <async_coro/callback.h>
 #include <async_coro/config.h>
+#include <async_coro/coroutine_suspender.h>
 #include <async_coro/execution_queue_mark.h>
 
 #include <atomic>
@@ -57,6 +58,7 @@ class scheduler;
  */
 class base_handle {
   friend scheduler;
+  friend coroutine_suspender;
 
  public:
   /**
@@ -194,21 +196,6 @@ class base_handle {
   bool is_suspended() const noexcept { return get_coroutine_state() == coroutine_state::suspended; }
 
   /**
-   * @brief Marks the coroutine as suspended
-   *
-   * Should be called on every await_suspend in child coroutines to properly
-   * track the coroutine state. This method updates the internal state to
-   * indicate that the coroutine is waiting for resumption.
-   *
-   * @note This method is noexcept and will not throw exceptions
-   * @note This method should be called from await_suspend implementations
-   * @note The state change is atomic and thread-safe
-   */
-  void on_suspended() noexcept {
-    set_coroutine_state(coroutine_state::suspended);
-  }
-
-  /**
    * @brief Switches the coroutine to a different execution queue
    *
    * Should be called instead of on_suspended when the coroutine needs to
@@ -240,6 +227,10 @@ class base_handle {
    */
   execution_queue_mark get_execution_queue() const noexcept {
     return _execution_queue;
+  }
+
+  auto suspend(std::uint32_t suspend_count) noexcept {
+    return coroutine_suspender{*this, suspend_count};
   }
 
  protected:
@@ -325,6 +316,7 @@ class base_handle {
   };
 
   callback_base::ptr _start_function;
+  bool* _was_coro_suspended = nullptr;
   scheduler* _scheduler = nullptr;
   std::coroutine_handle<> _handle;
   std::thread::id _execution_thread = {};

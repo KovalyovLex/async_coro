@@ -17,6 +17,7 @@
 namespace async_coro {
 
 class base_handle;
+class coroutine_suspender;
 
 /**
  * @class scheduler
@@ -75,9 +76,10 @@ class scheduler {
    * @param coroutine_or_function The coroutine or function to be executed.
    * @return A handle to the started task.
    */
-  template <typename T>
-  auto start_task(T&& coroutine_or_function, execution_queue_mark execution_queue = execution_queues::main) {
-    return start_task(task_launcher{std::forward<T>(coroutine_or_function), execution_queue});
+  template <typename... RArgs>
+    requires(is_task_launchable<RArgs...>)
+  auto start_task(RArgs&&... launcher_args) {
+    return start_task(task_launcher{std::forward<RArgs>(launcher_args)...});
   }
 
   /**
@@ -106,15 +108,7 @@ class scheduler {
    * thread is suitable, or schedule it for later execution.
    * @param handle_impl The handle of the coroutine to continue.
    */
-  void continue_execution(base_handle& handle_impl);
-
-  /**
-   * @brief Schedules a coroutine for continued execution on its assigned thread.
-   * @details For internal use. Unlike `continue_execution`, this method always schedules
-   * the coroutine for later execution without attempting to run it immediately.
-   * @param handle_impl The handle of the coroutine to schedule.
-   */
-  void plan_continue_execution(base_handle& handle_impl);
+  void continue_execution(base_handle& handle_impl, internal::passkey_any<coroutine_suspender, scheduler>);
 
   // Embed coroutine. Returns true if coroutine was finished
   bool on_child_coro_added(base_handle& parent, base_handle& child, internal::passkey<task_base>);

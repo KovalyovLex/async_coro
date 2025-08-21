@@ -70,8 +70,6 @@ struct await_when_any {
   }
 
   bool await_ready() {
-    ASYNC_CORO_ASSERT(_suspended.load(std::memory_order::relaxed) == false);
-
     const auto store_result = [this](auto& coro, auto index) -> bool {
       if (!this->_has_result.exchange(true, std::memory_order::relaxed)) {
         using result_t = decltype(coro.get());
@@ -91,12 +89,12 @@ struct await_when_any {
   template <typename U>
     requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> h) {
-    h.promise().on_suspended();
+    _suspension = h.promise().suspend(2);
 
     const auto continue_f = [&](auto& coro, auto index) {
       using result_t = decltype(coro.get());
 
-      coro.continue_with([this, h, index](auto& res) {
+      coro.continue_with([this, index](auto& res) {
         if (!_has_result.exchange(true, std::memory_order::relaxed)) {
           // continue this coro
           if constexpr (!std::is_void_v<result_t>) {
@@ -104,19 +102,14 @@ struct await_when_any {
           } else {
             new (&_result) result_type{index, std::monostate{}};
           }
-          base_handle& handle = h.promise();
-          if (_suspended.load(std::memory_order::acquire)) {
-            handle.get_scheduler().continue_execution(handle);
-          } else {
-            handle.get_scheduler().plan_continue_execution(handle);
-          }
+          _suspension.try_to_continue_on_any_thread();
         }
       });
     };
 
     call_functor(continue_f, std::index_sequence_for<TArgs...>{});
 
-    _suspended.store(true, std::memory_order::release);
+    _suspension.try_to_continue_immediately();
   }
 
   result_type await_resume() noexcept(std::is_nothrow_move_constructible_v<result_type>) {
@@ -139,11 +132,11 @@ struct await_when_any {
  private:
   std::tuple<task_launcher<TArgs>...> _launchers;
   std::tuple<task_handle<TArgs>...> _coroutines;
+  coroutine_suspender _suspension;
   union {
     result_type _result;
   };
   std::atomic_bool _has_result{false};
-  std::atomic_bool _suspended{false};
 };
 
 template <typename... TArgs>

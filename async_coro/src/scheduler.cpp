@@ -41,8 +41,22 @@ bool scheduler::is_current_thread_fits(execution_queue_mark execution_queue) noe
 bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_parent_on_finish) {
   ASYNC_CORO_ASSERT(handle_impl.is_current_thread_same());
 
+  bool was_coro_suspended = false;
+  auto ptr_was_coro_suspended = handle_impl._was_coro_suspended ? handle_impl._was_coro_suspended : &was_coro_suspended;
   handle_impl.set_coroutine_state(coroutine_state::running);
+  handle_impl._was_coro_suspended = ptr_was_coro_suspended;
+
+  ASYNC_CORO_ASSERT(!*ptr_was_coro_suspended);
+
   handle_impl._handle.resume();
+
+  if (*ptr_was_coro_suspended) {
+    return false;
+  }
+
+  ASYNC_CORO_ASSERT(handle_impl._was_coro_suspended == nullptr || handle_impl._was_coro_suspended == ptr_was_coro_suspended);
+
+  handle_impl._was_coro_suspended = nullptr;
 
   const auto state = handle_impl.get_coroutine_state();
 
@@ -53,15 +67,18 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
   } else if (state == coroutine_state::finished) {
     if (auto* parent = handle_impl.get_parent(); continue_parent_on_finish && parent && parent->get_coroutine_state() == coroutine_state::suspended) {
       // wake up parent coroutine
-      continue_execution(*handle_impl._parent);
+      continue_execution(*handle_impl._parent, internal::passkey{this});
     } else if (!parent) {
       // cleanup coroutine
+      *ptr_was_coro_suspended = true;
+
+      bool was_managed = false;
       {
         // remove from managed
         unique_lock lock{_mutex};
         auto it = std::find(_managed_coroutines.begin(), _managed_coroutines.end(), &handle_impl);
-        ASYNC_CORO_ASSERT(it != _managed_coroutines.end());
         if (it != _managed_coroutines.end()) {
+          was_managed = true;
           if (*it != _managed_coroutines.back()) {
             std::swap(*it, _managed_coroutines.back());
           }
@@ -89,7 +106,9 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
       handle_impl.execute_continuation();
 #endif
 
-      handle_impl.on_task_freed_by_scheduler();
+      if (was_managed) {
+        handle_impl.on_task_freed_by_scheduler();
+      }
     }
 
     return true;
@@ -153,7 +172,7 @@ void scheduler::set_unhandled_exception_handler(unique_function<void(std::except
 }
 #endif
 
-void scheduler::continue_execution(base_handle& handle_impl) {
+void scheduler::continue_execution(base_handle& handle_impl, internal::passkey_any<coroutine_suspender, scheduler>) {
   ASYNC_CORO_ASSERT(handle_impl._execution_thread != std::thread::id{});
   ASYNC_CORO_ASSERT(handle_impl.get_coroutine_state() == coroutine_state::suspended);
 
@@ -163,13 +182,6 @@ void scheduler::continue_execution(base_handle& handle_impl) {
   } else {
     plan_continue_on_thread(handle_impl, handle_impl._execution_queue);
   }
-}
-
-void scheduler::plan_continue_execution(base_handle& handle_impl) {
-  ASYNC_CORO_ASSERT(handle_impl._execution_thread != std::thread::id{});
-  ASYNC_CORO_ASSERT(handle_impl.get_coroutine_state() == coroutine_state::suspended);
-
-  plan_continue_on_thread(handle_impl, handle_impl._execution_queue);
 }
 
 void scheduler::change_execution_queue(base_handle& handle_impl,
