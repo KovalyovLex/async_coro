@@ -102,7 +102,7 @@ struct await_when_any {
           } else {
             new (&_result) result_type{index, std::monostate{}};
           }
-          _suspension.try_to_continue_on_any_thread();
+          _suspension.try_to_continue_from_any_thread();
         }
       });
     };

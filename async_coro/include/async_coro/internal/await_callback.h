@@ -38,7 +38,7 @@ struct await_callback {
       if (!done) [[likely]] {
         const_cast<bool&>(done) = true;  // we intensionally breaks constant here to keep callback immutable
 
-        _suspension.try_to_continue_on_any_thread();
+        _suspension.try_to_continue_from_any_thread();
       }
     });
 
