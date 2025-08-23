@@ -16,6 +16,8 @@ void coroutine_suspender::try_to_continue_from_any_thread() {
   ASYNC_CORO_ASSERT(prev_count != 0);
 
   if (prev_count == 1) {
+    (void)_suspend_count.load(std::memory_order::acquire);
+
     if (_handle->is_finished()) [[unlikely]] {
       // some exception happened before callback call
       return;
@@ -42,10 +44,12 @@ void coroutine_suspender::try_to_continue_immediately() {
     }
   }
 
-  const auto prev_count = _suspend_count.fetch_sub(1, std::memory_order::acq_rel);
+  const auto prev_count = _suspend_count.fetch_sub(1, std::memory_order::release);
   ASYNC_CORO_ASSERT(prev_count != 0);
 
   if (prev_count == 1) {
+    (void)_suspend_count.load(std::memory_order::acquire);
+
     if (run_data) {
       // return flag as continue execution may throw exception that should be handled in finalizer
       run_data->external_continuation_request = false;
