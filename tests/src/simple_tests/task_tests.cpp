@@ -12,6 +12,7 @@
 
 #include <memory>
 #include <semaphore>
+#include <thread>
 #include <variant>
 
 namespace task_tests {
@@ -1369,6 +1370,7 @@ TEST(task, multiple_workers_async_execution) {
   size_t num_repeats = 0;
   while (!handle.done() && num_repeats++ < 1000000) {
     scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
+    std::this_thread::yield();
   }
 
   ASSERT_TRUE(handle.done());
