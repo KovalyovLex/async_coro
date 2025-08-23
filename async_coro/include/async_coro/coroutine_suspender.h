@@ -19,7 +19,7 @@ class base_handle;
 /// @note The suspend count is managed atomically. The coroutine is resumed either immediately or scheduled
 /// for execution on any thread, depending on which method is called. Method `try_to_continue_immediately` should be called at least once.
 ///
-/// @see try_to_continue_on_any_thread
+/// @see try_to_continue_from_any_thread
 /// @see try_to_continue_immediately
 class coroutine_suspender {
  public:
@@ -50,12 +50,13 @@ class coroutine_suspender {
 
   ~coroutine_suspender() noexcept = default;
 
-  // Decrements suspend_count and if it zero schedules coroutine.
-  void try_to_continue_on_any_thread();
+  /// Decrements suspend_count and if it zero schedules coroutine.
+  void try_to_continue_from_any_thread();
 
-  // Decrements suspend_count and if it zero schedules coroutine.
-  // Should be called only on the thread where this object was created.
-  // This method should be called at least once.
+  /// Decrements suspend_count and if it zero schedules coroutine.
+  ///
+  /// @note Should be called only on the thread where this object was created.
+  /// This method should be called at least once.
   void try_to_continue_immediately();
 
  private:

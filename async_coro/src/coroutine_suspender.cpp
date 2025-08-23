@@ -9,7 +9,7 @@
 
 namespace async_coro {
 
-void coroutine_suspender::try_to_continue_on_any_thread() {
+void coroutine_suspender::try_to_continue_from_any_thread() {
   ASYNC_CORO_ASSERT(_handle);
 
   const auto prev_count = _suspend_count.fetch_sub(1, std::memory_order::release);

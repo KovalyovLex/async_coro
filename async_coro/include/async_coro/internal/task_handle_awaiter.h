@@ -29,7 +29,7 @@ struct task_handle_awaiter {
     _suspension = h.promise().suspend(2);
 
     _th.continue_with([this](promise_result<R>&) {
-      _suspension.try_to_continue_on_any_thread();
+      _suspension.try_to_continue_from_any_thread();
     });
 
     _suspension.try_to_continue_immediately();

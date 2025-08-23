@@ -55,7 +55,7 @@ struct await_when_all {
 
     const auto continue_f = [&](auto& coro) {
       coro.continue_with([this](auto&) noexcept {
-        _suspension.try_to_continue_on_any_thread();
+        _suspension.try_to_continue_from_any_thread();
       });
     };
 
