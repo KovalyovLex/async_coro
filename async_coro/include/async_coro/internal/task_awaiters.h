@@ -274,6 +274,11 @@ struct any_awaiter {
 
   explicit any_awaiter(std::tuple<TAwaiters...>&& awaiters) noexcept : _awaiters(std::move(awaiters)) {}
 
+  any_awaiter(any_awaiter&& other) noexcept
+      : _awaiters(std::move(other._awaiters)) {
+    ASYNC_CORO_ASSERT(other._has_result.load(std::memory_order::relaxed) = false);
+  }
+
   template <class TAwaiter>
     requires(std::is_rvalue_reference_v<TAwaiter &&>)
   auto operator||(TAwaiter&& other) && noexcept {
@@ -374,7 +379,7 @@ struct any_awaiter {
  private:
   template <class F, size_t... TI>
   auto calculate_is_ready(const F& store_result, std::integer_sequence<size_t, TI...>) {
-    return ((std::get<TI>(_awaiters).done() && store_result(std::get<TI>(_awaiters), std::in_place_index_t<TI>{})) || ...);
+    return ((std::get<TI>(_awaiters).await_ready() && store_result(std::get<TI>(_awaiters), std::in_place_index_t<TI>{})) || ...);
   }
 
   template <class F, size_t... TI>
