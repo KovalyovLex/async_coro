@@ -1332,7 +1332,7 @@ TEST(task, multiple_workers_async_execution) {
         },
         async_coro::execution_queues::worker);
 
-    co_await handle_void;
+    co_await std::move(handle_void);
 
     auto handle_int = co_await async_coro::start_task(
         []() -> async_coro::task<int> {
@@ -1352,13 +1352,13 @@ TEST(task, multiple_workers_async_execution) {
         },
         async_coro::execution_queues::main);
 
-    const auto res_int = co_await handle_int;
+    const auto res_int = co_await std::move(handle_int);
     EXPECT_EQ(res_int, 3);
 
-    const auto res_double = co_await handle_double;
+    const auto res_double = co_await std::move(handle_double);
     EXPECT_DOUBLE_EQ(res_double, 3.1415);
 
-    const auto res_float = co_await handle_float;
+    const auto res_float = co_await std::move(handle_float);
     EXPECT_FLOAT_EQ(res_float, 2.34f);
 
     co_return res_float;
