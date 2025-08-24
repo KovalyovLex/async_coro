@@ -45,7 +45,6 @@ TEST(task, await_no_wait) {
   auto handle = scheduler.start_task(std::move(routine));
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), 2);
-  EXPECT_EQ((int)handle, 2);
 }
 
 TEST(task, resume_on_callback_deep) {

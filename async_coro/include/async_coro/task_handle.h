@@ -6,7 +6,6 @@
 #include <async_coro/internal/promise_type.h>
 #include <async_coro/internal/task_handle_awaiter.h>
 
-#include <concepts>
 #include <coroutine>
 #include <type_traits>
 #include <utility>
@@ -84,27 +83,6 @@ class task_handle final {
   }
 
   void get() const&& = delete;
-
-  template <typename Y>
-    requires(std::same_as<Y, R> && !std::same_as<R, void>)
-  operator Y&() & {
-    ASYNC_CORO_ASSERT(_handle && _handle.promise().is_finished());
-    return _handle.promise().get_result_ref();
-  }
-
-  template <typename Y>
-    requires(std::same_as<Y, R> && !std::same_as<R, void>)
-  operator const Y&() const& {
-    ASYNC_CORO_ASSERT(_handle && _handle.promise().is_finished());
-    return _handle.promise().get_result_cref();
-  }
-
-  template <typename Y>
-    requires(std::same_as<Y, R> && !std::same_as<R, void>)
-  operator Y() && {
-    ASYNC_CORO_ASSERT(_handle && _handle.promise().is_finished());
-    return _handle.promise().move_result();
-  }
 
   // Checks if coroutine is finished.
   // If state is empty returns true as well
