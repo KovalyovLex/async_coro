@@ -7,7 +7,6 @@
 #include <async_coro/task_launcher.h>
 
 #include <algorithm>
-#include <atomic>
 #include <coroutine>
 #include <tuple>
 #include <type_traits>
