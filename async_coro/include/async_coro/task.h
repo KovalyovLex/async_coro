@@ -28,7 +28,7 @@ struct task_base {
  *
  * @tparam R The result type produced by the coroutine.
  */
-template <typename R>
+template <typename R = void>
 struct task final : private task_base {
   using promise_type = async_coro::internal::promise_type<R>;
   using handle_type = std::coroutine_handle<promise_type>;

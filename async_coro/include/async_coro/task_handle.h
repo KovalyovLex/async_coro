@@ -27,7 +27,7 @@ namespace async_coro {
  *
  * @tparam R The result type produced by the coroutine.
  */
-template <typename R>
+template <typename R = void>
 class task_handle final {
   using promise_type = async_coro::internal::promise_type<R>;
   using handle_type = std::coroutine_handle<promise_type>;
@@ -144,8 +144,8 @@ class task_handle final {
     _handle.promise().check_exception();
   }
 
-  internal::task_handle_awaiter<R> coro_await_transform(base_handle&) & {
-    return internal::task_handle_awaiter<R>{*this};
+  internal::task_handle_awaiter<R> coro_await_transform(base_handle&) && {
+    return internal::task_handle_awaiter<R>{std::move(*this)};
   }
 
  private:
