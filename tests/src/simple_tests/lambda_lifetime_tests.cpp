@@ -3,14 +3,14 @@
 #include <async_coro/scheduler.h>
 #include <async_coro/start_task.h>
 #include <async_coro/task.h>
+#include <async_coro/task_handle_operators.h>
 #include <async_coro/task_launcher.h>
-#include <async_coro/when_all.h>
-#include <async_coro/when_any.h>
 #include <gtest/gtest.h>
 
 #include <functional>
 #include <memory>
 #include <variant>
+
 
 namespace lambda_lifetime_tests {
 
@@ -246,10 +246,10 @@ TEST(lambda_lifetime, when_all_tasks) {
       };
 
       // Use when_all to wait for all tasks
-      auto results = co_await async_coro::when_all(
-          async_coro::task_launcher{std::move(task1)},
-          async_coro::task_launcher{std::move(task2)},
-          async_coro::task_launcher{std::move(task3)});
+      auto results = co_await (
+          co_await async_coro::start_task(std::move(task1)) &&
+          co_await async_coro::start_task(std::move(task2)) &&
+          co_await async_coro::start_task(std::move(task3)));
 
       EXPECT_EQ(lifetime_tracker::num_instances, 3);
 
@@ -343,10 +343,10 @@ TEST(lambda_lifetime, when_any_tasks) {
       };
 
       // Use when_any to wait for the first task to complete
-      auto result = co_await async_coro::when_any(
-          async_coro::task_launcher{std::move(task1)},
-          async_coro::task_launcher{std::move(task2)},
-          async_coro::task_launcher{std::move(task3)});
+      auto result = co_await (
+          co_await async_coro::start_task(std::move(task1)) ||
+          co_await async_coro::start_task(std::move(task2)) ||
+          co_await async_coro::start_task(std::move(task3)));
 
       EXPECT_EQ(lifetime_tracker::num_instances, 3);
 

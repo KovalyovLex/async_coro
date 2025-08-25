@@ -8,9 +8,8 @@
 #include <async_coro/start_task.h>
 #include <async_coro/switch_to_queue.h>
 #include <async_coro/task.h>
+#include <async_coro/task_handle_operators.h>
 #include <async_coro/task_launcher.h>
-#include <async_coro/when_all.h>
-#include <async_coro/when_any.h>
 #include <gtest/gtest.h>
 
 #include <atomic>
@@ -234,9 +233,9 @@ TEST(exception_handling, when_all_one_task_throws) {
 
   auto main_coroutine = [normal_task, throwing_task]() -> async_coro::task<int> {
     try {
-      auto results = co_await async_coro::when_all(
-          async_coro::task_launcher{normal_task},
-          async_coro::task_launcher{throwing_task});
+      auto results = co_await (
+          co_await async_coro::start_task(normal_task) &&
+          co_await async_coro::start_task(throwing_task));
 
       const auto sum = std::apply(
           [](auto... values) {
@@ -276,10 +275,10 @@ TEST(exception_handling, when_all_multiple_tasks_throw) {
 
   auto main_coroutine = [throwing_task1, throwing_task2, normal_task]() -> async_coro::task<int> {
     try {
-      auto results = co_await async_coro::when_all(
-          async_coro::task_launcher{throwing_task1},
-          async_coro::task_launcher{throwing_task2},
-          async_coro::task_launcher{normal_task});
+      auto results = co_await (
+          co_await async_coro::start_task(throwing_task1) &&
+          co_await async_coro::start_task(throwing_task2) &&
+          co_await async_coro::start_task(normal_task));
 
       const auto sum = std::apply(
           [](auto... values) {
@@ -328,9 +327,9 @@ TEST(exception_handling, when_all_async_throwing_tasks) {
 
   auto main_coroutine = [async_throwing_task1, async_throwing_task2]() -> async_coro::task<int> {
     try {
-      auto results = co_await async_coro::when_all(
-          async_coro::task_launcher{async_throwing_task1},
-          async_coro::task_launcher{async_throwing_task2});
+      auto results = co_await (
+          co_await async_coro::start_task(async_throwing_task1) &&
+          co_await async_coro::start_task(async_throwing_task2));
 
       const auto sum = std::apply(
           [](auto... values) {
@@ -374,9 +373,9 @@ TEST(exception_handling, when_any_one_task_throws) {
 
   auto main_coroutine = [normal_task, throwing_task]() -> async_coro::task<int> {
     try {
-      auto result = co_await async_coro::when_any(
-          async_coro::task_launcher{normal_task},
-          async_coro::task_launcher{throwing_task});
+      auto result = co_await (
+          co_await async_coro::start_task(normal_task) ||
+          co_await async_coro::start_task(throwing_task));
 
       int value = 0;
       std::visit([&value](auto v) {
@@ -415,9 +414,9 @@ TEST(exception_handling, when_any_all_tasks_throw) {
 
   auto main_coroutine = [throwing_task1, throwing_task2]() -> async_coro::task<int> {
     try {
-      auto result = co_await async_coro::when_any(
-          async_coro::task_launcher{throwing_task1},
-          async_coro::task_launcher{throwing_task2});
+      auto result = co_await (
+          co_await async_coro::start_task(throwing_task1) ||
+          co_await async_coro::start_task(throwing_task2));
 
       int value = 0;
       std::visit([&value](auto v) {
@@ -593,10 +592,10 @@ TEST(exception_handling, mixed_success_and_failure_scenarios) {
 
   auto main_coroutine = [successful_task, async_throwing_task, callback_throwing_task]() -> async_coro::task<int> {
     try {
-      auto results = co_await async_coro::when_all(
-          async_coro::task_launcher{successful_task},
-          async_coro::task_launcher{async_throwing_task},
-          async_coro::task_launcher{callback_throwing_task});
+      auto results = co_await (
+          co_await async_coro::start_task(successful_task) &&
+          co_await async_coro::start_task(async_throwing_task) &&
+          co_await async_coro::start_task(callback_throwing_task));
 
       const auto sum = std::apply(
           [](auto... values) {
@@ -714,9 +713,9 @@ TEST(exception_handling, void_coroutines_with_exceptions) {
 
   auto main_coroutine = [void_normal_task, void_throwing_task]() -> async_coro::task<int> {
     try {
-      co_await async_coro::when_all(
-          async_coro::task_launcher{void_normal_task},
-          async_coro::task_launcher{void_throwing_task});
+      co_await (
+          co_await async_coro::start_task(void_normal_task) &&
+          co_await async_coro::start_task(void_throwing_task));
 
       co_return 42;
     } catch (const test_exception& e) {
@@ -745,9 +744,9 @@ TEST(exception_handling, void_coroutines_when_any_exception) {
 
   auto main_coroutine = [void_normal_task, void_throwing_task]() -> async_coro::task<int> {
     try {
-      auto result = co_await async_coro::when_any(
-          async_coro::task_launcher{void_normal_task},
-          async_coro::task_launcher{void_throwing_task});
+      auto result = co_await (
+          co_await async_coro::start_task(void_normal_task) ||
+          co_await async_coro::start_task(void_throwing_task));
 
       EXPECT_EQ(result.index(), 0);  // Should get the normal task
       co_return 42;

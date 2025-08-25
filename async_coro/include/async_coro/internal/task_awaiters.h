@@ -8,7 +8,6 @@
 
 #include <atomic>
 #include <cstdint>
-#include <memory>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -294,7 +293,7 @@ struct any_awaiter {
 
   any_awaiter(any_awaiter&& other) noexcept
       : _awaiters(std::move(other._awaiters)) {
-    ASYNC_CORO_ASSERT(other._has_result.load(std::memory_order::relaxed) = false);
+    ASYNC_CORO_ASSERT(other._result_index.load(std::memory_order::relaxed) == 0);
   }
 
   template <class TAwaiter>
@@ -375,7 +374,7 @@ struct any_awaiter {
 
   void check_coro_exception() const noexcept {}
 
-  result_type await_resume() noexcept(std::is_nothrow_move_constructible_v<result_type>) {
+  result_type await_resume() {
     union_res res;
     const auto index = _result_index.load(std::memory_order::relaxed);
 
