@@ -47,18 +47,20 @@ constexpr auto get_variant_for_types(types_holder<TArgs...>) noexcept {
   return std::variant<TArgs...>{};
 }
 
-template <size_t I, size_t... Ints, class TTuple, class TElem>
+template <size_t... Ints, class TTuple, class TElem>
 constexpr auto replace_last_tuple_elem_impl(std::integer_sequence<size_t, Ints...>, TTuple&& tuple, TElem&& new_last_elem) noexcept {
   static_assert(!std::is_reference_v<TElem>);
 
-  using tuple_t = std::tuple<std::tuple_element<Ints, TTuple>..., TElem>;
+  using tuple_t = std::tuple<typename std::tuple_element<Ints, TTuple>::type..., TElem>;
 
   return tuple_t{std::get<Ints>(std::move(tuple))..., std::move(new_last_elem)};
 }
 
 template <class TTuple, class TElem>
 constexpr auto replace_last_tuple_elem(TTuple&& tuple, TElem&& new_last_elem) noexcept {
-  return replace_last_tuple_elem_impl(std::make_index_sequence<std::tuple_size_v<TTuple> - 1>(), std::forward<TTuple>(tuple), std::forward<TElem>(new_last_elem));
+  static_assert(std::tuple_size_v<TTuple> > 1);
+
+  return replace_last_tuple_elem_impl(std::make_index_sequence<std::tuple_size_v<TTuple> - 1>{}, std::forward<TTuple>(tuple), std::forward<TElem>(new_last_elem));
 }
 
 template <class TTuple, size_t... Ints>
@@ -120,13 +122,13 @@ struct handle_awaiter {
   explicit handle_awaiter(task_handle<TRes> handle) noexcept : _handle(std::move(handle)) {}
 
   template <class TRes2>
-  all_awaiter<handle_awaiter<TRes>, handle_awaiter<TRes2>> operator&&(task_handle<TRes2>&& other) && noexcept {
-    return {._awaiters = {std::move(*this), handle_awaiter<TRes2>{std::move(other)}}};
+  auto operator&&(task_handle<TRes2>&& other) && noexcept {
+    return all_awaiter{std::tuple<handle_awaiter<TRes>, handle_awaiter<TRes2>>{std::move(*this), handle_awaiter<TRes2>{std::move(other)}}};
   }
 
   template <class TRes2>
-  any_awaiter<handle_awaiter<TRes>, handle_awaiter<TRes2>> operator||(task_handle<TRes2>&& other) && noexcept {
-    return {._awaiters = {std::move(*this), handle_awaiter<TRes2>{std::move(other)}}};
+  auto operator||(task_handle<TRes2>&& other) && noexcept {
+    return any_awaiter{std::tuple<handle_awaiter<TRes>, handle_awaiter<TRes2>>{std::move(*this), handle_awaiter<TRes2>{std::move(other)}}};
   }
 
   bool await_ready() const noexcept { return _handle.done(); }
@@ -198,12 +200,10 @@ struct all_awaiter {
     return any_awaiter{std::tuple<all_awaiter, TAwaiter>{std::move(*this), std::move(other)}};
   }
 
-  // && ... || task - case
+  // && ... || task - case. Operator && has less precedence so its equal to (&& ...) || task case
   template <class TRes>
   auto operator||(task_handle<TRes>&& other) && noexcept {
-    auto& last_awaiter = std::get<sizeof...(TAwaiters) - 2>(_awaiters);
-
-    return internal::all_awaiter{replace_last_tuple_elem(std::move(_awaiters), std::move(last_awaiter) || std::move(other))};
+    return any_awaiter{std::tuple<all_awaiter, handle_awaiter<TRes>>{std::move(*this), std::move(other)}};
   }
 
   template <class TAwaiter>
@@ -322,12 +322,10 @@ struct any_awaiter {
     return all_awaiter{std::tuple<any_awaiter, TAwaiter>{std::move(*this), std::move(other)}};
   }
 
-  // || ... && task - case
+  // || ... && task - case. Operator && has less precedence so this can happen only in (|| ...) && task case
   template <class TRes>
   auto operator&&(task_handle<TRes>&& other) && noexcept {
-    auto& last_awaiter = std::get<sizeof...(TAwaiters) - 2>(_awaiters);
-
-    return internal::any_awaiter{replace_last_tuple_elem(std::move(_awaiters), std::move(last_awaiter) && std::move(other))};
+    return all_awaiter{std::tuple<any_awaiter, handle_awaiter<TRes>>{std::move(*this), handle_awaiter<TRes>{std::move(other)}}};
   }
 
   template <class TAwaiter>

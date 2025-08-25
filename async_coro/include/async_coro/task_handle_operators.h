@@ -75,7 +75,7 @@ auto operator||(task_handle<TRes1>&& a, internal::any_awaiter<TAwaitables...>&& 
 
 template <class TRes1, class... TAwaitables>
 auto operator||(task_handle<TRes1>&& a, internal::all_awaiter<TAwaitables...>&& b) noexcept {
-  return internal::any_awaiter{std::make_tuple(internal::handle_awaiter<TRes1>{std::move(a)})} || std::move(b);
+  return internal::any_awaiter{std::make_tuple(internal::handle_awaiter<TRes1>{std::move(a)}, std::move(b))};
 }
 
 // Delete lvalue overloads to prevent use-after-move

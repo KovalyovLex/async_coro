@@ -4,8 +4,46 @@
 #include <gtest/gtest.h>
 
 #include <thread>
+#include <tuple>
 #include <type_traits>
 #include <variant>
+
+namespace test_utils {
+
+template <class T, template <class...> class Template>
+struct is_specialization : std::false_type {};
+
+template <template <class...> class Template, class... Args>
+struct is_specialization<Template<Args...>, Template> : std::true_type {};
+
+template <class T>
+constexpr auto int_visitor_impl(T num) noexcept;
+
+template <class... TArgs>
+constexpr auto int_applier_impl(TArgs... num) noexcept {
+  return (int_visitor_impl(num) + ...);
+}
+
+template <class T>
+constexpr auto int_visitor_impl(T num) noexcept {
+  if constexpr (!std::is_same_v<T, std::monostate>) {
+    if constexpr (is_specialization<T, std::tuple>::value) {
+      return std::apply([](auto... nums) noexcept { return int_applier_impl(nums...); }, num);
+    } else if constexpr (is_specialization<T, std::variant>::value) {
+      return std::visit([](auto n) noexcept { return int_visitor_impl(n); }, num);
+    } else {
+      return int(num);
+    }
+  } else {
+    return 0;
+  }
+}
+
+constexpr auto int_visitor = [](auto num) noexcept {
+  return int_visitor_impl(num);
+};
+
+}  // namespace test_utils
 
 TEST(task_op, and_result_pair) {
   auto routine1 = []() -> async_coro::task<int> {
@@ -193,14 +231,6 @@ TEST(task_op, or_result_triple_with_void) {
     co_return;
   };
 
-  const auto visitor = [&](auto num) {
-    if constexpr (!std::is_same_v<decltype(num), std::monostate>) {
-      return int(num);
-    } else {
-      return 0;
-    }
-  };
-
   auto routine = [&]() -> async_coro::task<int> {
     auto& scheduler = co_await async_coro::get_scheduler();
 
@@ -208,7 +238,7 @@ TEST(task_op, or_result_triple_with_void) {
       auto results = co_await (scheduler.start_task(routine3) || scheduler.start_task(routine1) || scheduler.start_task(routine2));
       static_assert(std::is_same_v<decltype(results), std::variant<std::monostate, int, float>>);
 
-      const auto res = std::visit(visitor, results);
+      const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 0);
     }
 
@@ -216,7 +246,7 @@ TEST(task_op, or_result_triple_with_void) {
       auto results = co_await (scheduler.start_task(routine1) || scheduler.start_task(routine3) || scheduler.start_task(routine2));
       static_assert(std::is_same_v<decltype(results), std::variant<int, std::monostate, float>>);
 
-      const auto res = std::visit(visitor, results);
+      const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);
     }
 
@@ -224,7 +254,7 @@ TEST(task_op, or_result_triple_with_void) {
       auto results = co_await (scheduler.start_task(routine2) || scheduler.start_task(routine1) || scheduler.start_task(routine3));
       static_assert(std::is_same_v<decltype(results), std::variant<float, int, std::monostate>>);
 
-      const auto res = std::visit(visitor, results);
+      const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 3);
     }
 
@@ -232,7 +262,7 @@ TEST(task_op, or_result_triple_with_void) {
 
     static_assert(std::is_same_v<decltype(results), std::variant<int, float, std::monostate>>);
 
-    co_return std::visit(visitor, results);
+    co_return std::visit(test_utils::int_visitor, results);
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(async_coro::execution_system_config{})};
@@ -259,14 +289,6 @@ TEST(task_op, or_result_with_parenthesis) {
     co_return;
   };
 
-  const auto visitor = [&](auto num) {
-    if constexpr (!std::is_same_v<decltype(num), std::monostate>) {
-      return int(num);
-    } else {
-      return 0;
-    }
-  };
-
   auto routine = [&]() -> async_coro::task<int> {
     auto& scheduler = co_await async_coro::get_scheduler();
 
@@ -274,21 +296,21 @@ TEST(task_op, or_result_with_parenthesis) {
       auto results = co_await (scheduler.start_task(routine1) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)) || scheduler.start_task(routine_void));
       static_assert(std::is_same_v<decltype(results), std::variant<int, float, double, std::monostate>>);
 
-      const auto res = std::visit(visitor, results);
+      const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);
     }
     {
       auto results = co_await (scheduler.start_task(routine1) || scheduler.start_task(routine_void) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)));
       static_assert(std::is_same_v<decltype(results), std::variant<int, std::monostate, float, double>>);
 
-      const auto res = std::visit(visitor, results);
+      const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);
     }
     {
       auto results = co_await ((scheduler.start_task(routine1) || scheduler.start_task(routine_void)) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)));
       static_assert(std::is_same_v<decltype(results), std::variant<int, std::monostate, float, double>>);
 
-      const auto res = std::visit(visitor, results);
+      const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);
     }
 
@@ -296,7 +318,7 @@ TEST(task_op, or_result_with_parenthesis) {
 
     static_assert(std::is_same_v<decltype(results), std::variant<int, float, double, std::monostate>>);
 
-    co_return std::visit(visitor, results);
+    co_return std::visit(test_utils::int_visitor, results);
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(async_coro::execution_system_config{})};
@@ -323,44 +345,57 @@ TEST(task_op, mixed_result_with_parenthesis) {
     co_return;
   };
 
-  const auto visitor = [&](auto num) {
-    if constexpr (!std::is_same_v<decltype(num), std::monostate>) {
-      return int(num);
-    } else {
-      return 0;
-    }
-  };
-
   auto routine = [&]() -> async_coro::task<int> {
     auto& scheduler = co_await async_coro::get_scheduler();
 
     {
-      auto results = co_await (scheduler.start_task(routine1) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)) || scheduler.start_task(routine_void));
-      static_assert(std::is_same_v<decltype(results), std::variant<int, float, double, std::monostate>>);
+      auto results = co_await (scheduler.start_task(routine1) && (scheduler.start_task(routine2) || scheduler.start_task(routine3)) || scheduler.start_task(routine_void));
+      static_assert(std::is_same_v<decltype(results), std::variant<std::tuple<int, std::variant<float, double>>, std::monostate>>);
 
-      const auto res = std::visit(visitor, results);
+      const auto res = std::visit(test_utils::int_visitor, results);
+      EXPECT_EQ(res, 4);
+    }
+    {
+      auto results = co_await (scheduler.start_task(routine1) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)) && scheduler.start_task(routine_void));
+      static_assert(std::is_same_v<decltype(results), std::variant<int, std::tuple<std::variant<float, double>>>>);
+
+      const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);
     }
     {
-      auto results = co_await (scheduler.start_task(routine1) || scheduler.start_task(routine_void) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)));
-      static_assert(std::is_same_v<decltype(results), std::variant<int, std::monostate, float, double>>);
+      auto results = co_await (scheduler.start_task(routine1) && scheduler.start_task(routine_void) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)));
+      static_assert(std::is_same_v<decltype(results), std::variant<std::tuple<int>, std::variant<float, double>>>);
 
-      const auto res = std::visit(visitor, results);
+      const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);
     }
     {
-      auto results = co_await ((scheduler.start_task(routine1) || scheduler.start_task(routine_void)) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)));
-      static_assert(std::is_same_v<decltype(results), std::variant<int, std::monostate, float, double>>);
+      auto results = co_await (scheduler.start_task(routine1) || scheduler.start_task(routine_void) && (scheduler.start_task(routine2) || scheduler.start_task(routine3)));
+      static_assert(std::is_same_v<decltype(results), std::variant<int, std::tuple<std::variant<float, double>>>>);
 
-      const auto res = std::visit(visitor, results);
+      const auto res = std::visit(test_utils::int_visitor, results);
+      EXPECT_EQ(res, 1);
+    }
+    {
+      auto results = co_await ((scheduler.start_task(routine1) && scheduler.start_task(routine_void)) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)));
+      static_assert(std::is_same_v<decltype(results), std::variant<std::tuple<int>, std::variant<float, double>>>);
+
+      const auto res = std::visit(test_utils::int_visitor, results);
+      EXPECT_EQ(res, 1);
+    }
+    {
+      auto results = co_await ((scheduler.start_task(routine1) || scheduler.start_task(routine_void)) || (scheduler.start_task(routine2) && scheduler.start_task(routine3)));
+      static_assert(std::is_same_v<decltype(results), std::variant<int, std::monostate, std::tuple<float, double>>>);
+
+      const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);
     }
 
     {
-      auto results = co_await (scheduler.start_task(routine1) || scheduler.start_task(routine2) || scheduler.start_task(routine3) || scheduler.start_task(routine_void));
-      static_assert(std::is_same_v<decltype(results), std::variant<int, float, double, std::monostate>>);
+      auto results = co_await (scheduler.start_task(routine1) || scheduler.start_task(routine2) && scheduler.start_task(routine3) || scheduler.start_task(routine_void));
+      static_assert(std::is_same_v<decltype(results), std::variant<int, std::tuple<float, double>, std::monostate>>);
 
-      const auto res = std::visit(visitor, results);
+      const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);
 
       co_return res;
