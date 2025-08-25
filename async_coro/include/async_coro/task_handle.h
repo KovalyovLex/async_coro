@@ -118,6 +118,18 @@ class task_handle final {
     }
   }
 
+  // Resets continuation callback.
+  void reset_continue() noexcept {
+    ASYNC_CORO_ASSERT(!_handle.promise().is_coro_embedded());
+
+    if (!_handle) {
+      return;
+    }
+
+    auto& promise = _handle.promise();
+    promise.set_continuation_functor(nullptr, internal::passkey{this});
+  }
+
   void check_exception() const noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
     _handle.promise().check_exception();
   }

@@ -6,7 +6,9 @@
 #include <async_coro/scheduler.h>
 #include <async_coro/task_handle.h>
 
+#include <atomic>
 #include <cstdint>
+#include <memory>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -80,7 +82,7 @@ constexpr auto get_tuple_index_seq_without_voids() {
 
 template <class TAwaiter>
 struct await_suspension_wrapper {
-  bool await_ready() {
+  bool await_ready() noexcept {
     return _awaiter.await_ready();
   }
 
@@ -88,6 +90,10 @@ struct await_suspension_wrapper {
     requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> h) {
     _suspension = h.promise().suspend(_awaiter.num_suspensions() + 1);
+
+    _awaiter.suspend_coro_awaiter([this]() {
+      _suspension.try_to_continue_from_any_thread();
+    });
 
     _suspension.try_to_continue_immediately();
   }
@@ -134,11 +140,15 @@ struct handle_awaiter {
   }
 
   template <class Fx>
-    requires(internal::is_runnable<std::remove_cvref_t<Fx>, void, void>)
-  void suspend_coro_awaiter(Fx&& continue_f) noexcept(internal::is_noexcept_runnable<std::remove_cvref_t<Fx>, void, void>) {
+    requires(internal::is_runnable<std::remove_cvref_t<Fx>, void>)
+  void suspend_coro_awaiter(Fx&& continue_f) noexcept(internal::is_noexcept_runnable<std::remove_cvref_t<Fx>, void>) {
     _handle.continue_with([continue_f = std::forward<Fx>(continue_f)](promise_result<TRes>&) noexcept(internal::is_noexcept_runnable<std::remove_cvref_t<Fx>, void, void>) {
       continue_f();
     });
+  }
+
+  void reset_suspender_coro_awaiter() noexcept {
+    _handle.reset_continue();
   }
 
   void check_coro_exception() const {
@@ -204,7 +214,7 @@ struct all_awaiter {
     return internal::all_awaiter{std::tuple_cat(std::tuple<TAwaiter>(std::move(other)), std::move(_awaiters))};
   }
 
-  bool await_ready() {
+  bool await_ready() noexcept {
     return std::apply(
         [&](auto&... awaiters) {
           return (awaiters.await_ready() && ...);
@@ -220,10 +230,18 @@ struct all_awaiter {
         _awaiters);
   }
 
+  void reset_suspender_coro_awaiter() noexcept {
+    return std::apply(
+        [&](auto&... awaiters) {
+          (awaiters.reset_suspender_coro_awaiter(), ...);
+        },
+        _awaiters);
+  }
+
   template <class Fx>
   void suspend_coro_awaiter(const Fx& continue_f) {
     std::apply(
-        [&continue_f](auto&... awaiters) {
+        [continue_f](auto&... awaiters) {
           (awaiters.suspend_coro_awaiter(continue_f), ...);
         },
         _awaiters);
@@ -320,56 +338,71 @@ struct any_awaiter {
     return internal::any_awaiter{std::tuple_cat(std::tuple<TAwaiter>(std::move(other)), std::move(_awaiters))};
   }
 
-  bool await_ready() {
-    const auto store_result = [this](auto& awaiter, auto index) -> bool {
-      if (!this->_has_result.exchange(true, std::memory_order::relaxed)) {
-        using result_t = decltype(awaiter.await_resume());
-        if constexpr (std::is_void_v<result_t>) {
-          awaiter.await_resume();
-          new (&_result) result_type{index, std::monostate{}};
-        } else {
-          new (&_result) result_type{index, awaiter.await_resume()};
-        }
+  bool await_ready() noexcept {
+    const auto func = [this](size_t awaiter_index) noexcept {
+      size_t expected_index = 0;
+      if (_result_index.compare_exchange_strong(expected_index, awaiter_index, std::memory_order::relaxed)) {
+        return true;
       }
-      return true;
+      return false;
     };
 
-    return calculate_is_ready(store_result, std::index_sequence_for<TAwaiters...>{});
+    return calculate_is_ready(func, std::index_sequence_for<TAwaiters...>{});
   }
 
-  std::uint32_t num_suspensions() const noexcept {
-    return 1;
+  std::uint32_t num_suspensions() const noexcept { return 1; }
+
+  void reset_suspender_coro_awaiter() noexcept {
+    return std::apply(
+        [&](auto&... awaiters) {
+          (awaiters.reset_suspender_coro_awaiter(), ...);
+        },
+        _awaiters);
   }
 
   template <class Fx>
   void suspend_coro_awaiter(const Fx& continue_f) {
-    const auto func = [&continue_f, this](auto& awaiter, auto index) {
-      using result_t = decltype(awaiter.await_resume());
-      using index_t = decltype(index);
-
-      awaiter.suspend_coro_awaiter([this, &continue_f, &awaiter]() {
-        if (!_has_result.exchange(true, std::memory_order::relaxed)) {
-          // continue this coro
-          if constexpr (std::is_void_v<result_t>) {
-            new (&_result) result_type{index_t{}, std::monostate{}};
-
-          } else {
-            new (&_result) result_type{index_t{}, awaiter.await_resume()};
-          }
+    const auto func = [&continue_f, this](auto& awaiter, auto, size_t awaiter_index) {
+      awaiter.suspend_coro_awaiter([this, continue_f, awaiter_index]() {
+        size_t expected_index = 0;
+        if (_result_index.compare_exchange_strong(expected_index, awaiter_index, std::memory_order::relaxed)) {
           continue_f();
         }
       });
+      return _result_index.load(std::memory_order::relaxed) == 0;
     };
 
-    call_functor(func, std::index_sequence_for<TAwaiters...>{});
+    call_functor_while_true(func, std::index_sequence_for<TAwaiters...>{});
   }
 
   void check_coro_exception() const noexcept {}
 
   result_type await_resume() noexcept(std::is_nothrow_move_constructible_v<result_type>) {
-    ASYNC_CORO_ASSERT(_has_result.load(std::memory_order::relaxed));
+    union_res res;
+    const auto index = _result_index.load(std::memory_order::relaxed);
 
-    return std::move(_result);
+    ASYNC_CORO_ASSERT(index > 0);
+
+    reset_suspender_coro_awaiter();
+
+    const auto func = [&](auto& awaiter, auto variant_index, size_t awaiter_index) {
+      using result_t = decltype(awaiter.await_resume());
+
+      if (index == awaiter_index) {
+        if constexpr (std::is_void_v<result_t>) {
+          awaiter.check_coro_exception();
+          new (&res.r) result_type{variant_index, std::monostate{}};
+        } else {
+          new (&res.r) result_type{variant_index, awaiter.await_resume()};
+        }
+        return false;
+      }
+      return true;
+    };
+
+    call_functor_while_true(func, std::index_sequence_for<TAwaiters...>{});
+
+    return std::move(res.r);
   }
 
   await_suspension_wrapper<any_awaiter> coro_await_transform(base_handle&) && {
@@ -378,21 +411,25 @@ struct any_awaiter {
 
  private:
   template <class F, size_t... TI>
-  auto calculate_is_ready(const F& store_result, std::integer_sequence<size_t, TI...>) {
-    return ((std::get<TI>(_awaiters).await_ready() && store_result(std::get<TI>(_awaiters), std::in_place_index_t<TI>{})) || ...);
+  auto calculate_is_ready(const F& store_result, std::integer_sequence<size_t, TI...>) noexcept {
+    return ((std::get<TI>(_awaiters).await_ready() && store_result(TI + 1)) || ...);
   }
 
   template <class F, size_t... TI>
-  void call_functor(const F& func, std::integer_sequence<size_t, TI...>) {
-    (func(std::get<TI>(_awaiters), std::in_place_index_t<TI>{}), ...);
+  void call_functor_while_true(const F& func, std::integer_sequence<size_t, TI...>) {
+    ((func(std::get<TI>(_awaiters), std::in_place_index_t<TI>{}, TI + 1)) && ...);
   }
+
+  union union_res {
+    union_res() noexcept {}
+    ~union_res() noexcept(std::is_nothrow_destructible_v<result_type>) { r.~result_type(); }
+
+    result_type r;
+  };
 
  private:
   std::tuple<TAwaiters...> _awaiters;
-  union {
-    result_type _result;
-  };
-  std::atomic_bool _has_result{false};
+  std::atomic_size_t _result_index{0};  // 1 based index
 };
 
 template <typename... TArgs>

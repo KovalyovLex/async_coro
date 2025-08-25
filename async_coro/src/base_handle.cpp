@@ -34,7 +34,7 @@ void base_handle::set_owning_by_task_handle(bool owning) {
 
 void base_handle::set_continuation_functor(callback_base* f) noexcept {
   ASYNC_CORO_ASSERT(!is_embedded());
-  ASYNC_CORO_ASSERT(_continuation.load(std::memory_order::relaxed) == nullptr);
+  ASYNC_CORO_ASSERT(_continuation.load(std::memory_order::relaxed) == nullptr || f == nullptr);
 
   _continuation.store(f, std::memory_order::release);
 }
