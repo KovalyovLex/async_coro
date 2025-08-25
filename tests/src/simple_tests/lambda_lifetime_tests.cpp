@@ -11,7 +11,6 @@
 #include <memory>
 #include <variant>
 
-
 namespace lambda_lifetime_tests {
 
 // Helper class to track object lifetime
