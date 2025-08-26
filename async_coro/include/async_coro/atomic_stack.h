@@ -5,6 +5,7 @@
 #include <async_coro/internal/virtual_tagged_ptr.h>
 #include <async_coro/thread_safety/spin_lock_mutex.h>
 #include <async_coro/thread_safety/unique_lock.h>
+#include <async_coro/warnings.h>
 
 #include <array>
 #include <atomic>
@@ -18,10 +19,8 @@ namespace async_coro {
 
 template <typename T, uint32_t BlockSize = 64>
 class atomic_stack {
-#if defined _MSC_VER
-#pragma warning(push)
-#pragma warning(disable : 4324)
-#endif
+  ASYNC_CORO_WARNINGS_MSVC_PUSH
+  ASYNC_CORO_WARNINGS_MSVC_IGNORE(4324)
 
   struct alignas(std::hardware_constructive_interference_size) value_holder {
     // using union to not initialize value by default
@@ -36,9 +35,7 @@ class atomic_stack {
     ~value_holder() noexcept {}
   };
 
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
+  ASYNC_CORO_WARNINGS_MSVC_POP
 
   struct values_array {
     values_array(uint32_t index)

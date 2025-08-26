@@ -4,3 +4,4 @@ Language: Cpp
 Standard: Latest
 ColumnLimit: 0
 StatementMacros: [_Pragma, _pragma]
+WhitespaceSensitiveMacros: [ASYNC_CORO_WARNINGS_GCC_IGNORE]

@@ -4,6 +4,7 @@
 #include <async_coro/internal/always_false.h>
 #include <async_coro/internal/remove_void_tuple.h>
 #include <async_coro/scheduler.h>
+#include <async_coro/warnings.h>
 
 #include <atomic>
 #include <cstdint>
@@ -403,7 +404,13 @@ struct any_awaiter {
 
     call_functor_while_true(func, std::index_sequence_for<TAwaiters...>{});
 
+    ASYNC_CORO_WARNINGS_GCC_PUSH
+    ASYNC_CORO_WARNINGS_GCC_IGNORE(unknown-warning-option)
+    ASYNC_CORO_WARNINGS_GCC_IGNORE(maybe-uninitialized)
+
     return std::move(res.r);
+
+    ASYNC_CORO_WARNINGS_GCC_POP
   }
 
   await_suspension_wrapper<any_awaiter> coro_await_transform(base_handle&) && {
