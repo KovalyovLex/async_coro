@@ -4,9 +4,9 @@
 #include <async_coro/config.h>
 #include <async_coro/internal/passkey.h>
 #include <async_coro/internal/promise_type.h>
+#include <async_coro/internal/task_awaiters.h>
 #include <async_coro/internal/task_handle_awaiter.h>
 
-#include <concepts>
 #include <coroutine>
 #include <type_traits>
 #include <utility>
@@ -27,7 +27,7 @@ namespace async_coro {
  *
  * @tparam R The result type produced by the coroutine.
  */
-template <typename R>
+template <typename R = void>
 class task_handle final {
   using promise_type = async_coro::internal::promise_type<R>;
   using handle_type = std::coroutine_handle<promise_type>;
@@ -67,6 +67,70 @@ class task_handle final {
     }
   }
 
+  /**
+   * @brief Waits for all the given tasks to complete.
+   *
+   * This operator returns awaiter to suspend the current coroutine and wait for all the specified tasks to complete before proceeding.
+   *
+   * @return An awaitable that resolves to a std::tuple containing the results of all tasks.
+   *
+   * @note When any of the tasks return void, the corresponding tuple element will be std::monostate.
+   *       The function handles mixed return types including void tasks.
+   *
+   * @example
+   * \code{.cpp}
+   * auto results = co_await (scheduler.start_task(task1) && scheduler.start_task(task2));
+   *
+   * // This coroutine will resume execution after all of the tasks has completed.
+   *
+   * \endcode
+   */
+  template <class TRes2>
+  auto operator&&(task_handle<TRes2>&& b) && noexcept {
+    return internal::all_awaiter{std::make_tuple(internal::handle_awaiter<R>{std::move(*this)}, internal::handle_awaiter<TRes2>{std::move(b)})};
+  }
+
+  template <class... TAwaitables>
+  auto operator&&(internal::any_awaiter<TAwaitables...>&& b) && noexcept {
+    return internal::all_awaiter{std::make_tuple(internal::handle_awaiter<R>{std::move(*this)}, std::move(b))};
+  }
+
+  template <class... TAwaitables>
+  auto operator&&(internal::all_awaiter<TAwaitables...>&& b) && noexcept {
+    return std::move(b).prepend_awaiter(internal::handle_awaiter<R>{std::move(*this)});
+  }
+
+  /**
+   * @brief Waits for any of the given tasks to complete.
+   *
+   * This function suspends current coroutine and waits for any one of the specified tasks to complete before proceeding.
+   * The function returns as soon as the first task completes, with the result of that task.
+   *
+   * @return An awaitable of std::variant<TArgs> containing the result of the first completed task.
+   *
+   * @example
+   * \code{.cpp}
+   * auto results = co_await (scheduler.start_task(task1) || scheduler.start_task(task2));
+   *
+   * // This coroutine will resume execution after any one of the tasks has completed.
+   *
+   * \endcode
+   */
+  template <class TRes2>
+  auto operator||(task_handle<TRes2>&& b) && noexcept {
+    return internal::any_awaiter{std::make_tuple(internal::handle_awaiter<R>{std::move(*this)}, internal::handle_awaiter<TRes2>{std::move(b)})};
+  }
+
+  template <class... TAwaitables>
+  auto operator||(internal::any_awaiter<TAwaitables...>&& b) && noexcept {
+    return std::move(b).prepend_awaiter(internal::handle_awaiter<R>{std::move(*this)});
+  }
+
+  template <class... TAwaitables>
+  auto operator||(internal::all_awaiter<TAwaitables...>&& b) && noexcept {
+    return internal::any_awaiter{std::make_tuple(internal::handle_awaiter<R>{std::move(*this)}, std::move(b))};
+  }
+
   // access for result
   decltype(auto) get() & {
     ASYNC_CORO_ASSERT(_handle && _handle.promise().is_finished());
@@ -84,27 +148,6 @@ class task_handle final {
   }
 
   void get() const&& = delete;
-
-  template <typename Y>
-    requires(std::same_as<Y, R> && !std::same_as<R, void>)
-  operator Y&() & {
-    ASYNC_CORO_ASSERT(_handle && _handle.promise().is_finished());
-    return _handle.promise().get_result_ref();
-  }
-
-  template <typename Y>
-    requires(std::same_as<Y, R> && !std::same_as<R, void>)
-  operator const Y&() const& {
-    ASYNC_CORO_ASSERT(_handle && _handle.promise().is_finished());
-    return _handle.promise().get_result_cref();
-  }
-
-  template <typename Y>
-    requires(std::same_as<Y, R> && !std::same_as<R, void>)
-  operator Y() && {
-    ASYNC_CORO_ASSERT(_handle && _handle.promise().is_finished());
-    return _handle.promise().move_result();
-  }
 
   // Checks if coroutine is finished.
   // If state is empty returns true as well
@@ -140,12 +183,24 @@ class task_handle final {
     }
   }
 
+  // Resets continuation callback.
+  void reset_continue() noexcept {
+    ASYNC_CORO_ASSERT(!_handle.promise().is_coro_embedded());
+
+    if (!_handle) {
+      return;
+    }
+
+    auto& promise = _handle.promise();
+    promise.set_continuation_functor(nullptr, internal::passkey{this});
+  }
+
   void check_exception() const noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
     _handle.promise().check_exception();
   }
 
-  internal::task_handle_awaiter<R> coro_await_transform(base_handle&) & {
-    return internal::task_handle_awaiter<R>{*this};
+  internal::task_handle_awaiter<R> coro_await_transform(base_handle&) && {
+    return internal::task_handle_awaiter<R>{std::move(*this)};
   }
 
  private:

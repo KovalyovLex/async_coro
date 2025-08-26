@@ -5,6 +5,7 @@
 #include <async_coro/internal/hardware_interference_size.h>
 #include <async_coro/thread_notifier.h>
 #include <async_coro/unique_function.h>
+#include <async_coro/warnings.h>
 
 #include <atomic>
 #include <cstdint>
@@ -227,10 +228,8 @@ class execution_system : public i_execution_system {
   /** @brief Type alias for the task queue using atomic_queue */
   using tasks = atomic_queue<task_function>;
 
-#if defined _MSC_VER
-#pragma warning(push)
-#pragma warning(disable : 4324)
-#endif
+  ASYNC_CORO_WARNINGS_MSVC_PUSH
+  ASYNC_CORO_WARNINGS_MSVC_IGNORE(4324)
 
   /**
    * @brief Data structure containing information for each worker thread
@@ -255,9 +254,7 @@ class execution_system : public i_execution_system {
     std::size_t num_loops_before_sleep = 0;
   };
 
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
+  ASYNC_CORO_WARNINGS_MSVC_POP
 
   /**
    * @brief Data structure for managing a single execution queue

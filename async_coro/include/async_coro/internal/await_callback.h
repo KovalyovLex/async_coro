@@ -3,8 +3,8 @@
 #include <async_coro/base_handle.h>
 #include <async_coro/config.h>
 #include <async_coro/scheduler.h>
+#include <async_coro/warnings.h>
 
-#include <atomic>
 #include <concepts>
 #include <coroutine>
 #include <type_traits>
@@ -24,10 +24,8 @@ struct await_callback {
 
   bool await_ready() const noexcept { return false; }
 
-#if defined _MSC_VER
-#pragma warning(push)
-#pragma warning(disable : 4702)
-#endif
+  ASYNC_CORO_WARNINGS_MSVC_PUSH
+  ASYNC_CORO_WARNINGS_MSVC_IGNORE(4702)
 
   template <typename U>
     requires(std::derived_from<U, base_handle>)
@@ -45,9 +43,7 @@ struct await_callback {
     _suspension.try_to_continue_immediately();
   }
 
-#if defined _MSC_VER
-#pragma warning(pop)
-#endif
+  ASYNC_CORO_WARNINGS_MSVC_POP
 
   void await_resume() const noexcept {}
 

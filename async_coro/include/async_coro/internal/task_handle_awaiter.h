@@ -16,7 +16,7 @@ namespace async_coro::internal {
 
 template <class R>
 struct task_handle_awaiter {
-  explicit task_handle_awaiter(task_handle<R>& th) noexcept : _th(th) {}
+  explicit task_handle_awaiter(task_handle<R>&& th) noexcept : _th(std::move(th)) {}
   task_handle_awaiter(const task_handle_awaiter&) = delete;
   task_handle_awaiter(task_handle_awaiter&&) = delete;
   ~task_handle_awaiter() noexcept = default;
@@ -40,7 +40,7 @@ struct task_handle_awaiter {
   }
 
  private:
-  task_handle<R>& _th;
+  task_handle<R> _th;
   coroutine_suspender _suspension;
 };
 

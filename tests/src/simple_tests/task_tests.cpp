@@ -6,8 +6,6 @@
 #include <async_coro/switch_to_queue.h>
 #include <async_coro/task.h>
 #include <async_coro/task_launcher.h>
-#include <async_coro/when_all.h>
-#include <async_coro/when_any.h>
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -45,7 +43,6 @@ TEST(task, await_no_wait) {
   auto handle = scheduler.start_task(std::move(routine));
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), 2);
-  EXPECT_EQ((int)handle, 2);
 }
 
 TEST(task, resume_on_callback_deep) {
@@ -236,10 +233,10 @@ TEST(task, when_all) {
   };
 
   auto routine = [&]() -> async_coro::task<int> {
-    auto results = co_await async_coro::when_all(
-        async_coro::task_launcher{routine1},
-        async_coro::task_launcher{routine2},
-        async_coro::task_launcher{routine3, async_coro::execution_queues::worker});
+    auto results = co_await (
+        co_await async_coro::start_task(routine1) &&
+        co_await async_coro::start_task(routine2) &&
+        co_await async_coro::start_task(routine3, async_coro::execution_queues::worker));
 
     const auto sum = std::apply(
         [&](auto... num) {
@@ -288,10 +285,10 @@ TEST(task, when_all_void) {
 
   bool executed = false;
   auto routine = [&]() -> async_coro::task<void> {
-    co_await async_coro::when_all(
-        async_coro::task_launcher{routine1, async_coro::execution_queues::worker},
-        async_coro::task_launcher{routine2},
-        async_coro::task_launcher{routine3, async_coro::execution_queues::worker});
+    co_await (
+        co_await async_coro::start_task(routine1, async_coro::execution_queues::worker) &&
+        co_await async_coro::start_task(routine2) &&
+        co_await async_coro::start_task(routine3, async_coro::execution_queues::worker));
 
     executed = true;
     co_return;
@@ -339,10 +336,10 @@ TEST(task, when_all_with_void) {
 
   bool executed = false;
   auto routine = [&]() -> async_coro::task<int> {
-    auto results = co_await async_coro::when_all(
-        async_coro::task_launcher{routine1(), async_coro::execution_queues::worker},
-        async_coro::task_launcher{routine2},
-        async_coro::task_launcher{routine3, async_coro::execution_queues::worker});
+    auto results = co_await (
+        co_await async_coro::start_task(routine1(), async_coro::execution_queues::worker) &&
+        co_await async_coro::start_task(routine2) &&
+        co_await async_coro::start_task(routine3, async_coro::execution_queues::worker));
 
     executed = true;
     const auto sum = std::apply(
@@ -396,10 +393,10 @@ TEST(task, when_all_with_void_first) {
 
   bool executed = false;
   auto routine = [&]() -> async_coro::task<int> {
-    auto results = co_await async_coro::when_all(
-        async_coro::task_launcher{routine2},
-        async_coro::task_launcher{routine1(), async_coro::execution_queues::worker},
-        async_coro::task_launcher{routine3(), async_coro::execution_queues::worker});
+    auto results = co_await (
+        co_await async_coro::start_task(routine2) &&
+        co_await async_coro::start_task(routine1(), async_coro::execution_queues::worker) &&
+        co_await async_coro::start_task(routine3(), async_coro::execution_queues::worker));
 
     executed = true;
     const auto sum = std::apply(
@@ -453,10 +450,10 @@ TEST(task, when_all_with_void_last) {
 
   bool executed = false;
   auto routine = [&]() -> async_coro::task<int> {
-    auto results = co_await async_coro::when_all(
-        async_coro::task_launcher{routine2},
-        async_coro::task_launcher{routine3(), async_coro::execution_queues::worker},
-        async_coro::task_launcher{routine1(), async_coro::execution_queues::worker});
+    auto results = co_await (
+        co_await async_coro::start_task(routine2) &&
+        co_await async_coro::start_task(routine3(), async_coro::execution_queues::worker) &&
+        co_await async_coro::start_task(routine1(), async_coro::execution_queues::worker));
 
     executed = true;
     const auto sum = std::apply(
@@ -499,9 +496,9 @@ TEST(task, when_all_no_wait) {
   };
 
   auto routine = [&]() -> async_coro::task<int> {
-    auto results = co_await async_coro::when_all(
-        async_coro::task_launcher{routine1},
-        async_coro::task_launcher{routine2});
+    auto results = co_await (
+        co_await async_coro::start_task(routine1) &&
+        co_await async_coro::start_task(routine2));
 
     const auto sum = std::apply(
         [&](auto... num) {
@@ -536,9 +533,9 @@ TEST(task, when_any_no_wait_sleep) {
   };
 
   auto routine = [&]() -> async_coro::task<int> {
-    auto result = co_await async_coro::when_any(
-        async_coro::task_launcher{routine1},
-        async_coro::task_launcher{routine3(), async_coro::execution_queues::worker});
+    auto result = co_await (
+        co_await async_coro::start_task(routine1) ||
+        co_await async_coro::start_task(routine3(), async_coro::execution_queues::worker));
 
     int sum = 0;
     std::visit([&](auto num) { return sum = int(num); }, result);
@@ -580,10 +577,10 @@ TEST(task, when_any_no_wait) {
   };
 
   auto routine = [&]() -> async_coro::task<int> {
-    auto result = co_await async_coro::when_any(
-        async_coro::task_launcher{routine1},
-        async_coro::task_launcher{routine2},
-        async_coro::task_launcher{routine3});
+    auto result = co_await (
+        co_await async_coro::start_task(routine1) ||
+        co_await async_coro::start_task(routine2) ||
+        co_await async_coro::start_task(routine3));
 
     int sum = 0;
     std::visit([&](auto num) { return sum = int(num); }, result);
@@ -620,9 +617,9 @@ TEST(task, when_any_void_all) {
   };
 
   auto routine = [&]() -> async_coro::task<void> {
-    auto result = co_await async_coro::when_any(
-        async_coro::task_launcher{routine1},
-        async_coro::task_launcher{routine2});
+    auto result = co_await (
+        co_await async_coro::start_task(routine1) ||
+        co_await async_coro::start_task(routine2));
 
     EXPECT_EQ(result.index(), 0);
 
@@ -662,10 +659,10 @@ TEST(task, when_any_void_first) {
   };
 
   auto routine = [&]() -> async_coro::task<int> {
-    auto result = co_await async_coro::when_any(
-        async_coro::task_launcher{routine1},
-        async_coro::task_launcher{routine2},
-        async_coro::task_launcher{routine3});
+    auto result = co_await (
+        co_await async_coro::start_task(routine1) ||
+        co_await async_coro::start_task(routine2) ||
+        co_await async_coro::start_task(routine3));
 
     EXPECT_EQ(result.index(), 0);
 
@@ -713,10 +710,10 @@ TEST(task, when_any_void_last) {
   };
 
   auto routine = [&]() -> async_coro::task<int> {
-    auto result = co_await async_coro::when_any(
-        async_coro::task_launcher{routine3},
-        async_coro::task_launcher{routine2},
-        async_coro::task_launcher{routine1});
+    auto result = co_await (
+        co_await async_coro::start_task(routine3) ||
+        co_await async_coro::start_task(routine2) ||
+        co_await async_coro::start_task(routine1));
 
     EXPECT_EQ(result.index(), 0);
 
@@ -764,10 +761,10 @@ TEST(task, when_any_void_mid) {
   };
 
   auto routine = [&]() -> async_coro::task<int> {
-    auto result = co_await async_coro::when_any(
-        async_coro::task_launcher{routine3},
-        async_coro::task_launcher{routine1},
-        async_coro::task_launcher{routine2});
+    auto result = co_await (
+        co_await async_coro::start_task(routine3) ||
+        co_await async_coro::start_task(routine1) ||
+        co_await async_coro::start_task(routine2));
 
     EXPECT_EQ(result.index(), 0);
 
@@ -815,10 +812,10 @@ TEST(task, when_any_index_check) {
   };
 
   auto routine = [&]() -> async_coro::task<int> {
-    auto result = co_await async_coro::when_any(
-        async_coro::task_launcher{routine1},
-        async_coro::task_launcher{routine2},
-        async_coro::task_launcher{routine3});
+    auto result = co_await (
+        co_await async_coro::start_task(routine1) ||
+        co_await async_coro::start_task(routine2) ||
+        co_await async_coro::start_task(routine3));
 
     EXPECT_EQ(result.index(), 1);
 
@@ -869,10 +866,10 @@ TEST(task, when_any_index_check_last) {
   };
 
   auto routine = [&]() -> async_coro::task<int> {
-    auto result = co_await async_coro::when_any(
-        async_coro::task_launcher{routine1},
-        async_coro::task_launcher{routine2},
-        async_coro::task_launcher{routine3});
+    auto result = co_await (
+        co_await async_coro::start_task(routine1) ||
+        co_await async_coro::start_task(routine2) ||
+        co_await async_coro::start_task(routine3));
 
     EXPECT_EQ(result.index(), 2);
 
@@ -927,10 +924,10 @@ TEST(task, when_any_continue_after_parent_complete) {
     };
 
     auto routine = [&]() -> async_coro::task<int> {
-      auto result = co_await async_coro::when_any(
-          async_coro::task_launcher{routine1},
-          async_coro::task_launcher{routine2},
-          async_coro::task_launcher{routine3});
+      auto result = co_await (
+          co_await async_coro::start_task(routine1) ||
+          co_await async_coro::start_task(routine2) ||
+          co_await async_coro::start_task(routine3));
 
       EXPECT_EQ(result.index(), 2);
 
@@ -977,10 +974,10 @@ TEST(task, when_any) {
   };
 
   auto routine = [&]() -> async_coro::task<int> {
-    auto result = co_await async_coro::when_any(
-        async_coro::task_launcher{routine1(), async_coro::execution_queues::worker},
-        async_coro::task_launcher{routine2(), async_coro::execution_queues::worker},
-        async_coro::task_launcher{routine3(), async_coro::execution_queues::worker});
+    auto result = co_await (
+        co_await async_coro::start_task(routine1(), async_coro::execution_queues::worker) ||
+        co_await async_coro::start_task(routine2(), async_coro::execution_queues::worker) ||
+        co_await async_coro::start_task(routine3(), async_coro::execution_queues::worker));
 
     int sum = 0;
     std::visit([&](auto num) { return sum = int(num); }, result);
@@ -1025,10 +1022,10 @@ TEST(task, when_any_immediate_execution_order) {
   };
 
   auto routine = [&]() -> async_coro::task<int> {
-    co_await async_coro::when_any(
-        async_coro::task_launcher{routine1},
-        async_coro::task_launcher{routine2},
-        async_coro::task_launcher{routine3});
+    co_await (
+        co_await async_coro::start_task(routine1) ||
+        co_await async_coro::start_task(routine2) ||
+        co_await async_coro::start_task(routine3));
 
     EXPECT_EQ(index, 3);
     co_return index;
@@ -1065,10 +1062,10 @@ TEST(task, when_all_immediate_execution_order) {
   };
 
   auto routine = [&]() -> async_coro::task<int> {
-    co_await async_coro::when_all(
-        async_coro::task_launcher{routine1},
-        async_coro::task_launcher{routine2},
-        async_coro::task_launcher{routine3});
+    co_await (
+        co_await async_coro::start_task(routine1) &&
+        co_await async_coro::start_task(routine2) &&
+        co_await async_coro::start_task(routine3));
 
     EXPECT_EQ(index, 3);
     co_return index;
@@ -1332,7 +1329,7 @@ TEST(task, multiple_workers_async_execution) {
         },
         async_coro::execution_queues::worker);
 
-    co_await handle_void;
+    co_await std::move(handle_void);
 
     auto handle_int = co_await async_coro::start_task(
         []() -> async_coro::task<int> {
@@ -1352,13 +1349,13 @@ TEST(task, multiple_workers_async_execution) {
         },
         async_coro::execution_queues::main);
 
-    const auto res_int = co_await handle_int;
+    const auto res_int = co_await std::move(handle_int);
     EXPECT_EQ(res_int, 3);
 
-    const auto res_double = co_await handle_double;
+    const auto res_double = co_await std::move(handle_double);
     EXPECT_DOUBLE_EQ(res_double, 3.1415);
 
-    const auto res_float = co_await handle_float;
+    const auto res_float = co_await std::move(handle_float);
     EXPECT_FLOAT_EQ(res_float, 2.34f);
 
     co_return res_float;

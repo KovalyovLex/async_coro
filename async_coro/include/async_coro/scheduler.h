@@ -2,6 +2,7 @@
 
 #include <async_coro/config.h>
 #include <async_coro/i_execution_system.h>
+#include <async_coro/internal/get_scheduler_awaiter.h>
 #include <async_coro/internal/passkey.h>
 #include <async_coro/task_handle.h>
 #include <async_coro/task_launcher.h>
@@ -130,5 +131,10 @@ class scheduler {
   std::shared_ptr<unique_function<void(std::exception_ptr)>> _exception_handler CORO_THREAD_GUARDED_BY(_mutex);
 #endif
 };
+
+// Returns awaiter to get scheduler. Should be used inside task
+inline auto get_scheduler() noexcept {
+  return internal::get_scheduler_awaiter{};
+}
 
 }  // namespace async_coro
