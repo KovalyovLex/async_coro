@@ -3,7 +3,6 @@
 #include <async_coro/scheduler.h>
 #include <async_coro/start_task.h>
 #include <async_coro/task.h>
-#include <async_coro/task_handle_operators.h>
 #include <async_coro/task_launcher.h>
 #include <gtest/gtest.h>
 

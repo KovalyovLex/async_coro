@@ -1,6 +1,5 @@
 #include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>
-#include <async_coro/task_handle_operators.h>
 #include <gtest/gtest.h>
 
 #include <thread>

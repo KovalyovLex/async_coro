@@ -4,7 +4,6 @@
 #include <async_coro/internal/always_false.h>
 #include <async_coro/internal/remove_void_tuple.h>
 #include <async_coro/scheduler.h>
-#include <async_coro/task_handle.h>
 
 #include <atomic>
 #include <cstdint>
@@ -12,6 +11,11 @@
 #include <type_traits>
 #include <utility>
 #include <variant>
+
+namespace async_coro {
+template <typename R>
+class task_handle;
+}
 
 namespace async_coro::internal {
 

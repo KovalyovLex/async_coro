@@ -8,7 +8,6 @@
 #include <async_coro/start_task.h>
 #include <async_coro/switch_to_queue.h>
 #include <async_coro/task.h>
-#include <async_coro/task_handle_operators.h>
 #include <async_coro/task_launcher.h>
 #include <gtest/gtest.h>
 

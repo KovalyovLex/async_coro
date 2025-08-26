@@ -4,6 +4,7 @@
 #include <async_coro/config.h>
 #include <async_coro/internal/passkey.h>
 #include <async_coro/internal/promise_type.h>
+#include <async_coro/internal/task_awaiters.h>
 #include <async_coro/internal/task_handle_awaiter.h>
 
 #include <coroutine>
@@ -64,6 +65,70 @@ class task_handle final {
     if (_handle) {
       _handle.promise().set_owning_by_task_handle(false, internal::passkey{this});
     }
+  }
+
+  /**
+   * @brief Waits for all the given tasks to complete.
+   *
+   * This operator returns awaiter to suspend the current coroutine and wait for all the specified tasks to complete before proceeding.
+   *
+   * @return An awaitable that resolves to a std::tuple containing the results of all tasks.
+   *
+   * @note When any of the tasks return void, the corresponding tuple element will be std::monostate.
+   *       The function handles mixed return types including void tasks.
+   *
+   * @example
+   * \code{.cpp}
+   * auto results = co_await (scheduler.start_task(task1) && scheduler.start_task(task2));
+   *
+   * // This coroutine will resume execution after all of the tasks has completed.
+   *
+   * \endcode
+   */
+  template <class TRes2>
+  auto operator&&(task_handle<TRes2>&& b) && noexcept {
+    return internal::all_awaiter{std::make_tuple(internal::handle_awaiter<R>{std::move(*this)}, internal::handle_awaiter<TRes2>{std::move(b)})};
+  }
+
+  template <class... TAwaitables>
+  auto operator&&(internal::any_awaiter<TAwaitables...>&& b) && noexcept {
+    return internal::all_awaiter{std::make_tuple(internal::handle_awaiter<R>{std::move(*this)}, std::move(b))};
+  }
+
+  template <class... TAwaitables>
+  auto operator&&(internal::all_awaiter<TAwaitables...>&& b) && noexcept {
+    return std::move(b).prepend_awaiter(internal::handle_awaiter<R>{std::move(*this)});
+  }
+
+  /**
+   * @brief Waits for any of the given tasks to complete.
+   *
+   * This function suspends current coroutine and waits for any one of the specified tasks to complete before proceeding.
+   * The function returns as soon as the first task completes, with the result of that task.
+   *
+   * @return An awaitable of std::variant<TArgs> containing the result of the first completed task.
+   *
+   * @example
+   * \code{.cpp}
+   * auto results = co_await (scheduler.start_task(task1) || scheduler.start_task(task2));
+   *
+   * // This coroutine will resume execution after any one of the tasks has completed.
+   *
+   * \endcode
+   */
+  template <class TRes2>
+  auto operator||(task_handle<TRes2>&& b) && noexcept {
+    return internal::any_awaiter{std::make_tuple(internal::handle_awaiter<R>{std::move(*this)}, internal::handle_awaiter<TRes2>{std::move(b)})};
+  }
+
+  template <class... TAwaitables>
+  auto operator||(internal::any_awaiter<TAwaitables...>&& b) && noexcept {
+    return std::move(b).prepend_awaiter(internal::handle_awaiter<R>{std::move(*this)});
+  }
+
+  template <class... TAwaitables>
+  auto operator||(internal::all_awaiter<TAwaitables...>&& b) && noexcept {
+    return internal::any_awaiter{std::make_tuple(internal::handle_awaiter<R>{std::move(*this)}, std::move(b))};
   }
 
   // access for result
