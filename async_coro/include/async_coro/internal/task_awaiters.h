@@ -405,7 +405,6 @@ struct any_awaiter {
     call_functor_while_true(func, std::index_sequence_for<TAwaiters...>{});
 
     ASYNC_CORO_WARNINGS_GCC_PUSH
-    ASYNC_CORO_WARNINGS_GCC_IGNORE(unknown-warning-option)
     ASYNC_CORO_WARNINGS_GCC_IGNORE(maybe-uninitialized)
 
     return std::move(res.r);

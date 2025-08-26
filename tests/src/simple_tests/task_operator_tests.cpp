@@ -347,6 +347,9 @@ TEST(task_op, mixed_result_with_parenthesis) {
   auto routine = [&]() -> async_coro::task<int> {
     auto& scheduler = co_await async_coro::get_scheduler();
 
+    ASYNC_CORO_WARNINGS_GCC_PUSH
+    ASYNC_CORO_WARNINGS_GCC_IGNORE(parentheses)
+
     {
       auto results = co_await (scheduler.start_task(routine1) && (scheduler.start_task(routine2) || scheduler.start_task(routine3)) || scheduler.start_task(routine_void));
       static_assert(std::is_same_v<decltype(results), std::variant<std::tuple<int, std::variant<float, double>>, std::monostate>>);
@@ -399,6 +402,8 @@ TEST(task_op, mixed_result_with_parenthesis) {
 
       co_return res;
     }
+
+    ASYNC_CORO_WARNINGS_GCC_POP
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(async_coro::execution_system_config{})};
