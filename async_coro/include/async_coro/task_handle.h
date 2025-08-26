@@ -195,10 +195,6 @@ class task_handle final {
     promise.set_continuation_functor(nullptr, internal::passkey{this});
   }
 
-  void check_exception() const noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
-    _handle.promise().check_exception();
-  }
-
   internal::task_handle_awaiter<R> coro_await_transform(base_handle&) && {
     return internal::task_handle_awaiter<R>{std::move(*this)};
   }

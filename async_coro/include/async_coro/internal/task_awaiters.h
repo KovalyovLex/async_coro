@@ -86,6 +86,25 @@ constexpr auto get_tuple_index_seq_without_voids() {
   return get_tuple_index_seq_without_voids_impl<TTuple>(std::integer_sequence<size_t>{}, std::make_index_sequence<std::tuple_size_v<TTuple>>{});
 }
 
+template <class TTuple, size_t... Ints>
+constexpr std::integer_sequence<size_t, Ints...> get_tuple_index_seq_of_voids_impl(std::integer_sequence<size_t, Ints...>, std::integer_sequence<size_t>) {
+  return {};
+}
+
+template <class TTuple, size_t I, size_t... Ints1, size_t... Ints2>
+constexpr auto get_tuple_index_seq_of_voids_impl(std::integer_sequence<size_t, Ints1...>, std::integer_sequence<size_t, I, Ints2...>) {
+  if constexpr (!std::is_void_v<typename std::tuple_element<I, TTuple>::type>) {
+    return get_tuple_index_seq_of_voids_impl<TTuple>(std::integer_sequence<size_t, Ints1...>{}, std::integer_sequence<size_t, Ints2...>{});
+  } else {
+    return get_tuple_index_seq_of_voids_impl<TTuple>(std::integer_sequence<size_t, Ints1..., I>{}, std::integer_sequence<size_t, Ints2...>{});
+  }
+}
+
+template <class TTuple>
+constexpr auto get_tuple_index_seq_of_voids() {
+  return get_tuple_index_seq_of_voids_impl<TTuple>(std::integer_sequence<size_t>{}, std::make_index_sequence<std::tuple_size_v<TTuple>>{});
+}
+
 template <class TAwaiter>
 struct await_suspension_wrapper {
   bool await_ready() noexcept {
@@ -155,10 +174,6 @@ struct handle_awaiter {
 
   void reset_suspender_coro_awaiter() noexcept {
     _handle.reset_continue();
-  }
-
-  void check_coro_exception() const {
-    _handle.check_exception();
   }
 
   TRes await_resume() {
@@ -251,16 +266,14 @@ struct all_awaiter {
         _awaiters);
   }
 
-  void check_coro_exception() const {
-    std::apply(
-        [&](auto&... awaiters) {
-          (awaiters.check_coro_exception(), ...);
-        },
-        _awaiters);
-  }
-
   result_type await_resume() {
-    check_coro_exception();
+    using voids_index_seq = decltype(get_tuple_index_seq_of_voids<std::tuple<typename TAwaiters::result_type...>>());
+
+    if constexpr (std::is_same_v<voids_index_seq, std::integer_sequence<size_t>>) {
+      [&]<size_t... Ints>(std::integer_sequence<size_t, Ints...>) {
+        (std::get<Ints>(std::move(_awaiters)).await_resume(), ...);
+      }(voids_index_seq{});
+    }
 
     if constexpr (std::is_same_v<result_type, std::tuple<>>) {
       return {};
@@ -377,8 +390,6 @@ struct any_awaiter {
     call_functor_while_true(func, std::index_sequence_for<TAwaiters...>{});
   }
 
-  void check_coro_exception() const noexcept {}
-
   result_type await_resume() {
     union_res res;
     const auto index = _result_index.load(std::memory_order::relaxed);
@@ -392,7 +403,7 @@ struct any_awaiter {
 
       if (index == awaiter_index) {
         if constexpr (std::is_void_v<result_t>) {
-          awaiter.check_coro_exception();
+          awaiter.await_resume();
           new (&res.r) result_type{variant_index, std::monostate{}};
         } else {
           new (&res.r) result_type{variant_index, awaiter.await_resume()};
