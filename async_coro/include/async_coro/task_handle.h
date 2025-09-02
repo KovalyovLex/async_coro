@@ -2,9 +2,10 @@
 
 #include <async_coro/callback.h>
 #include <async_coro/config.h>
+#include <async_coro/internal/all_awaiter.h>
+#include <async_coro/internal/any_awaiter.h>
 #include <async_coro/internal/passkey.h>
 #include <async_coro/internal/promise_type.h>
-#include <async_coro/internal/task_awaiters.h>
 #include <async_coro/internal/task_handle_awaiter.h>
 
 #include <coroutine>
@@ -106,6 +107,8 @@ class task_handle final {
    * This function suspends current coroutine and waits for any one of the specified tasks to complete before proceeding.
    * The function returns as soon as the first task completes, with the result of that task.
    *
+   * @note When first task finishes other tasks get canceled
+   *
    * @return An awaitable of std::variant<TArgs> containing the result of the first completed task.
    *
    * @example
@@ -158,8 +161,8 @@ class task_handle final {
   // Sets callback that will be called after coroutine finish on thread that finished the coroutine.
   // If coroutine is already finished, the callback will be called immediately.
   template <class Fx>
-    requires(internal::is_runnable<std::remove_cvref_t<Fx>, void, promise_result<R>&>)
-  void continue_with(Fx&& f) noexcept(internal::is_noexcept_runnable<std::remove_cvref_t<Fx>, void, promise_result<R>&>) {
+    requires(internal::is_runnable<std::remove_cvref_t<Fx>, void, promise_result<R>&, bool>)
+  void continue_with(Fx&& f) noexcept(internal::is_noexcept_runnable<std::remove_cvref_t<Fx>, void, promise_result<R>&, bool>) {
     ASYNC_CORO_ASSERT(!_handle.promise().is_coro_embedded());
 
     if (!_handle) {
@@ -168,15 +171,15 @@ class task_handle final {
 
     auto& promise = _handle.promise();
     if (done()) {
-      f(promise);
+      f(promise, false);
     } else {
-      auto continue_f = callback<void, promise_result<R>&>::allocate(std::forward<Fx>(f));
+      auto continue_f = callback<void, promise_result<R>&, bool>::allocate(std::forward<Fx>(f));
       promise.set_continuation_functor(continue_f, internal::passkey{this});
       if (done()) {
         if (auto f_base = promise.get_continuation_functor(internal::passkey{this})) {
           ASYNC_CORO_ASSERT(f_base == continue_f);
           (void)f_base;
-          continue_f->execute(promise);
+          continue_f->execute(promise, false);
           continue_f->destroy();
         }
       }
@@ -193,6 +196,20 @@ class task_handle final {
 
     auto& promise = _handle.promise();
     promise.set_continuation_functor(nullptr, internal::passkey{this});
+  }
+
+  /**
+   * @brief Requests coroutine to stop. Stop will happen on next suspension point of coroutine.
+   *
+   * @return previous state of cancel request
+   */
+  bool request_cancel() noexcept {
+    if (!_handle) {
+      return false;
+    }
+
+    auto& promise = _handle.promise();
+    return promise.request_cancel();
   }
 
   internal::task_handle_awaiter<R> coro_await_transform(base_handle&) && {

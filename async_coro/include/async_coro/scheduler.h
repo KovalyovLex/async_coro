@@ -111,7 +111,11 @@ class scheduler {
    */
   void continue_execution(base_handle& handle_impl, internal::passkey_any<coroutine_suspender, scheduler>);
 
-  // Embed coroutine. Returns true if coroutine was finished
+  /**
+   * @brief Embed coroutine. Returns true if coroutine was finished
+   * @param parent The handle of the owning coroutine.
+   * @param parent The handle of the coroutine to embed into parent.
+   */
   bool on_child_coro_added(base_handle& parent, base_handle& child, internal::passkey<task_base>);
 
  private:
@@ -120,6 +124,7 @@ class scheduler {
   bool continue_execution_impl(base_handle& handle_impl, bool continue_parent_on_finish = true);
   void plan_continue_on_thread(base_handle& handle_impl, execution_queue_mark execution_queue);
   void change_execution_queue(base_handle& handle_impl, execution_queue_mark execution_queue);
+  void cleanup_coroutine(base_handle& handle_impl, bool cancelled);
 
  private:
   mutex _mutex;

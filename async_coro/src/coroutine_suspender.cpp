@@ -9,11 +9,15 @@
 
 namespace async_coro {
 
-void coroutine_suspender::try_to_continue_from_any_thread() {
+void coroutine_suspender::try_to_continue_from_any_thread(bool cancel) {
   ASYNC_CORO_ASSERT(_handle);
 
   const auto prev_count = _suspend_count.fetch_sub(1, std::memory_order::release);
   ASYNC_CORO_ASSERT(prev_count != 0);
+
+  if (cancel) {
+    _handle->request_cancel();
+  }
 
   if (prev_count == 1) {
     (void)_suspend_count.load(std::memory_order::acquire);

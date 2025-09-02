@@ -41,87 +41,100 @@ bool scheduler::is_current_thread_fits(execution_queue_mark execution_queue) noe
 }
 
 bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_parent_on_finish) {
-  ASYNC_CORO_ASSERT(handle_impl.is_current_thread_same());
-
   internal::scheduled_run_data local_run_data{};
   internal::scheduled_run_data* curren_data{nullptr};
+  coroutine_state state;
 
   if (handle_impl._run_data.compare_exchange_strong(curren_data, &local_run_data, std::memory_order::relaxed)) {
     curren_data = &local_run_data;
   }
 
-  handle_impl.set_coroutine_state(coroutine_state::running);
+  bool was_cancelled = handle_impl.set_coroutine_state_and_get_cancelled(coroutine_state::running);
 
   ASYNC_CORO_ASSERT(!curren_data->external_continuation_request);
 
-  handle_impl.get_handle().resume();
+  if (!was_cancelled) {
+    handle_impl.get_handle().resume();
 
-  if (curren_data->external_continuation_request) {
-    // this coroutine could be managed by another thread and it could be even destroyed so return immediately
-    return false;
+    if (curren_data->external_continuation_request) {
+      // this coroutine could be managed by another thread and it could be even destroyed so return immediately
+      return false;
+    }
+
+    if (curren_data == &local_run_data) {
+      handle_impl._run_data.store(nullptr, std::memory_order::relaxed);
+    }
+
+    std::tie(state, was_cancelled) = handle_impl.get_coroutine_state_and_cancelled();
+  } else {
+    state = coroutine_state::suspended;
+    handle_impl.set_coroutine_state(state);
   }
-
-  if (curren_data == &local_run_data) {
-    handle_impl._run_data.store(nullptr, std::memory_order::relaxed);
-  }
-
-  const auto state = handle_impl.get_coroutine_state();
 
   ASYNC_CORO_ASSERT(state != coroutine_state::running);
 
-  if (state == coroutine_state::waiting_switch) {
-    change_execution_queue(handle_impl, handle_impl._execution_queue);
-  } else if (state == coroutine_state::finished) {
+  if (was_cancelled || state == coroutine_state::finished) {
+    const auto cancelled_without_finish = state != coroutine_state::finished && was_cancelled;
+
     if (auto* parent = handle_impl.get_parent(); continue_parent_on_finish && parent && parent->get_coroutine_state() == coroutine_state::suspended) {
+      if (cancelled_without_finish) {
+        parent->request_cancel();
+      }
+
       // wake up parent coroutine
       continue_execution(*handle_impl._parent, internal::passkey{this});
     } else if (!parent) {
       // cleanup coroutine
       curren_data->external_continuation_request = true;
 
-      bool was_managed = false;
-      {
-        // remove from managed
-        unique_lock lock{_mutex};
-        auto it = std::find(_managed_coroutines.begin(), _managed_coroutines.end(), &handle_impl);
-        if (it != _managed_coroutines.end()) {
-          was_managed = true;
-          if (*it != _managed_coroutines.back()) {
-            std::swap(*it, _managed_coroutines.back());
-          }
-          _managed_coroutines.resize(_managed_coroutines.size() - 1);
-        }
-      }
-
-#if ASYNC_CORO_WITH_EXCEPTIONS && ASYNC_CORO_COMPILE_WITH_EXCEPTIONS
-      try {
-        // try to handle exception by external api
-        if (!handle_impl.execute_continuation()) {
-          handle_impl.check_exception_base();
-        }
-      } catch (...) {
-        decltype(_exception_handler) handler_copy;
-        {
-          unique_lock lock{_mutex};
-          handler_copy = _exception_handler;
-        }
-        if (handler_copy) {
-          (*handler_copy)(std::current_exception());
-        }
-      }
-#else
-      handle_impl.execute_continuation();
-#endif
-
-      if (was_managed) {
-        handle_impl.on_task_freed_by_scheduler();
-      }
+      cleanup_coroutine(handle_impl, cancelled_without_finish);
     }
-
     return true;
+  } else if (state == coroutine_state::waiting_switch) {
+    change_execution_queue(handle_impl, handle_impl._execution_queue);
   }
 
   return false;
+}
+
+void scheduler::cleanup_coroutine(base_handle& handle_impl, bool cancelled) {
+  bool was_managed = false;
+  {
+    // remove from managed
+    unique_lock lock{_mutex};
+    auto it = std::find(_managed_coroutines.begin(), _managed_coroutines.end(), &handle_impl);
+    if (it != _managed_coroutines.end()) {
+      was_managed = true;
+      if (*it != _managed_coroutines.back()) {
+        std::swap(*it, _managed_coroutines.back());
+      }
+      _managed_coroutines.resize(_managed_coroutines.size() - 1);
+    }
+  }
+
+#if ASYNC_CORO_WITH_EXCEPTIONS && ASYNC_CORO_COMPILE_WITH_EXCEPTIONS
+  try {
+    // try to handle exception by external api
+    if (!handle_impl.execute_continuation(cancelled)) {
+      handle_impl.check_exception_base();
+    }
+  } catch (...) {
+    decltype(_exception_handler) handler_copy;
+    {
+      unique_lock lock{_mutex};
+      handler_copy = _exception_handler;
+    }
+    if (handler_copy) {
+      (*handler_copy)(std::current_exception());
+    }
+  }
+#else
+  handle_impl.execute_continuation(cancelled);
+#endif
+
+  if (was_managed) {
+    handle_impl.on_task_freed_by_scheduler();
+  }
 }
 
 void scheduler::plan_continue_on_thread(base_handle& handle_impl, execution_queue_mark execution_queue) {
@@ -149,6 +162,7 @@ void scheduler::add_coroutine(base_handle& handle_impl,
     unique_lock lock{_mutex};
 
     if (_is_destroying) {
+      lock.unlock();
       // if we are in destructor no way to run this coroutine
       handle_impl.on_task_freed_by_scheduler();
       return;
@@ -203,6 +217,7 @@ bool scheduler::on_child_coro_added(base_handle& parent, base_handle& child, int
   ASYNC_CORO_ASSERT(parent._scheduler == this);
   ASYNC_CORO_ASSERT(child._execution_thread == std::thread::id{});
   ASYNC_CORO_ASSERT(child.get_coroutine_state() == coroutine_state::created);
+  ASYNC_CORO_ASSERT(parent.is_current_thread_same());
 
   parent.set_coroutine_state(coroutine_state::suspended);
 

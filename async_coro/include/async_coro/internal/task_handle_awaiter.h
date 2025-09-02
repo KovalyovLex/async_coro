@@ -28,8 +28,8 @@ struct task_handle_awaiter {
   void await_suspend(std::coroutine_handle<T> h) {
     _suspension = h.promise().suspend(2);
 
-    _th.continue_with([this](promise_result<R>&) {
-      _suspension.try_to_continue_from_any_thread();
+    _th.continue_with([this](promise_result<R>&, bool canceled) {
+      _suspension.try_to_continue_from_any_thread(canceled);
     });
 
     _suspension.try_to_continue_immediately();

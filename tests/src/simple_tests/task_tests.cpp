@@ -957,6 +957,14 @@ TEST(task, when_any_continue_after_parent_complete) {
 TEST(task, when_any) {
   std::binary_semaphore sema{0};
 
+  struct ReleaseInDestructor {
+    ReleaseInDestructor(std::binary_semaphore& ref) noexcept : sema_ref(ref) {}
+    ~ReleaseInDestructor() {
+      sema_ref.release();
+    }
+    std::binary_semaphore& sema_ref;
+  };
+
   auto routine1 = []() -> async_coro::task<int> {
     co_return 1;
   };
@@ -966,9 +974,9 @@ TEST(task, when_any) {
   };
 
   auto routine3 = [&]() -> async_coro::task<double> {
-    std::this_thread::sleep_for(std::chrono::milliseconds{10});
+    ReleaseInDestructor t{sema};
 
-    sema.release();
+    std::this_thread::sleep_for(std::chrono::milliseconds{10});
 
     co_return 2.72;
   };
@@ -985,7 +993,7 @@ TEST(task, when_any) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{{{"worker1"}, {"worker2"}}})};
 
   auto handle = scheduler.start_task(routine());
 
