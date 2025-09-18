@@ -42,10 +42,13 @@ bool scheduler::is_current_thread_fits(execution_queue_mark execution_queue) noe
 
 bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_parent_on_finish) {
   internal::scheduled_run_data local_run_data{};
+
   internal::scheduled_run_data* curren_data{nullptr};
+  bool run_data_was_set = false;
   coroutine_state state;
 
   if (handle_impl._run_data.compare_exchange_strong(curren_data, &local_run_data, std::memory_order::relaxed)) {
+    run_data_was_set = true;
     curren_data = &local_run_data;
   }
 
@@ -61,14 +64,14 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
       return false;
     }
 
-    if (curren_data == &local_run_data) {
-      handle_impl._run_data.store(nullptr, std::memory_order::relaxed);
-    }
-
     std::tie(state, was_cancelled) = handle_impl.get_coroutine_state_and_cancelled();
   } else {
     state = coroutine_state::suspended;
     handle_impl.set_coroutine_state(state);
+  }
+
+  if (run_data_was_set) {
+    handle_impl._run_data.store(nullptr, std::memory_order::relaxed);
   }
 
   ASYNC_CORO_ASSERT(state != coroutine_state::running);
@@ -76,16 +79,32 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
   if (was_cancelled || state == coroutine_state::finished) {
     const auto cancelled_without_finish = state != coroutine_state::finished && was_cancelled;
 
-    if (auto* parent = handle_impl.get_parent(); continue_parent_on_finish && parent && parent->get_coroutine_state() == coroutine_state::suspended) {
+    auto* parent = handle_impl.get_parent();
+
+    if (parent) {
+      ASYNC_CORO_ASSERT(parent->_current_child == &handle_impl);
+
+      parent->_current_child = nullptr;
+
       if (cancelled_without_finish) {
         parent->request_cancel();
+
+        if (handle_impl._on_cancel) {
+          std::exchange(handle_impl._on_cancel, nullptr)->execute();
+        }
       }
 
-      // wake up parent coroutine
-      continue_execution(*handle_impl._parent, internal::passkey{this});
-    } else if (!parent) {
+      if (continue_parent_on_finish && parent->get_coroutine_state() == coroutine_state::suspended) {
+        // wake up parent coroutine
+        continue_execution(*parent, internal::passkey{this});
+      }
+    } else {
       // cleanup coroutine
       curren_data->external_continuation_request = true;
+
+      if (cancelled_without_finish && handle_impl._on_cancel) {
+        std::exchange(handle_impl._on_cancel, nullptr)->execute();
+      }
 
       cleanup_coroutine(handle_impl, cancelled_without_finish);
     }
@@ -226,6 +245,7 @@ bool scheduler::on_child_coro_added(base_handle& parent, base_handle& child, int
   child._execution_queue = parent._execution_queue;
   child.set_parent(parent);
   child.set_coroutine_state(coroutine_state::suspended);
+  parent._current_child = &child;
 
   // start execution of internal coroutine
   bool was_done = continue_execution_impl(child, false);

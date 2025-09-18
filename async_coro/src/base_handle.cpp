@@ -74,4 +74,22 @@ void base_handle::inc_num_owners() noexcept {
   }
 }
 
+bool base_handle::request_cancel() {
+  bool was_requested = set_cancel_requested(true);
+  if (!was_requested) {
+    // this is first cancel - notify continuation
+    const auto state = get_coroutine_state(std::memory_order::acquire);
+    if ((state == coroutine_state::suspended || state == coroutine_state::waiting_switch)) {
+      if (_current_child) {
+        _current_child->request_cancel();
+      }
+      if (_on_cancel) {
+        _on_cancel->execute();
+      }
+    }
+    execute_continuation(true);
+  }
+  return was_requested;
+}
+
 }  // namespace async_coro

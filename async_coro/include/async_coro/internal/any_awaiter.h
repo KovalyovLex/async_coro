@@ -82,6 +82,16 @@ struct any_awaiter {
     const auto func = [this](size_t awaiter_index) noexcept {
       size_t expected_index = 0;
       if (_result_index.compare_exchange_strong(expected_index, awaiter_index, std::memory_order::relaxed)) {
+        // cancel other coroutines
+        call_functor_while_true(
+            [&](auto& awaiter_to_cancel, auto, size_t index) {
+              if (index != awaiter_index) {
+                awaiter_to_cancel.cancel_await();
+              }
+              return true;
+            },
+            std::index_sequence_for<TAwaiters...>{});
+
         return true;
       }
       return false;

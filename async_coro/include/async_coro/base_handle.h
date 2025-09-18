@@ -66,7 +66,7 @@ class base_handle {
   static constexpr uint8_t coroutine_state_mask = (1 << 0) | (1 << 1) | (1 << 2);
   static constexpr uint8_t is_embedded_mask = (1 << 3);
   static constexpr uint8_t num_owners_step = (1 << 4);
-  static constexpr uint8_t num_owners_mask = (1 << 4) | (1 << 5);
+  static constexpr uint8_t num_owners_mask = (1 << 4) | (1 << 5);  // can have 2 owners max (1 is scheduler and another is task_handle)
   static constexpr uint8_t is_cancel_requested_mask = (1 << 6);
 
  public:
@@ -247,7 +247,8 @@ class base_handle {
    *
    * @see `coroutine_suspender`
    */
-  auto suspend(std::uint32_t suspend_count) noexcept {
+  auto suspend(std::uint32_t suspend_count, callback<void>* on_cancel) noexcept {
+    this->_on_cancel = on_cancel;
     return coroutine_suspender{*this, suspend_count};
   }
 
@@ -256,8 +257,25 @@ class base_handle {
    *
    * @return previous state of cancel request
    */
-  bool request_cancel() noexcept {
-    return set_cancel_requested(true);
+  bool request_cancel();
+
+  /**
+   * @brief Returns state of cancel request
+   *
+   * @return previous state of cancel request
+   */
+  bool is_cancelled() noexcept {
+    return _atomic_state.load(std::memory_order::relaxed) & is_cancel_requested_mask;
+  }
+
+  /**
+   * @brief Returns pair of coroutine_state and state of cancel request
+   *
+   * @return std::pair of coroutine_state and state of cancel request
+   */
+  std::pair<coroutine_state, bool> get_coroutine_state_and_cancelled(std::memory_order order = std::memory_order::relaxed) const noexcept {
+    const auto state = _atomic_state.load(order);
+    return {static_cast<coroutine_state>(state & coroutine_state_mask), state & is_cancel_requested_mask};
   }
 
  protected:
@@ -311,11 +329,6 @@ class base_handle {
     return static_cast<coroutine_state>(_atomic_state.load(order) & coroutine_state_mask);
   }
 
-  std::pair<coroutine_state, bool> get_coroutine_state_and_cancelled(std::memory_order order = std::memory_order::relaxed) const noexcept {
-    const auto state = _atomic_state.load(order);
-    return {static_cast<coroutine_state>(state & coroutine_state_mask), state & is_cancel_requested_mask};
-  }
-
   void set_coroutine_state(coroutine_state value, bool release = false) noexcept {
     if (release) {
       update_value(static_cast<uint8_t>(value), get_inverted_mask(coroutine_state_mask), std::memory_order::relaxed, std::memory_order::release);
@@ -358,6 +371,8 @@ class base_handle {
   std::coroutine_handle<> _handle;
   scheduler* _scheduler = nullptr;
   callback_base::ptr _start_function;
+  callback<void>* _on_cancel = nullptr;  // can be called more than once
+  base_handle* _current_child = nullptr;
   std::thread::id _execution_thread = {};
   execution_queue_mark _execution_queue = execution_queues::main;
   std::atomic<uint8_t> _atomic_state{num_owners_step};  // 1 owner by default

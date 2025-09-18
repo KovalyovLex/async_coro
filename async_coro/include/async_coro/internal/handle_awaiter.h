@@ -41,7 +41,6 @@ struct handle_awaiter {
   bool await_ready() const noexcept { return _handle.done(); }
 
   void cancel_await() noexcept {
-    _handle.reset_continue();
     _handle.request_cancel();
   }
 
@@ -51,10 +50,6 @@ struct handle_awaiter {
     _handle.continue_with([continue_f = std::forward<Fx>(continue_f)](promise_result<TRes>&, bool cancelled) noexcept(internal::is_noexcept_runnable<std::remove_cvref_t<Fx>, void, bool>) {
       continue_f(cancelled);
     });
-  }
-
-  void reset_suspender_coro_awaiter() noexcept {
-    _handle.reset_continue();
   }
 
   TRes await_resume() {

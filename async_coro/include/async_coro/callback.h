@@ -249,6 +249,28 @@ struct concrete_callable : public callback<R, TArgs...> {
 };
 
 template <typename Fx, typename R, typename... TArgs>
+struct concrete_callable_on_stack : public callback<R, TArgs...> {
+  template <class T>
+  concrete_callable_on_stack(T&& fx) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
+      : callback<R, TArgs...>(&executor, &deleter),
+        _fx(std::forward<T>(fx)) {}
+
+  ~concrete_callable_on_stack() noexcept = default;
+
+ private:
+  static void deleter(callback_base*) noexcept {
+    // do nothing
+  }
+
+  static R executor(callback_base* base, TArgs... value) {
+    return static_cast<concrete_callable_on_stack*>(base)->_fx(std::forward<TArgs>(value)...);
+  }
+
+ private:
+  Fx _fx;
+};
+
+template <typename Fx, typename R, typename... TArgs>
 struct concrete_callable_noexcept : public callback_noexcept<R, TArgs...> {
   template <class T>
   concrete_callable_noexcept(T&& fx) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
@@ -271,6 +293,28 @@ struct concrete_callable_noexcept : public callback_noexcept<R, TArgs...> {
 
   static R executor(callback_base* base, TArgs... value) noexcept {
     return static_cast<concrete_callable_noexcept*>(base)->_fx(std::forward<TArgs>(value)...);
+  }
+
+ private:
+  Fx _fx;
+};
+
+template <typename Fx, typename R, typename... TArgs>
+struct concrete_callable_noexcept_on_stack : public callback_noexcept<R, TArgs...> {
+  template <class T>
+  concrete_callable_noexcept_on_stack(T&& fx) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
+      : callback_noexcept<R, TArgs...>(&executor, &deleter),
+        _fx(std::forward<T>(fx)) {}
+
+  ~concrete_callable_noexcept_on_stack() noexcept = default;
+
+ private:
+  static void deleter(callback_base*) noexcept {
+    // do nothing
+  }
+
+  static R executor(callback_base* base, TArgs... value) noexcept {
+    return static_cast<concrete_callable_noexcept_on_stack*>(base)->_fx(std::forward<TArgs>(value)...);
   }
 
  private:

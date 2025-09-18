@@ -8,9 +8,13 @@
 #include <async_coro/internal/promise_type.h>
 #include <async_coro/internal/task_handle_awaiter.h>
 
+#include <atomic>
 #include <coroutine>
 #include <type_traits>
 #include <utility>
+
+#include "async_coro/base_handle.h"
+
 
 namespace async_coro {
 
@@ -169,17 +173,18 @@ class task_handle final {
       return;
     }
 
-    auto& promise = _handle.promise();
+    promise_type& promise = _handle.promise();
     if (done()) {
       f(promise, false);
     } else {
       auto continue_f = callback<void, promise_result<R>&, bool>::allocate(std::forward<Fx>(f));
       promise.set_continuation_functor(continue_f, internal::passkey{this});
-      if (done()) {
+      auto [state, cancelled] = promise.get_coroutine_state_and_cancelled(std::memory_order::acquire);
+      if (state == async_coro::coroutine_state::finished || cancelled) {
         if (auto f_base = promise.get_continuation_functor(internal::passkey{this})) {
           ASYNC_CORO_ASSERT(f_base == continue_f);
           (void)f_base;
-          continue_f->execute(promise, false);
+          continue_f->execute(promise, cancelled);
           continue_f->destroy();
         }
       }
@@ -210,6 +215,14 @@ class task_handle final {
 
     auto& promise = _handle.promise();
     return promise.request_cancel();
+  }
+
+  bool is_cancelled() noexcept {
+    if (!_handle) {
+      return false;
+    }
+
+    return _handle.promise().is_cancelled();
   }
 
   internal::task_handle_awaiter<R> coro_await_transform(base_handle&) && {

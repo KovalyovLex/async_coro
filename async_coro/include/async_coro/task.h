@@ -77,11 +77,17 @@ struct task final : private task_base {
 
   bool done() const noexcept { return _handle.done(); }
 
+  void cancel() {
+    if (_handle) {
+      _handle.promise().request_cancel();
+    }
+  }
+
   // task should be moved to become embedded
   void await_ready() = delete;
 
   awaiter coro_await_transform(base_handle& parent) && {
-    return {*this, on_child_coro_added(parent, _handle.promise())};
+    return {*this, on_child_coro_added(parent, _handle.promise()) && !parent.is_cancelled()};
   }
 
   handle_type release_handle(internal::passkey_successors<scheduler>) noexcept {

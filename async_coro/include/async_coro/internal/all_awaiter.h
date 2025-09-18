@@ -96,10 +96,22 @@ struct all_awaiter {
     _num_not_finished.store(sizeof...(TAwaiters), std::memory_order::relaxed);
 
     std::apply(
-        [this](auto&... awaiters) {
-          (awaiters.continue_after_complete([this](bool cancelled) {
-            if (cancelled) {
-              _was_any_cancelled.store(true, std::memory_order::relaxed);
+        [this](auto&... awaiter) {
+          (awaiter.continue_after_complete([this, awaiter_ptr = static_cast<void*>(&awaiter)](bool cancelled) {
+            if (cancelled && !_was_any_cancelled.exchange(true, std::memory_order::relaxed)) {
+              // immediately notify others to cancel
+              std::apply(
+                  [&](auto&... awaiter_to_cancel) {
+                    (
+                        // call lambda with if
+                        [awaiter_ptr](auto& awt) {
+                          if (static_cast<void*>(&awt) != awaiter_ptr) {
+                            awt.cancel_await();
+                          }
+                        }(awaiter_to_cancel),
+                        ...);
+                  },
+                  _awaiters);
             }
             if (_num_not_finished.fetch_sub(1, std::memory_order::relaxed) == 1) {
               _continue_f(_was_any_cancelled.load(std::memory_order::relaxed));

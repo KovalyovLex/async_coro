@@ -1,10 +1,12 @@
 #pragma once
 
 #include <async_coro/base_handle.h>
+#include <async_coro/callback.h>
 #include <async_coro/config.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/warnings.h>
 
+#include <atomic>
 #include <concepts>
 #include <coroutine>
 #include <type_traits>
@@ -15,7 +17,9 @@ namespace async_coro::internal {
 template <typename T>
 struct await_callback {
   explicit await_callback(T&& callback) noexcept(std::is_nothrow_constructible_v<T, T&&>)
-      : _on_await(std::forward<T>(callback)) {}
+      : _on_await(std::forward<T>(callback)),
+        _callback(on_cancel_callback{this}) {}
+
   await_callback(const await_callback&) = delete;
   await_callback(await_callback&&) = delete;
 
@@ -30,12 +34,12 @@ struct await_callback {
   template <typename U>
     requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> h) {
-    _suspension = h.promise().suspend(2);
+    _was_done.store(false, std::memory_order::relaxed);
 
-    _on_await([done = false, this]() {
-      if (!done) [[likely]] {
-        const_cast<bool&>(done) = true;  // we intensionally breaks constant here to keep callback immutable
+    _suspension = h.promise().suspend(2, &_callback);
 
+    _on_await([this]() {
+      if (!_was_done.exchange(true, std::memory_order::relaxed)) [[likely]] {
         _suspension.try_to_continue_from_any_thread(false);
       }
     });
@@ -48,8 +52,22 @@ struct await_callback {
   void await_resume() const noexcept {}
 
  private:
+  struct on_cancel_callback {
+    void operator()() const {
+      if (!clb->_was_done.exchange(true, std::memory_order::relaxed)) {
+        // cancel
+        clb->_suspension.try_to_continue_from_any_thread(true);
+      }
+    }
+
+    await_callback* clb;
+  };
+
+ private:
   T _on_await;
   coroutine_suspender _suspension;
+  concrete_callable_on_stack<on_cancel_callback, void> _callback;
+  std::atomic_bool _was_done = false;
 };
 
 template <typename T>

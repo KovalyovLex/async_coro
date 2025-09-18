@@ -27,6 +27,9 @@ void coroutine_suspender::try_to_continue_from_any_thread(bool cancel) {
       return;
     }
 
+    // reset our cancel
+    _handle->_on_cancel = nullptr;
+
     _handle->get_scheduler().continue_execution(*_handle, internal::passkey{this});
   }
 }
@@ -64,6 +67,9 @@ void coroutine_suspender::try_to_continue_immediately() {
       // some exception happened before callback call
       return;
     }
+
+    // reset our cancel
+    _handle->_on_cancel = nullptr;
 
     _handle->get_scheduler().continue_execution(*_handle, internal::passkey{this});
   }
