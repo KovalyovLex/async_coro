@@ -22,6 +22,15 @@ struct coro_runner {
 
   async_coro::scheduler _scheduler;
 };
+
+struct release_sema_in_destructor {
+  release_sema_in_destructor(std::binary_semaphore& ref) noexcept : sema_ref(ref) {}
+  ~release_sema_in_destructor() {
+    sema_ref.release();
+  }
+  std::binary_semaphore& sema_ref;
+};
+
 }  // namespace task_tests
 
 TEST(task, await_no_wait) {
@@ -518,16 +527,16 @@ TEST(task, when_all_no_wait) {
 }
 
 TEST(task, when_any_no_wait_sleep) {
-  std::binary_semaphore sema{0};
-
   auto routine1 = []() -> async_coro::task<int> {
     co_return 1;
   };
 
   auto routine3 = [&]() -> async_coro::task<double> {
-    std::this_thread::sleep_for(std::chrono::milliseconds{10});
+    // this coro should not start
 
-    sema.release();
+    ADD_FAILURE();
+
+    std::this_thread::sleep_for(std::chrono::milliseconds{10});
 
     co_return 2.72;
   };
@@ -547,9 +556,6 @@ TEST(task, when_any_no_wait_sleep) {
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
-
-  // wait for worker thread finish coro
-  sema.acquire();
 
   std::this_thread::sleep_for(std::chrono::milliseconds{1});
 
@@ -957,14 +963,6 @@ TEST(task, when_any_continue_after_parent_complete) {
 TEST(task, when_any) {
   std::binary_semaphore sema{0};
 
-  struct ReleaseInDestructor {
-    ReleaseInDestructor(std::binary_semaphore& ref) noexcept : sema_ref(ref) {}
-    ~ReleaseInDestructor() {
-      sema_ref.release();
-    }
-    std::binary_semaphore& sema_ref;
-  };
-
   auto routine1 = []() -> async_coro::task<int> {
     co_return 1;
   };
@@ -974,7 +972,7 @@ TEST(task, when_any) {
   };
 
   auto routine3 = [&]() -> async_coro::task<double> {
-    ReleaseInDestructor t{sema};
+    task_tests::release_sema_in_destructor t{sema};
 
     std::this_thread::sleep_for(std::chrono::milliseconds{10});
 
