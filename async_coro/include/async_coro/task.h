@@ -1,6 +1,5 @@
 #pragma once
 
-#include <async_coro/base_handle.h>
 #include <async_coro/callback.h>
 #include <async_coro/config.h>
 #include <async_coro/internal/passkey.h>
@@ -14,6 +13,7 @@
 namespace async_coro {
 
 class scheduler;
+class base_handle;
 
 struct task_base {
   bool on_child_coro_added(base_handle& parent, base_handle& child);

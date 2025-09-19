@@ -245,7 +245,6 @@ bool scheduler::on_child_coro_added(base_handle& parent, base_handle& child, int
   child._execution_queue = parent._execution_queue;
   child.set_parent(parent);
   child.set_coroutine_state(coroutine_state::suspended);
-  parent._current_child = &child;
 
   // start execution of internal coroutine
   bool was_done = continue_execution_impl(child, false);

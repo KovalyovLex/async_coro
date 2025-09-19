@@ -1,10 +1,8 @@
 #pragma once
 
-#include <async_coro/base_handle.h>
 #include <async_coro/callback.h>
 #include <async_coro/coroutine_suspender.h>
 #include <async_coro/promise_result.h>
-#include <async_coro/scheduler.h>
 
 #include <atomic>
 
@@ -12,6 +10,8 @@ namespace async_coro {
 
 template <class R>
 class task_handle;
+
+class base_handle;
 
 }  // namespace async_coro
 

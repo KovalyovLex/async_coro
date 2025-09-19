@@ -313,6 +313,7 @@ class base_handle {
 
   void set_parent(base_handle& parent) noexcept {
     _parent = &parent;
+    parent._current_child = this;
     set_embedded(true);
   }
 

@@ -2,7 +2,6 @@
 
 #include <async_coro/internal/type_traits.h>
 
-#include <cstdint>
 #include <utility>
 
 namespace async_coro {
