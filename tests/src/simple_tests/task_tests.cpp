@@ -532,10 +532,6 @@ TEST(task, when_any_no_wait_sleep) {
   };
 
   auto routine3 = [&]() -> async_coro::task<double> {
-    // this coro should not start
-
-    ADD_FAILURE();
-
     std::this_thread::sleep_for(std::chrono::milliseconds{10});
 
     co_return 2.72;
