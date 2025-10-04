@@ -14,7 +14,7 @@ template <typename Fx, typename R, typename... TArgs>
 struct callable_impl;
 
 template <typename Fx, typename R, typename... TArgs>
-struct callable_impl_noexcept;
+struct callback_impl_noexcept;
 }  // namespace internal
 
 /**
@@ -185,7 +185,7 @@ struct callback_noexcept : public callback_base {
   template <class Fx>
     requires(std::is_nothrow_invocable_v<Fx, TArgs...> && std::is_same_v<R, std::invoke_result_t<Fx, TArgs...>>)
   static callback_noexcept* allocate(Fx&& fx) {
-    return new internal::callable_impl_noexcept<std::remove_cvref_t<Fx>, R, TArgs...>(std::forward<Fx>(fx));
+    return new internal::callback_impl_noexcept<std::remove_cvref_t<Fx>, R, TArgs...>(std::forward<Fx>(fx));
   }
 
  protected:
@@ -245,32 +245,14 @@ struct callable_impl : public callback<R, TArgs...> {
 };
 
 template <typename Fx, typename R, typename... TArgs>
-struct concrete_callable_on_stack : public callback<R, TArgs...> {
+struct callback_impl_noexcept : public callback_noexcept<R, TArgs...> {
   template <class T>
-  concrete_callable_on_stack(T&& fx) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
-      : callback<R, TArgs...>(&executor, &callback_base::stack_deleter),
-        _fx(std::forward<T>(fx)) {}
-
-  ~concrete_callable_on_stack() noexcept = default;
-
- private:
-  static R executor(callback_base* base, TArgs... value) {
-    return static_cast<concrete_callable_on_stack*>(base)->_fx(std::forward<TArgs>(value)...);
-  }
-
- private:
-  Fx _fx;
-};
-
-template <typename Fx, typename R, typename... TArgs>
-struct callable_impl_noexcept : public callback_noexcept<R, TArgs...> {
-  template <class T>
-  callable_impl_noexcept(T&& fx) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
+  callback_impl_noexcept(T&& fx) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
       : callback_noexcept<R, TArgs...>(&executor, get_deleter()),
         _fx(std::forward<T>(fx)) {}
 
  protected:
-  ~callable_impl_noexcept() noexcept = default;
+  ~callback_impl_noexcept() noexcept = default;
 
  private:
   static callback_base::deleter_t get_deleter() noexcept {
@@ -278,13 +260,13 @@ struct callable_impl_noexcept : public callback_noexcept<R, TArgs...> {
       return nullptr;
     } else {
       return +[](callback_base* base) noexcept {
-        delete static_cast<callable_impl_noexcept*>(base);
+        delete static_cast<callback_impl_noexcept*>(base);
       };
     }
   }
 
   static R executor(callback_base* base, TArgs... value) noexcept {
-    return static_cast<callable_impl_noexcept*>(base)->_fx(std::forward<TArgs>(value)...);
+    return static_cast<callback_impl_noexcept*>(base)->_fx(std::forward<TArgs>(value)...);
   }
 
  private:
@@ -292,17 +274,35 @@ struct callable_impl_noexcept : public callback_noexcept<R, TArgs...> {
 };
 
 template <typename Fx, typename R, typename... TArgs>
-struct callable_on_stack_noexcept : public callback_noexcept<R, TArgs...> {
+struct callback_on_stack : public callback<R, TArgs...> {
   template <class T>
-  callable_on_stack_noexcept(T&& fx) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
+  callback_on_stack(T&& fx) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
+      : callback<R, TArgs...>(&executor, &callback_base::stack_deleter),
+        _fx(std::forward<T>(fx)) {}
+
+  ~callback_on_stack() noexcept = default;
+
+ private:
+  static R executor(callback_base* base, TArgs... value) {
+    return static_cast<callback_on_stack*>(base)->_fx(std::forward<TArgs>(value)...);
+  }
+
+ private:
+  Fx _fx;
+};
+
+template <typename Fx, typename R, typename... TArgs>
+struct callback_on_stack_noexcept : public callback_noexcept<R, TArgs...> {
+  template <class T>
+  callback_on_stack_noexcept(T&& fx) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
       : callback_noexcept<R, TArgs...>(&executor, &callback_base::stack_deleter),
         _fx(std::forward<T>(fx)) {}
 
-  ~callable_on_stack_noexcept() noexcept = default;
+  ~callback_on_stack_noexcept() noexcept = default;
 
  private:
   static R executor(callback_base* base, TArgs... value) noexcept {
-    return static_cast<callable_on_stack_noexcept*>(base)->_fx(std::forward<TArgs>(value)...);
+    return static_cast<callback_on_stack_noexcept*>(base)->_fx(std::forward<TArgs>(value)...);
   }
 
  private:

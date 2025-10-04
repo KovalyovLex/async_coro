@@ -59,7 +59,7 @@ struct await_suspension_wrapper {
  private:
   TAwaiter _awaiter;
   coroutine_suspender _suspension{};
-  concrete_callable_on_stack<on_cancel_callback, void> _callback;
+  callback_on_stack<on_cancel_callback, void> _callback;
   std::atomic_bool _was_done{false};
 };
 

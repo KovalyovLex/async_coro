@@ -65,7 +65,7 @@ struct task_handle_awaiter {
  private:
   task_handle<R> _th;
   coroutine_suspender _suspension;
-  concrete_callable_on_stack<on_cancel_callback, void> _callback;
+  callback_on_stack<on_cancel_callback, void> _callback;
   std::atomic_bool _was_done{false};
 };
 
