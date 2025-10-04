@@ -41,6 +41,7 @@ struct handle_awaiter {
 
   void cancel_await() noexcept {
     _handle.request_cancel();
+    _handle.reset_continue();
   }
 
   template <class Fx>
