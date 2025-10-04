@@ -22,20 +22,17 @@ struct await_cancel_task {
   template <typename U>
     requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> h) {
-    auto& promise = h.promise();
+    base_handle& promise = h.promise();
 
     promise.request_cancel();
 
-    _suspension = promise.suspend(1, nullptr);
-    _suspension.try_to_continue_immediately();
+    auto suspension = promise.suspend(1, nullptr);
+    suspension.try_to_continue_immediately();
   }
 
   void await_resume() noexcept {
     ASYNC_CORO_ASSERT(false);
   }
-
- private:
-  coroutine_suspender _suspension;
 };
 
 }  // namespace async_coro::internal
