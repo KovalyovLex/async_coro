@@ -112,7 +112,7 @@ TEST(cancel_task, when_all_parent_cancelled) {
 
   auto parent = [&]() -> async_coro::task<int> {
     // both children awaited with when_all - cancellation in one should cancel the whole group
-    auto _ = co_await (co_await async_coro::start_task(child1()) && co_await async_coro::start_task(infinite_task()));
+    co_await (co_await async_coro::start_task(child1()) && co_await async_coro::start_task(infinite_task()));
 
     // should not reach here
     ADD_FAILURE();
@@ -239,7 +239,7 @@ TEST(cancel_task, root_request_cancel_with_started_children) {
     auto h1 = co_await async_coro::start_task(infinite_task1());
     auto h2 = co_await async_coro::start_task(infinite_task2());
     // wait for both (when_all)
-    auto _ = co_await (std::move(h1) && std::move(h2));
+    co_await (std::move(h1) && std::move(h2));
     // should not reach here if parent cancelled
     ADD_FAILURE();
     co_return 0;
