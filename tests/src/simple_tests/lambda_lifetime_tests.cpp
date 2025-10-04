@@ -85,7 +85,7 @@ TEST(lambda_lifetime, start_task_with_scheduler) {
 
   async_coro::task_handle<int> handle;
 
-  std::function<void()> continue_f;
+  async_coro::unique_function<void()> continue_f;
 
   {
     // Create task with lambda that captures the argument
@@ -139,7 +139,7 @@ TEST(lambda_lifetime, start_task_in_coroutine) {
       async_coro::execution_system_config{{{"worker1"}}})};
 
   async_coro::task_handle<int> handle;
-  std::function<void()> continue_f;
+  async_coro::unique_function<void()> continue_f;
 
   {
     lifetime_tracker captured_arg(100);
@@ -201,9 +201,9 @@ TEST(lambda_lifetime, when_all_tasks) {
       async_coro::execution_system_config{{{"worker1"}}})};
 
   async_coro::task_handle<int> handle;
-  std::function<void()> continue_f1;
-  std::function<void()> continue_f2;
-  std::function<void()> continue_f3;
+  async_coro::unique_function<void()> continue_f1;
+  async_coro::unique_function<void()> continue_f2;
+  async_coro::unique_function<void()> continue_f3;
 
   {
     lifetime_tracker captured_arg1(10);
@@ -298,9 +298,9 @@ TEST(lambda_lifetime, when_any_tasks) {
       async_coro::execution_system_config{{{"worker1"}}})};
 
   async_coro::task_handle<int> handle;
-  std::function<void()> continue_f1;
-  std::function<void()> continue_f2;
-  std::function<void()> continue_f3;
+  async_coro::unique_function<void()> continue_f1;
+  async_coro::unique_function<void()> continue_f2;
+  async_coro::unique_function<void()> continue_f3;
 
   {
     lifetime_tracker captured_arg1(100);

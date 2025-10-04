@@ -55,7 +55,7 @@ TEST(task, await_no_wait) {
 }
 
 TEST(task, resume_on_callback_deep) {
-  std::function<void()> continue_f;
+  async_coro::unique_function<void()> continue_f;
 
   auto routine_1 = [&continue_f]() -> async_coro::task<float> {
     co_await async_coro::await_callback(
@@ -85,7 +85,7 @@ TEST(task, resume_on_callback_deep) {
 }
 
 TEST(task, resume_on_callback) {
-  std::function<void()> continue_f;
+  async_coro::unique_function<void()> continue_f;
 
   auto routine = [](auto& cnt) -> async_coro::task<int> {
     co_await async_coro::await_callback([&cnt](auto f) { cnt = std::move(f); });
@@ -566,7 +566,7 @@ TEST(task, when_any_no_wait_sleep) {
 }
 
 TEST(task, when_any_no_wait) {
-  std::function<void()> continue_f;
+  async_coro::unique_function<void()> continue_f;
 
   auto routine1 = []() -> async_coro::task<int> {
     co_return 1;
@@ -610,7 +610,7 @@ TEST(task, when_any_no_wait) {
 }
 
 TEST(task, when_any_void_all) {
-  std::function<void()> continue_f;
+  async_coro::unique_function<void()> continue_f;
 
   auto routine1 = []() -> async_coro::task<void> {
     co_return;
@@ -648,7 +648,7 @@ TEST(task, when_any_void_all) {
 }
 
 TEST(task, when_any_void_first) {
-  std::function<void()> continue_f;
+  async_coro::unique_function<void()> continue_f;
 
   auto routine1 = []() -> async_coro::task<void> {
     co_return;
@@ -699,7 +699,7 @@ TEST(task, when_any_void_first) {
 }
 
 TEST(task, when_any_void_last) {
-  std::function<void()> continue_f;
+  async_coro::unique_function<void()> continue_f;
 
   auto routine1 = []() -> async_coro::task<void> {
     co_return;
@@ -750,7 +750,7 @@ TEST(task, when_any_void_last) {
 }
 
 TEST(task, when_any_void_mid) {
-  std::function<void()> continue_f;
+  async_coro::unique_function<void()> continue_f;
 
   auto routine1 = []() -> async_coro::task<void> {
     co_return;
@@ -801,7 +801,7 @@ TEST(task, when_any_void_mid) {
 }
 
 TEST(task, when_any_index_check) {
-  std::function<void()> continue_f;
+  async_coro::unique_function<void()> continue_f;
 
   auto routine1 = [&]() -> async_coro::task<int> {
     co_await async_coro::await_callback([&continue_f](auto f) { continue_f = std::move(f); });
@@ -852,8 +852,8 @@ TEST(task, when_any_index_check) {
 }
 
 TEST(task, when_any_index_check_last) {
-  std::function<void()> continue_f1;
-  std::function<void()> continue_f2;
+  async_coro::unique_function<void()> continue_f1;
+  async_coro::unique_function<void()> continue_f2;
 
   auto routine1 = [&]() -> async_coro::task<int> {
     co_await async_coro::await_callback([&continue_f1](auto f) { continue_f1 = std::move(f); });
@@ -906,8 +906,8 @@ TEST(task, when_any_index_check_last) {
 }
 
 TEST(task, when_any_continue_after_parent_complete) {
-  std::function<void()> continue_f1;
-  std::function<void()> continue_f2;
+  async_coro::unique_function<void()> continue_f1;
+  async_coro::unique_function<void()> continue_f2;
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
       async_coro::execution_system_config{{{"worker1"}}})};
@@ -1269,8 +1269,8 @@ TEST(task, lambda_lifetime) {
   };
 
   async_coro::scheduler scheduler;
-  std::function<void()> continue_f1;
-  std::function<void()> continue_f2;
+  async_coro::unique_function<void()> continue_f1;
+  async_coro::unique_function<void()> continue_f2;
 
   async_coro::task_handle<void> handle;
 

@@ -58,13 +58,12 @@ class function_impl_call;
  * decoupled from any specific function signature. It manages the lifetime
  * of the stored function object and handles its proper destruction.
  *
- * Typically used to implement custom move-only function wrappers with
- * small object optimization (SOO).
+ * Typically used to store custom move-only function after it execution to postpone destruction in type erased manner.
  *
  * @tparam SFOSize The size (in bytes) of the internal buffer used for
- *                 small object optimization. Defaults to `sizeof(void*)`.
+ *                 small object optimization. Defaults to `sizeof(void*) * 2`.
  */
-template <size_t SFOSize = sizeof(void*)>
+template <size_t SFOSize = sizeof(void*) * 2>
 class unique_function_storage {
   using t_small_buffer = internal::small_buffer<SFOSize>;
   using t_move_or_destroy_f = typename t_small_buffer::t_move_or_destroy_f;

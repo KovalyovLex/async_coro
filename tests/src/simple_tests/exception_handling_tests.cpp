@@ -1,5 +1,7 @@
 #include <async_coro/config.h>
 
+#include "async_coro/unique_function.h"
+
 #if ASYNC_CORO_WITH_EXCEPTIONS
 
 #include <async_coro/await_callback.h>
@@ -13,7 +15,6 @@
 
 #include <atomic>
 #include <chrono>
-#include <functional>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -84,7 +85,7 @@ TEST(exception_handling, simple_throw_in_coroutine) {
 }
 
 TEST(exception_handling, throw_after_await) {
-  std::function<void()> continue_f;
+  async_coro::unique_function<void()> continue_f;
 
   auto throwing_coroutine = [&continue_f]() -> async_coro::task<int> {
     co_await async_coro::await_callback([&continue_f](auto f) {
@@ -303,8 +304,8 @@ TEST(exception_handling, when_all_multiple_tasks_throw) {
 }
 
 TEST(exception_handling, when_all_async_throwing_tasks) {
-  std::function<void()> continue_f1;
-  std::function<void()> continue_f2;
+  async_coro::unique_function<void()> continue_f1;
+  async_coro::unique_function<void()> continue_f2;
 
   auto async_throwing_task1 = [&continue_f1]() -> async_coro::task<int> {
     co_await async_coro::await_callback([&continue_f1](auto f) {
@@ -496,7 +497,7 @@ TEST(exception_handling, start_task_nested_throws) {
 
 // await_callback exception tests
 TEST(exception_handling, await_callback_throws_in_callback) {
-  std::function<void()> continue_f;
+  async_coro::unique_function<void()> continue_f;
 
   auto callback_throwing_coroutine = [&continue_f]() -> async_coro::task<int> {
     try {
@@ -527,7 +528,7 @@ TEST(exception_handling, await_callback_throws_in_callback) {
 }
 
 TEST(exception_handling, await_callback_throws_after_resume) {
-  std::function<void()> continue_f;
+  async_coro::unique_function<void()> continue_f;
 
   auto callback_throwing_coroutine = [&continue_f]() -> async_coro::task<int> {
     co_await async_coro::await_callback([&continue_f](auto f) {
@@ -559,8 +560,8 @@ TEST(exception_handling, await_callback_throws_after_resume) {
 
 // Complex scenarios with multiple exception sources
 TEST(exception_handling, mixed_success_and_failure_scenarios) {
-  std::function<void()> continue_f1;
-  std::function<void()> continue_f2;
+  async_coro::unique_function<void()> continue_f1;
+  async_coro::unique_function<void()> continue_f2;
 
   auto successful_task = []() -> async_coro::task<int> {
     co_return 100;

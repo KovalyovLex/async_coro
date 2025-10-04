@@ -113,9 +113,9 @@ class function_impl_call<SFOSize, TFunc, R(TArgs...) noexcept> {
  * @tparam FTy The function signature, e.g., `R(Args...)`, where `R` is the return type
  *             and `Args...` are the parameter types.
  * @tparam SFOSize The size (in bytes) of the internal buffer used for small object optimization.
- *                 Defaults to `sizeof(void*)`.
+ *                 Defaults to `sizeof(void*) * 2`.
  */
-template <typename FTy, size_t SFOSize = sizeof(void*)>
+template <typename FTy, size_t SFOSize = sizeof(void*) * 2>
 class unique_function : private internal::function_impl_call<SFOSize, unique_function<FTy, SFOSize>, FTy>,
                         private unique_function_storage<SFOSize> {
   using super = internal::function_impl_call<SFOSize, unique_function<FTy, SFOSize>, FTy>;
