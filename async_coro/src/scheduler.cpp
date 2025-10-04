@@ -68,6 +68,11 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
   } else {
     state = coroutine_state::suspended;
     handle_impl.set_coroutine_state(state);
+
+    if (curren_data->external_continuation_request) {
+      // this coroutine could be managed by another thread and it could be even destroyed so return immediately
+      return false;
+    }
   }
 
   if (run_data_was_set) {
@@ -92,6 +97,9 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
         if (handle_impl._on_cancel) {
           std::exchange(handle_impl._on_cancel, nullptr)->execute();
         }
+
+        // current coroutine should not be processed further in recursive call
+        curren_data->external_continuation_request = true;
       }
 
       if (continue_parent_on_finish && parent->get_coroutine_state() == coroutine_state::suspended) {

@@ -175,6 +175,9 @@ TEST(cancel_task, cross_queue_cancel) {
 
   EXPECT_TRUE(worker_done);
 
+  // wait for cancel execute finish
+  std::this_thread::sleep_for(std::chrono::milliseconds(2));
+
   // process cancellation on main
   scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
