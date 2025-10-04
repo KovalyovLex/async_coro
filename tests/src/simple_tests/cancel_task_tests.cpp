@@ -107,6 +107,10 @@ TEST(cancel_task, when_all_parent_cancelled) {
   auto infinite_task = []() -> async_coro::task<int> {
     // should be cancelled by parent before finishing
     co_await async_coro::await_callback([](auto /*f*/) { /* never call */ });
+
+    // should not reach here
+    ADD_FAILURE();
+
     co_return 7;
   };
 
@@ -192,6 +196,10 @@ TEST(cancel_task, root_request_cancel_with_embedded_children) {
   auto infinite_task = [&child_started]() -> async_coro::task<int> {
     child_started = true;
     co_await async_coro::await_callback([](auto /*f*/) {});
+
+    // should not reach here
+    ADD_FAILURE();
+
     // if parent is cancelled this point must not be reached in parent logic
     co_return 10;
   };
@@ -226,11 +234,19 @@ TEST(cancel_task, root_request_cancel_with_started_children) {
 
   auto infinite_task1 = [&child1_resumed]() -> async_coro::task<int> {
     co_await async_coro::await_callback([&](auto /*f*/) { child1_resumed = true; });
+
+    // should not reach here
+    ADD_FAILURE();
+
     co_return 1;
   };
 
   auto infinite_task2 = [&child2_resumed]() -> async_coro::task<int> {
     co_await async_coro::await_callback([&](auto /*f*/) { child2_resumed = true; });
+
+    // should not reach here
+    ADD_FAILURE();
+
     co_return 2;
   };
 

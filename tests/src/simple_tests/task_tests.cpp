@@ -8,9 +8,11 @@
 #include <async_coro/task_launcher.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <memory>
 #include <semaphore>
 #include <thread>
+#include <type_traits>
 #include <variant>
 
 namespace task_tests {
@@ -1368,6 +1370,75 @@ TEST(task, multiple_workers_async_execution) {
 
   ASSERT_TRUE(handle.done());
   EXPECT_FLOAT_EQ(handle.get(), 2.34f);
+
+  handle = {};
+}
+
+TEST(task, multiple_workers_any_execution) {
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{
+          .worker_configs = {{"worker1", async_coro::execution_queues::worker},
+                             {"worker2", async_coro::execution_queues::worker},
+                             {"worker3", async_coro::execution_queues::worker},
+                             {"worker4", async_coro::execution_queues::worker},
+                             {"worker5", async_coro::execution_queues::worker}},
+          .main_thread_allowed_tasks = async_coro::execution_queues::main})};
+
+  auto routine = []() -> async_coro::task<float> {
+    auto handle_void = co_await async_coro::start_task(
+        []() -> async_coro::task<void> {
+          std::this_thread::sleep_for(std::chrono::milliseconds{1});
+          co_return;
+        },
+        async_coro::execution_queues::worker);
+
+    auto handle_int = co_await async_coro::start_task(
+        []() -> async_coro::task<int> {
+          std::this_thread::sleep_for(std::chrono::milliseconds{1});
+          co_return 3;
+        },
+        async_coro::execution_queues::worker);
+
+    auto handle_float = co_await async_coro::start_task(
+        []() -> async_coro::task<float> {
+          std::this_thread::sleep_for(std::chrono::milliseconds{1});
+          co_return 2.34f;
+        },
+        async_coro::execution_queues::worker);
+
+    auto handle_double = co_await async_coro::start_task(
+        []() -> async_coro::task<double> {
+          std::this_thread::sleep_for(std::chrono::milliseconds{1});
+          co_return 3.1415;
+        },
+        async_coro::execution_queues::worker);
+
+    auto res = co_await (std::move(handle_void) || std::move(handle_int) || std::move(handle_float) || std::move(handle_double));
+
+    float f_res = -1024.f;
+
+    std::visit([&](auto v) {
+      if constexpr (!std::is_same_v<decltype(v), std::monostate>) {
+        f_res = float(v);
+      } else {
+        f_res = 1.f;
+      }
+    },
+               res);
+
+    co_return f_res;
+  };
+
+  auto handle = scheduler.start_task(routine, async_coro::execution_queues::main);
+
+  size_t num_repeats = 0;
+  while (!handle.done() && num_repeats++ < 1000000) {
+    scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
+    std::this_thread::yield();
+  }
+
+  ASSERT_TRUE(handle.done());
+  EXPECT_GT(handle.get(), 0.f);
 
   handle = {};
 }
