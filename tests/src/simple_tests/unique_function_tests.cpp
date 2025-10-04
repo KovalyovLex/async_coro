@@ -115,7 +115,7 @@ TEST(unique_function, except_large_f) { test_small_f<false>(); }
 TEST(unique_function, size_check) {
   using namespace async_coro;
 
-  EXPECT_EQ(sizeof(unique_function<void()>), sizeof(void*) * 3);
+  EXPECT_EQ(sizeof(unique_function<void()>), sizeof(void*) * 4);
 }
 
 template <bool is_noexcept>
