@@ -11,7 +11,7 @@
 namespace async_coro {
 namespace internal {
 template <typename Fx, typename R, typename... TArgs>
-struct callable_impl;
+struct callback_impl;
 
 template <typename Fx, typename R, typename... TArgs>
 struct callback_impl_noexcept;
@@ -122,7 +122,7 @@ struct callback : public callback_base {
   template <class Fx>
     requires(std::is_invocable_v<Fx, TArgs...> && std::is_same_v<R, std::invoke_result_t<Fx, TArgs...>>)
   static callback* allocate(Fx&& fx) {
-    return new internal::callable_impl<std::remove_cvref_t<Fx>, R, TArgs...>(std::forward<Fx>(fx));
+    return new internal::callback_impl<std::remove_cvref_t<Fx>, R, TArgs...>(std::forward<Fx>(fx));
   }
 
  protected:
@@ -216,14 +216,14 @@ auto allocate_callback(Fx&& fx) {
 namespace internal {
 
 template <typename Fx, typename R, typename... TArgs>
-struct callable_impl : public callback<R, TArgs...> {
+struct callback_impl : public callback<R, TArgs...> {
   template <class T>
-  callable_impl(T&& fx) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
+  callback_impl(T&& fx) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
       : callback<R, TArgs...>(&executor, get_deleter()),
         _fx(std::forward<T>(fx)) {}
 
  protected:
-  ~callable_impl() noexcept = default;
+  ~callback_impl() noexcept = default;
 
  private:
   static callback_base::deleter_t get_deleter() noexcept {
@@ -231,13 +231,13 @@ struct callable_impl : public callback<R, TArgs...> {
       return nullptr;
     } else {
       return +[](callback_base* base) noexcept {
-        delete static_cast<callable_impl*>(base);
+        delete static_cast<callback_impl*>(base);
       };
     }
   }
 
   static R executor(callback_base* base, TArgs... value) {
-    return static_cast<callable_impl*>(base)->_fx(std::forward<TArgs>(value)...);
+    return static_cast<callback_impl*>(base)->_fx(std::forward<TArgs>(value)...);
   }
 
  private:
