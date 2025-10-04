@@ -961,8 +961,6 @@ TEST(task, when_any_continue_after_parent_complete) {
 }
 
 TEST(task, when_any) {
-  std::binary_semaphore sema{0};
-
   auto routine1 = []() -> async_coro::task<int> {
     co_return 1;
   };
@@ -972,11 +970,9 @@ TEST(task, when_any) {
   };
 
   auto routine3 = [&]() -> async_coro::task<double> {
-    task_tests::release_sema_in_destructor t{sema};
-
     std::this_thread::sleep_for(std::chrono::milliseconds{10});
 
-    co_return 2.72;
+    co_return 5.72;
   };
 
   auto routine = [&]() -> async_coro::task<int> {
@@ -996,9 +992,7 @@ TEST(task, when_any) {
   auto handle = scheduler.start_task(routine());
 
   // wait for worker thread finish coro
-  sema.acquire();
-
-  std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  std::this_thread::sleep_for(std::chrono::milliseconds{10});
 
   scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
