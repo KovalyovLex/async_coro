@@ -70,9 +70,22 @@ class task_launcher {
    * @param execution_queue The execution queue where the task should be scheduled
    */
   template <typename T>
-    requires(std::is_invocable_r_v<task<R>, T>)
-  task_launcher(T&& start_function, execution_queue_mark execution_queue) noexcept
+    requires(std::is_invocable_r_v<task<R>, T> && !std::is_convertible_v<T &&, task<R> (*)()>)
+  task_launcher(T&& start_function, execution_queue_mark execution_queue)
       : task_launcher(allocate_callback(std::forward<T>(start_function)), execution_queue) {}
+
+  /**
+   * @brief Constructs a task launcher with any callable that returns a task<R> and execution queue.
+   *
+   * This constructor accepts static functions that returns a task<R> when invoked.
+   *
+   * @param start_function A callable that returns a task<R> when invoked
+   * @param execution_queue The execution queue where the task should be scheduled
+   */
+  template <typename T>
+    requires(std::is_invocable_r_v<task<R>, T> && std::is_convertible_v<T &&, task<R> (*)()>)
+  task_launcher(T&& start_function, execution_queue_mark execution_queue)
+      : task_launcher(start_function(), execution_queue) {}
 
   /**
    * @brief Constructs a task launcher with any callable that returns a task<R> on the main execution queue.
@@ -84,7 +97,7 @@ class task_launcher {
    */
   template <typename T>
     requires(std::is_invocable_r_v<task<R>, T>)
-  task_launcher(T&& start_function) noexcept
+  task_launcher(T&& start_function)
       : task_launcher(std::forward<T>(start_function), execution_queues::main) {}
 
   /**
