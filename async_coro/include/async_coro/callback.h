@@ -275,10 +275,10 @@ struct callback_impl_noexcept : public callback_noexcept<R, TArgs...> {
 
 template <typename Fx, typename R, typename... TArgs>
 struct callback_on_stack : public callback<R, TArgs...> {
-  template <class T>
-  callback_on_stack(T&& fx) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
+  template <class... TArgs2>
+  callback_on_stack(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
       : callback<R, TArgs...>(&executor, &callback_base::stack_deleter),
-        _fx(std::forward<T>(fx)) {}
+        _fx(std::forward<TArgs2>(args)...) {}
 
   ~callback_on_stack() noexcept = default;
 
@@ -293,10 +293,10 @@ struct callback_on_stack : public callback<R, TArgs...> {
 
 template <typename Fx, typename R, typename... TArgs>
 struct callback_on_stack_noexcept : public callback_noexcept<R, TArgs...> {
-  template <class T>
-  callback_on_stack_noexcept(T&& fx) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
+  template <class... TArgs2>
+  callback_on_stack_noexcept(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
       : callback_noexcept<R, TArgs...>(&executor, &callback_base::stack_deleter),
-        _fx(std::forward<T>(fx)) {}
+        _fx(std::forward<TArgs2>(args)...) {}
 
   ~callback_on_stack_noexcept() noexcept = default;
 
