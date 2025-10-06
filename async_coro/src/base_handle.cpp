@@ -80,6 +80,10 @@ bool base_handle::request_cancel() {
   const auto [was_requested, state] = set_cancel_requested();
   if (!was_requested) {
     // this is first cancel - notify continuation
+
+    // sync data
+    get_coroutine_state(std::memory_order::acquire);
+
     if ((state == coroutine_state::suspended || state == coroutine_state::waiting_switch)) {
       // It should be unsafe to use this fields if state prior cancel request was suspended
       // as any continue after our request leaves this fields untouched
