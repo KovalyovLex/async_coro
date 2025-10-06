@@ -9,6 +9,17 @@
 
 namespace async_coro {
 
+coroutine_suspender::~coroutine_suspender() noexcept {
+  if (_suspend_count.load(std::memory_order::relaxed) != 0) {
+    // probably exception was thrown
+
+    // reset our cancel
+    if (auto cancel = _handle->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
+      cancel->destroy();
+    }
+  }
+}
+
 void coroutine_suspender::try_to_continue_from_any_thread(bool cancel) {
   ASYNC_CORO_ASSERT(_handle);
 

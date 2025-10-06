@@ -50,7 +50,7 @@ class coroutine_suspender {
     return *this;
   }
 
-  ~coroutine_suspender() noexcept = default;
+  ~coroutine_suspender() noexcept;
 
   /// Decrements suspend_count and if it zero schedules coroutine.
   /// If cancel is true - cancels coroutine
