@@ -21,6 +21,8 @@ namespace async_coro::internal {
  *
  * The number of high bits available for tagging is calculated as `sizeof(void*) * 8 - NumAddressBits`.
  *
+ * @TODO: Check compatibility with MTE on ARMs and iOS: https://security.apple.com/blog/memory-integrity-enforcement/
+ *
  * @tparam T The pointed-to object type. Must be a complete type.
  * @tparam NumAddressBits Number of bits used to store actual pointer addresses.
  *         Defaults to 48, matching common virtual memory architectures.
