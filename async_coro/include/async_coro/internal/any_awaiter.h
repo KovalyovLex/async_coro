@@ -272,8 +272,8 @@ class any_awaiter {
   std::tuple<TAwaiters...> _awaiters;
   TCallbacks _callbacks = create_callbacks(*this);
   continue_callback* _continue_f = nullptr;
-  std::atomic_size_t _result_index{0};  // 1 based index
-  std::atomic_size_t _num_await_free{0};
+  std::atomic_uint32_t _result_index{0};  // 1 based index
+  std::atomic_uint32_t _num_await_free{0};
   std::atomic_bool _was_continued{false};
 };
 

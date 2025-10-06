@@ -3,7 +3,6 @@
 #include <async_coro/thread_safety/analysis.h>
 
 #include <atomic>
-#include <thread>
 
 namespace async_coro {
 
@@ -18,26 +17,23 @@ class CORO_THREAD_CAPABILITY("mutex") spin_lock_mutex {
 
   void lock() noexcept CORO_THREAD_ACQUIRE() {
     // Optimistically assume the lock is free on first the try
-    while (_lock.exchange(true, std::memory_order::acquire)) {
+    while (_lock.test_and_set(std::memory_order::acquire)) {
       // Wait for lock to be released without generating cache misses
-      while (_lock.load(std::memory_order::relaxed)) {
-        std::this_thread::yield();
-      }
+      _lock.wait(true, std::memory_order::relaxed);
     }
   }
 
   bool try_lock() noexcept CORO_THREAD_TRY_ACQUIRE(true) {
-    // First do a relaxed load to check if lock is free in order to prevent
-    // unnecessary cache misses if someone does while(!try_lock())
-    return !_lock.load(std::memory_order::relaxed) && !_lock.exchange(true, std::memory_order::acquire);
+    return !_lock.test_and_set(std::memory_order::acquire);
   }
 
   void unlock() noexcept CORO_THREAD_RELEASE() {
-    _lock.store(false, std::memory_order::release);
+    _lock.clear(std::memory_order::release);
+    _lock.notify_one();
   }
 
  private:
-  std::atomic<bool> _lock = {false};
+  std::atomic_flag _lock{};
 };
 
 }  // namespace async_coro

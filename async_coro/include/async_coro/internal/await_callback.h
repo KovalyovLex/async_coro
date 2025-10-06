@@ -134,7 +134,7 @@ class await_callback_base {
       callback_lock.store(false, std::memory_order_release);
 
       if (!clb->_was_done.exchange(true, std::memory_order::relaxed)) {
-        // no cancel here should be done. clb cant be destroyed so we can release lock
+        // no cancel here should happen. clb can't be destroyed at this point so we can release the lock
         clb->_continue_lock.store(false, std::memory_order_release);
 
         clb->_suspension.try_to_continue_from_any_thread(false);

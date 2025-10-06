@@ -57,9 +57,20 @@ execution_system::execution_system(const execution_system_config& config, const 
     thread_data.num_loops_before_sleep = worker_config.num_loops_before_sleep;
 
     if (!thread_data.task_queues.empty()) {
-      num_threads_to_wait_start.fetch_add(1, std::memory_order::release);
+      num_threads_to_wait_start.fetch_add(1, std::memory_order::relaxed);
+    }
+  }
+
+  for (uint32_t i = 0; i < _num_workers; i++) {
+    auto& thread_data = _thread_data[i];
+
+    if (!thread_data.task_queues.empty()) {
+      auto& worker_config = config.worker_configs[i];
+
       thread_data.thread = std::thread([this, &thread_data, &num_threads_to_wait_start]() {
-        num_threads_to_wait_start.fetch_sub(1, std::memory_order::release);
+        if (num_threads_to_wait_start.fetch_sub(1, std::memory_order::relaxed) == 1) {
+          num_threads_to_wait_start.notify_one();
+        }
 
         worker_loop(thread_data);
       });
@@ -74,14 +85,10 @@ execution_system::execution_system(const execution_system_config& config, const 
     }
   }
 
-  size_t num_spins = 0;
-  while (num_threads_to_wait_start.load(std::memory_order::acquire) != 0) {
-    if (num_spins++ > 1000000) {
-      // this platform\libc probably dont support yield
-      std::this_thread::sleep_for(std::chrono::milliseconds{1});
-      num_spins = 0;
-    }
-    std::this_thread::yield();
+  auto num_started = num_threads_to_wait_start.load(std::memory_order::relaxed);
+  while (num_started != 0) {
+    num_threads_to_wait_start.wait(num_started, std::memory_order::relaxed);
+    num_started = num_threads_to_wait_start.load(std::memory_order::relaxed);
   }
 }
 
