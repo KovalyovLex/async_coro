@@ -5,13 +5,11 @@ namespace async_coro {
 void callback_base::destroy() noexcept {
   if (_deleter) {
     _deleter(this);
-  } else {
-    delete this;
   }
 }
 
-void callback_base::stack_deleter(callback_base*) noexcept {
-  // do nothing
+void callback_base::default_deleter(callback_base* ptr) noexcept {
+  delete ptr;
 }
 
 }  // namespace async_coro

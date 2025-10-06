@@ -26,7 +26,7 @@ class recurrent_callback_on_stack : public recurrent_callback<TArgs...> {
  public:
   template <class... TArgs2>
   recurrent_callback_on_stack(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
-      : super(&executor, &callback_base::stack_deleter),
+      : super(&executor, nullptr),
         _fx(std::forward<TArgs2>(args)...) {}
 
   recurrent_callback_on_stack(const recurrent_callback_on_stack&) = delete;

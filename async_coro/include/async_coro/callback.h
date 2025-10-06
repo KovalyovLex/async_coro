@@ -51,7 +51,7 @@ class callback_base {
    * @param deleter A custom deleter function. If nullptr, the default `delete
    * this` is used.
    */
-  callback_base(deleter_t deleter = nullptr) noexcept : _deleter(deleter) {}
+  callback_base(deleter_t deleter = &default_deleter) noexcept : _deleter(deleter) {}
   callback_base(const callback_base&) noexcept = default;
   callback_base(callback_base&&) noexcept = default;
 
@@ -64,7 +64,7 @@ class callback_base {
  protected:
   ~callback_base() noexcept = default;
 
-  static void stack_deleter(callback_base*) noexcept;
+  static void default_deleter(callback_base*) noexcept;
 
  private:
   deleter_t _deleter;
@@ -94,7 +94,7 @@ class callback : public callback_base {
    * invoked.
    * @param deleter A custom deleter function.
    */
-  callback(executor_t executor, deleter_t deleter = nullptr) noexcept
+  callback(executor_t executor, deleter_t deleter = &callback_base::default_deleter) noexcept
       : callback_base(deleter),
         _executor(executor) {
     ASYNC_CORO_ASSERT(executor);
@@ -157,7 +157,7 @@ class callback_noexcept : public callback_base {
    * invoked.
    * @param deleter A custom deleter function.
    */
-  callback_noexcept(executor_t executor, deleter_t deleter = nullptr) noexcept
+  callback_noexcept(executor_t executor, deleter_t deleter = &callback_base::default_deleter) noexcept
       : callback_base(deleter),
         _executor(executor) {
     ASYNC_CORO_ASSERT(executor);
@@ -230,7 +230,7 @@ class callback_impl : public callback<R, TArgs...> {
  private:
   static callback_base::deleter_t get_deleter() noexcept {
     if constexpr (std::is_trivially_destructible_v<Fx>) {
-      return nullptr;
+      return &callback_base::default_deleter;
     } else {
       return +[](callback_base* base) noexcept {
         delete static_cast<callback_impl*>(base);
@@ -260,7 +260,7 @@ class callback_impl_noexcept : public callback_noexcept<R, TArgs...> {
  private:
   static callback_base::deleter_t get_deleter() noexcept {
     if constexpr (std::is_trivially_destructible_v<Fx>) {
-      return nullptr;
+      return callback_base::default_deleter;
     } else {
       return +[](callback_base* base) noexcept {
         delete static_cast<callback_impl_noexcept*>(base);
@@ -281,7 +281,7 @@ class callback_on_stack : public callback<R, TArgs...> {
  public:
   template <class... TArgs2>
   callback_on_stack(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
-      : callback<R, TArgs...>(&executor, &callback_base::stack_deleter),
+      : callback<R, TArgs...>(&executor, nullptr),
         _fx(std::forward<TArgs2>(args)...) {}
 
   callback_on_stack(const callback_on_stack&) = delete;
@@ -306,7 +306,7 @@ class callback_on_stack_noexcept : public callback_noexcept<R, TArgs...> {
  public:
   template <class... TArgs2>
   callback_on_stack_noexcept(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
-      : callback_noexcept<R, TArgs...>(&executor, &callback_base::stack_deleter),
+      : callback_noexcept<R, TArgs...>(&executor, nullptr),
         _fx(std::forward<TArgs2>(args)...) {}
 
   callback_on_stack_noexcept(const callback_on_stack_noexcept&) = delete;
