@@ -248,8 +248,7 @@ class base_handle {
    * @see `coroutine_suspender`
    */
   auto suspend(std::uint32_t suspend_count, callback<void>* on_cancel) noexcept {
-    [[maybe_unused]] auto prev = this->_on_cancel.exchange(on_cancel, std::memory_order::relaxed);
-
+    ASYNC_CORO_ASSERT_VARIABLE auto prev = this->_on_cancel.exchange(on_cancel, std::memory_order::relaxed);
     ASYNC_CORO_ASSERT(prev == nullptr);
 
     return coroutine_suspender{*this, suspend_count};

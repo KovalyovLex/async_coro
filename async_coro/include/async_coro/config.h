@@ -11,6 +11,21 @@
 #endif
 
 #ifndef ASYNC_CORO_ASSERT
+
+#ifdef NDEBUG
+
+#define ASYNC_CORO_ASSERT(x)
+#define ASYNC_CORO_ASSERT_ENABLED 0
+#define ASYNC_CORO_ASSERT_VARIABLE [[maybe_unused]]
+
+#else
+
 #include <cassert>
-#define ASYNC_CORO_ASSERT assert
-#endif
+
+#define ASYNC_CORO_ASSERT(x) assert(x)
+#define ASYNC_CORO_ASSERT_ENABLED 1
+#define ASYNC_CORO_ASSERT_VARIABLE
+
+#endif  // def NDEBUG
+
+#endif  // !def ASYNC_CORO_ASSERT
