@@ -8,6 +8,7 @@
 #include <async_coro/warnings.h>
 
 #include <atomic>
+#include <cstdint>
 #include <tuple>
 #include <utility>
 
@@ -117,7 +118,7 @@ class any_awaiter {
 
   bool await_ready() noexcept {
     const auto func = [this](size_t awaiter_index) noexcept {
-      size_t expected_index = 0;
+      std::uint32_t expected_index = 0;
       if (_result_index.compare_exchange_strong(expected_index, awaiter_index + 1, std::memory_order::relaxed)) {
         // cancel other coroutines
         call_functor_while_true(
@@ -175,7 +176,7 @@ class any_awaiter {
   }
 
   continue_callback::return_type on_continue(bool cancelled, size_t awaiter_index) {
-    size_t expected_index = 0;
+    std::uint32_t expected_index = 0;
     if (_result_index.compare_exchange_strong(expected_index, awaiter_index + 1, std::memory_order::relaxed)) {
       // cancel other coroutines
       call_functor_while_true(
