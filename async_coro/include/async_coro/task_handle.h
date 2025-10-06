@@ -34,6 +34,7 @@ template <typename R = void>
 class task_handle final {
   using promise_type = async_coro::internal::promise_type<R>;
   using handle_type = std::coroutine_handle<promise_type>;
+  using callback_type = callback<void, promise_result<R>&, bool>;
 
  public:
   task_handle() noexcept = default;
@@ -175,17 +176,43 @@ class task_handle final {
     if (done()) {
       f(promise, false);
     } else {
-      auto continue_f = callback<void, promise_result<R>&, bool>::allocate(std::forward<Fx>(f));
+      auto continue_f = callback_type::allocate(std::forward<Fx>(f));
       promise.set_continuation_functor(continue_f, internal::passkey{this});
       auto [state, cancelled] = promise.get_coroutine_state_and_cancelled(std::memory_order::acquire);
       if (state == async_coro::coroutine_state::finished || cancelled) {
-        if (auto f_base = promise.get_continuation_functor(internal::passkey{this})) {
-          ASYNC_CORO_ASSERT(f_base == continue_f);
+        if (callback_base::ptr f_base{promise.get_continuation_functor(internal::passkey{this})}) {
+          ASYNC_CORO_ASSERT(f_base.get() == continue_f);
           (void)f_base;
           continue_f->execute(promise, cancelled);
-          continue_f->destroy();
         }
       }
+    }
+  }
+
+  // Sets callback that will be called after coroutine finish on thread that finished the coroutine.
+  // If coroutine is already finished, the callback will be called and destroyed immediately.
+  void continue_with(callback_type& f) {
+    ASYNC_CORO_ASSERT(!_handle.promise().is_coro_embedded());
+
+    typename callback_type::ptr uniq_ptr{&f};
+
+    if (!_handle) {
+      return;
+    }
+
+    promise_type& promise = _handle.promise();
+    if (done()) {
+      f.execute(promise, false);
+    } else {
+      const auto ptr = uniq_ptr.release();
+      promise.set_continuation_functor(ptr, internal::passkey{this});
+      const auto [state, cancelled] = promise.get_coroutine_state_and_cancelled(std::memory_order::acquire);
+      if (state == async_coro::coroutine_state::finished || cancelled) {
+        if (callback_base::ptr f_base{promise.get_continuation_functor(internal::passkey{this})}) {
+          ASYNC_CORO_ASSERT(f_base.get() == ptr);
+          ptr->execute(promise, cancelled);
+        }
+      };
     }
   }
 

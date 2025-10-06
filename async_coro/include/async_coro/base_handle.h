@@ -248,7 +248,10 @@ class base_handle {
    * @see `coroutine_suspender`
    */
   auto suspend(std::uint32_t suspend_count, callback<void>* on_cancel) noexcept {
-    this->_on_cancel = on_cancel;
+    [[maybe_unused]] auto prev = this->_on_cancel.exchange(on_cancel, std::memory_order::relaxed);
+
+    ASYNC_CORO_ASSERT(prev == nullptr);
+
     return coroutine_suspender{*this, suspend_count};
   }
 
@@ -352,8 +355,9 @@ class base_handle {
   }
 
   // returns previous value of cancel requested
-  bool set_cancel_requested(bool value) noexcept {
-    return update_value(value ? is_cancel_requested_mask : 0, get_inverted_mask(is_cancel_requested_mask)) & is_cancel_requested_mask;
+  std::pair<bool, coroutine_state> set_cancel_requested() noexcept {
+    const auto prev_state = update_value(is_cancel_requested_mask, get_inverted_mask(is_cancel_requested_mask), std::memory_order::acquire);
+    return {prev_state & is_cancel_requested_mask, static_cast<coroutine_state>(prev_state & coroutine_state_mask)};
   }
 
   uint8_t update_value(const uint8_t value, const uint8_t mask, std::memory_order read = std::memory_order::relaxed, std::memory_order write = std::memory_order::relaxed) noexcept {
@@ -372,7 +376,7 @@ class base_handle {
   std::coroutine_handle<> _handle;
   scheduler* _scheduler = nullptr;
   callback_base::ptr _start_function;
-  callback<void>* _on_cancel = nullptr;  // can be called more than once
+  std::atomic<callback<void>*> _on_cancel = nullptr;  // callback for our coroutine (not continuation of others) to be cancelled
   base_handle* _current_child = nullptr;
   std::thread::id _execution_thread = {};
   execution_queue_mark _execution_queue = execution_queues::main;

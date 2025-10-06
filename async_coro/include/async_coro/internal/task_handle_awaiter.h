@@ -18,10 +18,12 @@ class base_handle;
 namespace async_coro::internal {
 
 template <class R>
-struct task_handle_awaiter {
+class task_handle_awaiter {
+ public:
   explicit task_handle_awaiter(task_handle<R>&& th) noexcept
       : _th(std::move(th)),
-        _callback(on_cancel_callback{this}) {}
+        _on_cancel_callback(on_cancel_callback{*this}),
+        _on_continue_callback(on_continue_callback{*this}) {}
 
   task_handle_awaiter(const task_handle_awaiter&) = delete;
   task_handle_awaiter(task_handle_awaiter&&) = delete;
@@ -34,14 +36,9 @@ struct task_handle_awaiter {
   void await_suspend(std::coroutine_handle<T> h) {
     _was_done.store(false, std::memory_order::relaxed);
 
-    _suspension = h.promise().suspend(2, &_callback);
+    _suspension = h.promise().suspend(2, &_on_cancel_callback);
 
-    _th.continue_with([this](promise_result<R>&, bool canceled) {
-      if (!_was_done.exchange(true, std::memory_order::relaxed)) {
-        // cancel
-        _suspension.try_to_continue_from_any_thread(canceled);
-      }
-    });
+    _th.continue_with(_on_continue_callback);
 
     _suspension.try_to_continue_immediately();
   }
@@ -53,19 +50,30 @@ struct task_handle_awaiter {
  private:
   struct on_cancel_callback {
     void operator()() const {
-      if (!clb->_was_done.exchange(true, std::memory_order::relaxed)) {
+      if (!clb._was_done.exchange(true, std::memory_order::relaxed)) {
         // cancel
-        clb->_suspension.try_to_continue_from_any_thread(true);
+        clb._suspension.try_to_continue_from_any_thread(true);
       }
     }
 
-    task_handle_awaiter* clb;
+    task_handle_awaiter& clb;
+  };
+
+  struct on_continue_callback {
+    void operator()(promise_result<R>&, bool canceled) const {
+      if (!clb._was_done.exchange(true, std::memory_order::relaxed)) {
+        clb._suspension.try_to_continue_from_any_thread(canceled);
+      }
+    }
+
+    task_handle_awaiter& clb;
   };
 
  private:
   task_handle<R> _th;
   coroutine_suspender _suspension;
-  callback_on_stack<on_cancel_callback, void> _callback;
+  callback_on_stack<on_cancel_callback, void> _on_cancel_callback;
+  callback_on_stack<on_continue_callback, void, promise_result<R>&, bool> _on_continue_callback;
   std::atomic_bool _was_done{false};
 };
 

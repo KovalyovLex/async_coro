@@ -1,4 +1,5 @@
 #include <async_coro/base_handle.h>
+#include <async_coro/callback.h>
 #include <async_coro/config.h>
 #include <async_coro/execution_system.h>
 #include <async_coro/internal/scheduled_run_data.h>
@@ -92,11 +93,11 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
       parent->_current_child = nullptr;
 
       if (cancelled_without_finish) {
-        parent->request_cancel();
-
-        if (handle_impl._on_cancel) {
-          std::exchange(handle_impl._on_cancel, nullptr)->execute();
+        if (callback<void>::ptr on_cancel{handle_impl._on_cancel.exchange(nullptr, std::memory_order::relaxed)}) {
+          on_cancel->execute();
         }
+
+        parent->request_cancel();
 
         // current coroutine should not be processed further in recursive call
         curren_data->external_continuation_request = true;
@@ -110,8 +111,10 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
       // cleanup coroutine
       curren_data->external_continuation_request = true;
 
-      if (cancelled_without_finish && handle_impl._on_cancel) {
-        std::exchange(handle_impl._on_cancel, nullptr)->execute();
+      if (cancelled_without_finish) {
+        if (callback<void>::ptr on_cancel{handle_impl._on_cancel.exchange(nullptr, std::memory_order::relaxed)}) {
+          on_cancel->execute();
+        }
       }
 
       cleanup_coroutine(handle_impl, cancelled_without_finish);

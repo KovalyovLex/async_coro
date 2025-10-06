@@ -11,10 +11,10 @@
 namespace async_coro {
 namespace internal {
 template <typename Fx, typename R, typename... TArgs>
-struct callback_impl;
+class callback_impl;
 
 template <typename Fx, typename R, typename... TArgs>
-struct callback_impl_noexcept;
+class callback_impl_noexcept;
 }  // namespace internal
 
 /**
@@ -29,7 +29,8 @@ class callback_base {
    * @brief A custom deleter for std::unique_ptr to correctly destroy a
    * callback_base object.
    */
-  struct deleter {
+  class deleter {
+   public:
     void operator()(callback_base* ptr) const noexcept {
       ptr->destroy();
     }
@@ -75,7 +76,7 @@ class callback_base {
  * @tparam TArgs The argument types of the callback.
  */
 template <typename R, typename... TArgs>
-struct callback : public callback_base {
+class callback : public callback_base {
  public:
   /**
    * @brief A unique pointer to a callback that uses the custom deleter.
@@ -138,7 +139,7 @@ struct callback : public callback_base {
  * @tparam TArgs The argument types of the callback.
  */
 template <typename R, typename... TArgs>
-struct callback_noexcept : public callback_base {
+class callback_noexcept : public callback_base {
  public:
   /**
    * @brief A unique pointer to a callback that uses the custom deleter.
@@ -216,7 +217,8 @@ auto allocate_callback(Fx&& fx) {
 namespace internal {
 
 template <typename Fx, typename R, typename... TArgs>
-struct callback_impl : public callback<R, TArgs...> {
+class callback_impl : public callback<R, TArgs...> {
+ public:
   template <class T>
   callback_impl(T&& fx) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
       : callback<R, TArgs...>(&executor, get_deleter()),
@@ -245,7 +247,8 @@ struct callback_impl : public callback<R, TArgs...> {
 };
 
 template <typename Fx, typename R, typename... TArgs>
-struct callback_impl_noexcept : public callback_noexcept<R, TArgs...> {
+class callback_impl_noexcept : public callback_noexcept<R, TArgs...> {
+ public:
   template <class T>
   callback_impl_noexcept(T&& fx) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
       : callback_noexcept<R, TArgs...>(&executor, get_deleter()),
@@ -274,11 +277,18 @@ struct callback_impl_noexcept : public callback_noexcept<R, TArgs...> {
 };
 
 template <typename Fx, typename R, typename... TArgs>
-struct callback_on_stack : public callback<R, TArgs...> {
+class callback_on_stack : public callback<R, TArgs...> {
+ public:
   template <class... TArgs2>
   callback_on_stack(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
       : callback<R, TArgs...>(&executor, &callback_base::stack_deleter),
         _fx(std::forward<TArgs2>(args)...) {}
+
+  callback_on_stack(const callback_on_stack&) = delete;
+  callback_on_stack(callback_on_stack&&) = delete;
+
+  callback_on_stack& operator=(const callback_on_stack&) = delete;
+  callback_on_stack& operator=(callback_on_stack&&) = delete;
 
   ~callback_on_stack() noexcept = default;
 
@@ -292,11 +302,18 @@ struct callback_on_stack : public callback<R, TArgs...> {
 };
 
 template <typename Fx, typename R, typename... TArgs>
-struct callback_on_stack_noexcept : public callback_noexcept<R, TArgs...> {
+class callback_on_stack_noexcept : public callback_noexcept<R, TArgs...> {
+ public:
   template <class... TArgs2>
   callback_on_stack_noexcept(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
       : callback_noexcept<R, TArgs...>(&executor, &callback_base::stack_deleter),
         _fx(std::forward<TArgs2>(args)...) {}
+
+  callback_on_stack_noexcept(const callback_on_stack_noexcept&) = delete;
+  callback_on_stack_noexcept(callback_on_stack_noexcept&&) = delete;
+
+  callback_on_stack_noexcept& operator=(const callback_on_stack_noexcept&) = delete;
+  callback_on_stack_noexcept& operator=(callback_on_stack_noexcept&&) = delete;
 
   ~callback_on_stack_noexcept() noexcept = default;
 

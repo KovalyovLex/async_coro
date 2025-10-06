@@ -6,7 +6,7 @@
 namespace async_coro {
 
 template <typename R>
-struct task;
+class task;
 
 }
 

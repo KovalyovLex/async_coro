@@ -4,7 +4,6 @@
 #include <async_coro/internal/await_suspension_wrapper.h>
 #include <async_coro/internal/handle_awaiter.h>
 #include <async_coro/internal/tuple_variant_helpers.h>
-#include <async_coro/unique_function.h>
 #include <async_coro/warnings.h>
 
 #include <atomic>
@@ -20,24 +19,61 @@ class task_handle;
 
 namespace async_coro::internal {
 
+template <size_t I, class TAwaiter>
+class any_awaiter_continue_callback : public callback<void, bool> {
+ public:
+  any_awaiter_continue_callback(TAwaiter& awaiter) noexcept : callback<void, bool>(&executor, &deleter), _awaiter(awaiter) {}
+
+  any_awaiter_continue_callback(const any_awaiter_continue_callback&) = delete;
+  any_awaiter_continue_callback(any_awaiter_continue_callback&&) noexcept = default;
+
+  any_awaiter_continue_callback& operator=(const any_awaiter_continue_callback&) = delete;
+  any_awaiter_continue_callback& operator=(any_awaiter_continue_callback&&) = delete;
+
+ private:
+  static void executor(callback_base* base, bool cancelled) {
+    static_cast<any_awaiter_continue_callback*>(base)->_awaiter.on_continue(cancelled, I);
+  }
+
+  static void deleter(callback_base* base) noexcept {
+    static_cast<any_awaiter_continue_callback*>(base)->_awaiter.on_continuation_freed();
+  }
+
+ private:
+  TAwaiter& _awaiter;
+};
+
 // awaiter for coroutines scheduled with || op
 template <class... TAwaiters>
-struct any_awaiter {
+class any_awaiter {
   static_assert(sizeof...(TAwaiters) > 1);
 
   template <class...>
-  friend struct any_awaiter;
+  friend class any_awaiter;
 
-  using continue_function_t = async_coro::unique_function<void(bool), sizeof(void*) * 4>;
-
+ public:
   using result_type = decltype(get_variant_for_types(replace_void_type_in_holder(types_holder<typename TAwaiters::result_type...>{})));
 
-  explicit any_awaiter(std::tuple<TAwaiters...>&& awaiters) noexcept : _awaiters(std::move(awaiters)) {}
+  explicit any_awaiter(std::tuple<TAwaiters...>&& awaiters) noexcept
+      : _awaiters(std::move(awaiters)) {}
 
+  any_awaiter(const any_awaiter&) = delete;
   any_awaiter(any_awaiter&& other) noexcept
       : _awaiters(std::move(other._awaiters)) {
-    ASYNC_CORO_ASSERT(!other._continue_f);
+    ASYNC_CORO_ASSERT(other._continue_f == nullptr);
   }
+
+  ~any_awaiter() noexcept {
+    // wee need to wait
+    auto count = _num_await_free.load(std::memory_order::relaxed);
+    while (count != 0) {
+      _num_await_free.wait(count, std::memory_order::relaxed);
+      count = _num_await_free.load(std::memory_order::relaxed);
+    }
+  }
+
+  any_awaiter& operator=(const any_awaiter&) = delete;
+  any_awaiter& operator=(any_awaiter&&) = delete;
 
   template <class TAwaiter>
     requires(std::is_rvalue_reference_v<TAwaiter &&>)
@@ -81,7 +117,7 @@ struct any_awaiter {
   bool await_ready() noexcept {
     const auto func = [this](size_t awaiter_index) noexcept {
       size_t expected_index = 0;
-      if (_result_index.compare_exchange_strong(expected_index, awaiter_index, std::memory_order::relaxed)) {
+      if (_result_index.compare_exchange_strong(expected_index, awaiter_index + 1, std::memory_order::relaxed)) {
         // cancel other coroutines
         call_functor_while_true(
             [&](auto& awaiter_to_cancel, auto, size_t index) {
@@ -106,39 +142,67 @@ struct any_awaiter {
           (awaiters.cancel_await(), ...);
         },
         _awaiters);
+
+    if (!_was_continued.exchange(true, std::memory_order::relaxed)) {
+      if (callback<void, bool>::ptr continue_f{std::exchange(_continue_f, nullptr)}) {
+        continue_f->execute(true);
+      }
+    }
   }
 
-  void continue_after_complete(continue_function_t continue_f) {
-    _continue_f = std::move(continue_f);
+  void continue_after_complete(callback<void, bool>& continue_f) {
+    ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
-    const auto func = [this](auto& awaiter, auto, size_t awaiter_index) {
-      awaiter.continue_after_complete([this, awaiter_index](bool cancelled) {
-        size_t expected_index = 0;
-        if (_result_index.compare_exchange_strong(expected_index, awaiter_index, std::memory_order::relaxed)) {
-          // cancel other coroutines
-          call_functor_while_true(
-              [&](auto& awaiter_to_cancel, auto, size_t index) {
-                if (index != awaiter_index) {
-                  awaiter_to_cancel.cancel_await();
-                }
-                return true;
-              },
-              std::index_sequence_for<TAwaiters...>{});
+    _was_continued.store(false, std::memory_order::relaxed);
+    _continue_f = &continue_f;
 
-          _continue_f(cancelled);
-        }
-      });
-      return _result_index.load(std::memory_order::relaxed) == 0;
+    const auto iter_awaiters = [&]<size_t... TI>(std::index_sequence<TI...>) {
+      const auto set_continue = [&](auto& awaiter, callback<void, bool>& callback) {
+        _num_await_free.fetch_add(1, std::memory_order::relaxed);
+        awaiter.continue_after_complete(callback);
+        return _result_index.load(std::memory_order::relaxed) == 0;
+      };
+
+      // iterate while _result_index is zero
+      (void)(set_continue(std::get<TI>(_awaiters), std::get<TI>(_callbacks)) && ...);
     };
 
-    call_functor_while_true(func, std::index_sequence_for<TAwaiters...>{});
+    iter_awaiters(std::index_sequence_for<TAwaiters...>{});
+  }
+
+  void on_continue(bool cancelled, size_t awaiter_index) {
+    size_t expected_index = 0;
+    if (_result_index.compare_exchange_strong(expected_index, awaiter_index + 1, std::memory_order::relaxed)) {
+      // cancel other coroutines
+      call_functor_while_true(
+          [&](auto& awaiter_to_cancel, auto, size_t index) {
+            if (index != awaiter_index) {
+              awaiter_to_cancel.cancel_await();
+            }
+            return true;
+          },
+          std::index_sequence_for<TAwaiters...>{});
+
+      // continue execution
+      if (!_was_continued.exchange(true, std::memory_order::relaxed)) {
+        callback<void, bool>::ptr continuation{std::exchange(_continue_f, nullptr)};
+        ASYNC_CORO_ASSERT(continuation);
+        continuation->execute(cancelled);
+      }
+    }
+  }
+
+  void on_continuation_freed() noexcept {
+    if (_num_await_free.fetch_sub(1, std::memory_order::relaxed) == 1) {
+      _num_await_free.notify_one();
+    }
   }
 
   result_type await_resume() {
     union_res res;
-    const auto index = _result_index.load(std::memory_order::relaxed);
-
+    auto index = _result_index.load(std::memory_order::relaxed);
     ASYNC_CORO_ASSERT(index > 0);
+    --index;
 
     const auto func = [&](auto& awaiter, auto variant_index, size_t awaiter_index) {
       using result_t = decltype(awaiter.await_resume());
@@ -172,13 +236,21 @@ struct any_awaiter {
  private:
   template <class F, size_t... TI>
   auto calculate_is_ready(const F& store_result, std::integer_sequence<size_t, TI...>) noexcept {
-    return ((std::get<TI>(_awaiters).await_ready() && store_result(TI + 1)) || ...);
+    return ((std::get<TI>(_awaiters).await_ready() && store_result(TI)) || ...);
   }
 
   template <class F, size_t... TI>
   void call_functor_while_true(const F& func, std::integer_sequence<size_t, TI...>) {
-    ((func(std::get<TI>(_awaiters), std::in_place_index_t<TI>{}, TI + 1)) && ...);
+    ((func(std::get<TI>(_awaiters), std::in_place_index_t<TI>{}, TI)) && ...);
   }
+
+  static auto create_callbacks(any_awaiter& await) noexcept {
+    const auto iter_awaiters = [&]<size_t... TI>(std::index_sequence<TI...>) {
+      return std::make_tuple(any_awaiter_continue_callback<TI, any_awaiter>{await}...);
+    };
+
+    return iter_awaiters(std::index_sequence_for<TAwaiters...>{});
+  };
 
   union union_res {
     union_res() noexcept {}
@@ -188,12 +260,17 @@ struct any_awaiter {
   };
 
  private:
+  using TCallbacks = decltype(create_callbacks(std::declval<any_awaiter&>()));
+
   std::tuple<TAwaiters...> _awaiters;
+  TCallbacks _callbacks = create_callbacks(*this);
+  callback<void, bool>* _continue_f = nullptr;
   std::atomic_size_t _result_index{0};  // 1 based index
-  continue_function_t _continue_f;
+  std::atomic_size_t _num_await_free{0};
+  std::atomic_bool _was_continued{false};
 };
 
 template <typename... TArgs>
-any_awaiter(std::tuple<TArgs>...) -> any_awaiter<TArgs...>;
+any_awaiter(std::tuple<TArgs...>&&) -> any_awaiter<TArgs...>;
 
 }  // namespace async_coro::internal

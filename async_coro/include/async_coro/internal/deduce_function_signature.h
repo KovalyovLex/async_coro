@@ -7,10 +7,10 @@
 namespace async_coro {
 
 template <class R, class... TArgs>
-struct callback;
+class callback;
 
 template <class R, class... TArgs>
-struct callback_noexcept;
+class callback_noexcept;
 
 namespace internal {
 

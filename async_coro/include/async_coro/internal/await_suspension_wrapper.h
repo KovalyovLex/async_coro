@@ -15,9 +15,19 @@ class base_handle;
 namespace async_coro::internal {
 
 template <class TAwaiter>
-struct await_suspension_wrapper {
+class await_suspension_wrapper {
+ public:
   await_suspension_wrapper(TAwaiter&& awaiter) noexcept(std::is_nothrow_constructible_v<TAwaiter, TAwaiter&&>)
-      : _awaiter(std::move(awaiter)), _callback(on_cancel_callback{this}) {
+      : _awaiter(std::move(awaiter)),
+        _cancel_callback(on_cancel_callback{*this}),
+        _continue_callback(on_continue_callback{*this}) {
+  }
+
+  await_suspension_wrapper(const await_suspension_wrapper&) = delete;
+  await_suspension_wrapper(await_suspension_wrapper&& other) noexcept
+      : _awaiter(std::move(other._awaiter)),
+        _cancel_callback(on_cancel_callback{*this}),
+        _continue_callback(on_continue_callback{*this}) {
   }
 
   bool await_ready() noexcept {
@@ -29,13 +39,9 @@ struct await_suspension_wrapper {
   void await_suspend(std::coroutine_handle<U> h) {
     _was_done.store(false, std::memory_order::relaxed);
 
-    _suspension = h.promise().suspend(2, &_callback);
+    _suspension = h.promise().suspend(2, &_cancel_callback);
 
-    _awaiter.continue_after_complete([this](bool canceled) {
-      if (!_was_done.exchange(true, std::memory_order::relaxed)) [[likely]] {
-        _suspension.try_to_continue_from_any_thread(canceled);
-      }
-    });
+    _awaiter.continue_after_complete(_continue_callback);
 
     _suspension.try_to_continue_immediately();
   }
@@ -47,19 +53,32 @@ struct await_suspension_wrapper {
  private:
   struct on_cancel_callback {
     void operator()() const {
-      if (!clb->_was_done.exchange(true, std::memory_order::relaxed)) {
+      if (!clb._was_done.exchange(true, std::memory_order::relaxed)) {
         // cancel
-        clb->_suspension.try_to_continue_from_any_thread(true);
+        clb._awaiter.cancel_await();
+
+        clb._suspension.try_to_continue_from_any_thread(true);
       }
     }
 
-    await_suspension_wrapper* clb;
+    await_suspension_wrapper& clb;
+  };
+
+  struct on_continue_callback {
+    void operator()(bool canceled) const {
+      if (!clb._was_done.exchange(true, std::memory_order::relaxed)) [[likely]] {
+        clb._suspension.try_to_continue_from_any_thread(canceled);
+      }
+    }
+
+    await_suspension_wrapper& clb;
   };
 
  private:
   TAwaiter _awaiter;
   coroutine_suspender _suspension{};
-  callback_on_stack<on_cancel_callback, void> _callback;
+  callback_on_stack<on_cancel_callback, void> _cancel_callback;
+  callback_on_stack<on_continue_callback, void, bool> _continue_callback;
   std::atomic_bool _was_done{false};
 };
 

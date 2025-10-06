@@ -1,3 +1,4 @@
+#include <async_coro/execution_queue_mark.h>
 #include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>
 #include <gtest/gtest.h>
@@ -442,7 +443,7 @@ TEST(task_op, or_operator_with_delayed_tasks) {
           {"worker2", async_coro::execution_queues::worker}}};
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(config)};
 
-  auto handle = scheduler.start_task(routine());
+  auto handle = scheduler.start_task(routine(), async_coro::execution_queues::main);
 
   int counter = 0;
   while (!handle.done() && counter++ < 1000000) {

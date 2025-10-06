@@ -16,7 +16,15 @@ namespace async_coro::internal {
 
 class await_callback_base {
  protected:
-  await_callback_base() noexcept : _on_cancel(on_cancel_callback{this}) {}
+  await_callback_base() noexcept
+      : _on_cancel(on_cancel_callback{*this}) {
+  }
+
+  await_callback_base(const await_callback_base&) = delete;
+  await_callback_base(await_callback_base&&) = delete;
+
+  await_callback_base& operator=(await_callback_base&&) = delete;
+  await_callback_base& operator=(const await_callback_base&) = delete;
 
   ~await_callback_base() noexcept {
     reset_continue_callback();
@@ -141,15 +149,15 @@ class await_callback_base {
   class on_cancel_callback {
    public:
     void operator()() const {
-      if (!clb->_was_done.exchange(true, std::memory_order::relaxed)) {
+      if (!clb._was_done.exchange(true, std::memory_order::relaxed)) {
         // cancel
-        clb->reset_continue_callback();
+        clb.reset_continue_callback();
 
-        clb->_suspension.try_to_continue_from_any_thread(true);
+        clb._suspension.try_to_continue_from_any_thread(true);
       }
     }
 
-    await_callback_base* clb;
+    await_callback_base& clb;
   };
 
  protected:
@@ -161,15 +169,10 @@ class await_callback_base {
 };
 
 template <typename T>
-struct await_callback : private await_callback_base {
+class await_callback : private await_callback_base {
+ public:
   explicit await_callback(T&& callback) noexcept(std::is_nothrow_constructible_v<T, T&&>)
       : _on_await(std::forward<T>(callback)) {}
-
-  await_callback(const await_callback&) = delete;
-  await_callback(await_callback&&) = delete;
-
-  await_callback& operator=(await_callback&&) = delete;
-  await_callback& operator=(const await_callback&) = delete;
 
   ~await_callback() noexcept = default;
 

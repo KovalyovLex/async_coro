@@ -139,7 +139,7 @@ class unique_function : private internal::function_impl_call<SFOSize, unique_fun
       is_small_f<std::remove_cvref_t<Fx>> &&
       std::is_nothrow_constructible_v<Fx, Fx&&>;
 
-  struct no_init {};
+  class no_init {};
 
   unique_function(no_init) noexcept : storage(typename storage::no_init{}) {}
 

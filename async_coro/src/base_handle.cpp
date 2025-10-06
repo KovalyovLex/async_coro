@@ -10,6 +10,7 @@ namespace async_coro {
 
 base_handle::~base_handle() noexcept {
   ASYNC_CORO_ASSERT(release_continuation_functor() == nullptr);
+  ASYNC_CORO_ASSERT(_on_cancel.load(std::memory_order::relaxed) == nullptr);
 }
 
 void base_handle::on_task_freed_by_scheduler() {
@@ -44,11 +45,12 @@ void base_handle::set_continuation_functor(callback_base* f) noexcept {
 void base_handle::destroy_impl() {
   auto continuation = release_continuation_functor();
 
-  get_handle().destroy();
-
+  // continuation can hold something from coro. So destroy continuation first
   if (continuation) {
     continuation->destroy();
   }
+
+  get_handle().destroy();
 }
 
 uint8_t base_handle::dec_num_owners() noexcept {
@@ -75,16 +77,17 @@ void base_handle::inc_num_owners() noexcept {
 }
 
 bool base_handle::request_cancel() {
-  bool was_requested = set_cancel_requested(true);
+  const auto [was_requested, state] = set_cancel_requested();
   if (!was_requested) {
     // this is first cancel - notify continuation
-    const auto state = get_coroutine_state(std::memory_order::acquire);
     if ((state == coroutine_state::suspended || state == coroutine_state::waiting_switch)) {
+      // It should be unsafe to use this fields if state prior cancel request was suspended
+      // as any continue after our request leaves this fields untouched
       if (_current_child) {
         _current_child->request_cancel();
       }
-      if (_on_cancel) {
-        _on_cancel->execute();
+      if (callback<void>::ptr on_cancel{_on_cancel.exchange(nullptr, std::memory_order::relaxed)}) {
+        on_cancel->execute();
       }
     }
     execute_continuation(true);

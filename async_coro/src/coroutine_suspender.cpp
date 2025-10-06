@@ -22,13 +22,15 @@ void coroutine_suspender::try_to_continue_from_any_thread(bool cancel) {
   if (prev_count == 1) {
     (void)_suspend_count.load(std::memory_order::acquire);
 
+    // reset our cancel
+    if (auto cancel = _handle->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
+      cancel->destroy();
+    }
+
     if (_handle->is_finished()) [[unlikely]] {
       // some exception happened before callback call
       return;
     }
-
-    // reset our cancel
-    _handle->_on_cancel = nullptr;
 
     _handle->get_scheduler().continue_execution(*_handle, internal::passkey{this});
   }
@@ -63,13 +65,15 @@ void coroutine_suspender::try_to_continue_immediately() {
       _handle->_run_data.store(run_data, std::memory_order::release);
     }
 
+    // reset our cancel
+    if (auto cancel = _handle->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
+      cancel->destroy();
+    }
+
     if (_handle->is_finished()) [[unlikely]] {
       // some exception happened before callback call
       return;
     }
-
-    // reset our cancel
-    _handle->_on_cancel = nullptr;
 
     _handle->get_scheduler().continue_execution(*_handle, internal::passkey{this});
   }

@@ -11,7 +11,8 @@
 namespace async_coro::internal {
 
 template <typename R>
-struct await_start_task {
+class await_start_task {
+ public:
   explicit await_start_task(task_launcher<R> tsk) noexcept
       : _task(std::move(tsk)) {}
 

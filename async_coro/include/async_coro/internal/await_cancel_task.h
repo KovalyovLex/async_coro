@@ -8,7 +8,8 @@
 
 namespace async_coro::internal {
 
-struct await_cancel_task {
+class await_cancel_task {
+ public:
   explicit await_cancel_task() noexcept {}
 
   await_cancel_task(const await_cancel_task&) = delete;
