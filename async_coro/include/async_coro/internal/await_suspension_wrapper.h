@@ -2,6 +2,7 @@
 
 #include <async_coro/callback.h>
 #include <async_coro/coroutine_suspender.h>
+#include <async_coro/internal/continue_callback.h>
 
 #include <atomic>
 #include <concepts>
@@ -65,10 +66,11 @@ class await_suspension_wrapper {
   };
 
   struct on_continue_callback {
-    void operator()(bool canceled) const {
+    continue_callback::return_type operator()(bool canceled) const {
       if (!clb._was_done.exchange(true, std::memory_order::relaxed)) [[likely]] {
         clb._suspension.try_to_continue_from_any_thread(canceled);
       }
+      return {nullptr, false};
     }
 
     await_suspension_wrapper& clb;
@@ -78,7 +80,7 @@ class await_suspension_wrapper {
   TAwaiter _awaiter;
   coroutine_suspender _suspension{};
   callback_on_stack<on_cancel_callback, void> _cancel_callback;
-  callback_on_stack<on_continue_callback, void, bool> _continue_callback;
+  continue_callback_on_stack<on_continue_callback> _continue_callback;
   std::atomic_bool _was_done{false};
 };
 

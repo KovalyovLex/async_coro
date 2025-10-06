@@ -2,6 +2,7 @@
 
 #include <async_coro/callback.h>
 #include <async_coro/config.h>
+#include <async_coro/internal/continue_callback.h>
 #include <async_coro/internal/type_traits.h>
 
 #include <atomic>
@@ -62,13 +63,16 @@ class handle_awaiter {
     _handle.reset_continue();
 
     if (!_was_continued.exchange(true, std::memory_order::relaxed)) {
-      if (callback<void, bool>::ptr continuation{std::exchange(_continue_f, nullptr)}) {
-        continuation->execute(true);
+      continue_callback::ptr continuation{std::exchange(_continue_f, nullptr)};
+      bool cancel = true;
+
+      while (continuation) {
+        std::tie(continuation, cancel) = continuation->execute(cancel);
       }
     }
   }
 
-  void continue_after_complete(callback<void, bool>& continue_f) {
+  void continue_after_complete(continue_callback& continue_f) {
     ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
     _was_continued.store(false, std::memory_order::relaxed);
@@ -85,10 +89,12 @@ class handle_awaiter {
   struct on_continue_callback {
     void operator()(promise_result<TRes>&, bool canceled) const {
       if (!clb._was_continued.exchange(true, std::memory_order::relaxed)) {
-        callback<void, bool>::ptr continuation{std::exchange(clb._continue_f, nullptr)};
+        continue_callback::ptr continuation{std::exchange(clb._continue_f, nullptr)};
         ASYNC_CORO_ASSERT(continuation != nullptr);
 
-        continuation->execute(canceled);
+        do {
+          std::tie(continuation, canceled) = continuation->execute(canceled);
+        } while (continuation);
       }
     }
 
@@ -97,7 +103,7 @@ class handle_awaiter {
 
  private:
   task_handle<TRes> _handle;
-  callback<void, bool>* _continue_f = nullptr;
+  continue_callback* _continue_f = nullptr;
   callback_on_stack<on_continue_callback, void, promise_result<TRes>&, bool> _continue_callback;
   std::atomic_bool _was_continued{false};
 };

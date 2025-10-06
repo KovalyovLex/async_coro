@@ -3,6 +3,7 @@
 #include <async_coro/callback.h>
 #include <async_coro/config.h>
 #include <async_coro/internal/await_suspension_wrapper.h>
+#include <async_coro/internal/continue_callback.h>
 #include <async_coro/internal/handle_awaiter.h>
 #include <async_coro/internal/remove_void_tuple.h>
 #include <async_coro/internal/tuple_variant_helpers.h>
@@ -22,9 +23,9 @@ class task_handle;
 namespace async_coro::internal {
 
 template <size_t I, class TAwaiter>
-class all_awaiter_continue_callback : public callback<void, bool> {
+class all_awaiter_continue_callback : public continue_callback {
  public:
-  all_awaiter_continue_callback(TAwaiter& awaiter) noexcept : callback<void, bool>(&executor, &deleter), _awaiter(awaiter) {}
+  all_awaiter_continue_callback(TAwaiter& awaiter) noexcept : continue_callback(&executor, &deleter), _awaiter(awaiter) {}
 
   all_awaiter_continue_callback(const all_awaiter_continue_callback&) = delete;
   all_awaiter_continue_callback(all_awaiter_continue_callback&&) noexcept = default;
@@ -33,8 +34,8 @@ class all_awaiter_continue_callback : public callback<void, bool> {
   all_awaiter_continue_callback& operator=(all_awaiter_continue_callback&&) = delete;
 
  private:
-  static void executor(callback_base* base, bool cancelled) {
-    static_cast<all_awaiter_continue_callback*>(base)->_awaiter.on_continue(cancelled, I);
+  static continue_callback::return_type executor(callback_base* base, bool cancelled) {
+    return static_cast<all_awaiter_continue_callback*>(base)->_awaiter.on_continue(cancelled, I);
   }
 
   static void deleter(callback_base* base) noexcept {
@@ -130,13 +131,16 @@ class all_awaiter {
         _awaiters);
 
     if (!_was_continued.exchange(true, std::memory_order::relaxed)) {
-      if (callback<void, bool>::ptr continue_f{std::exchange(_continue_f, nullptr)}) {
-        continue_f->execute(true);
+      continue_callback::ptr continuation{std::exchange(_continue_f, nullptr)};
+      bool cancel = true;
+
+      while (continuation) {
+        std::tie(continuation, cancel) = continuation->execute(cancel);
       }
     }
   }
 
-  void continue_after_complete(callback<void, bool>& continue_f) {
+  void continue_after_complete(continue_callback& continue_f) {
     ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
     _was_continued.store(false, std::memory_order::relaxed);
@@ -145,7 +149,7 @@ class all_awaiter {
     _num_await_free.store(sizeof...(TAwaiters), std::memory_order::relaxed);
 
     const auto iter_awaiters = [&]<size_t... TI>(std::index_sequence<TI...>) {
-      const auto set_continue = [&](auto& awaiter, callback<void, bool>& callback) {
+      const auto set_continue = [&](auto& awaiter, continue_callback& callback) {
         awaiter.continue_after_complete(callback);
       };
 
@@ -155,7 +159,7 @@ class all_awaiter {
     iter_awaiters(std::index_sequence_for<TAwaiters...>{});
   }
 
-  void on_continue(bool cancelled, size_t awaiter_index) {
+  continue_callback::return_type on_continue(bool cancelled, size_t awaiter_index) {
     if (cancelled && !_was_any_cancelled.exchange(true, std::memory_order::relaxed)) {
       // immediately notify others to cancel
       const auto iter_awaiters = [&]<size_t... TI>(std::index_sequence<TI...>) {
@@ -173,12 +177,13 @@ class all_awaiter {
 
     if (_num_not_finished.fetch_sub(1, std::memory_order::relaxed) == 1) {
       if (!_was_continued.exchange(true, std::memory_order::relaxed)) {
-        callback<void, bool>::ptr continuation{std::exchange(_continue_f, nullptr)};
+        continue_callback::ptr continuation{std::exchange(_continue_f, nullptr)};
         ASYNC_CORO_ASSERT(continuation);
 
-        continuation->execute(_was_any_cancelled.load(std::memory_order::relaxed));
+        return {std::move(continuation), _was_any_cancelled.load(std::memory_order::relaxed)};
       }
     }
+    return {nullptr, cancelled};
   }
 
   void on_continuation_freed() noexcept {
@@ -224,7 +229,7 @@ class all_awaiter {
 
   std::tuple<TAwaiters...> _awaiters;
   TCallbacks _callbacks = create_callbacks(*this);
-  callback<void, bool>* _continue_f = nullptr;
+  continue_callback* _continue_f = nullptr;
   std::atomic_size_t _num_not_finished{0};
   std::atomic_size_t _num_await_free{0};
   std::atomic_bool _was_any_cancelled{false};

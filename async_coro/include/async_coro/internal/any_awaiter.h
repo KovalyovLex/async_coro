@@ -2,6 +2,7 @@
 
 #include <async_coro/config.h>
 #include <async_coro/internal/await_suspension_wrapper.h>
+#include <async_coro/internal/continue_callback.h>
 #include <async_coro/internal/handle_awaiter.h>
 #include <async_coro/internal/tuple_variant_helpers.h>
 #include <async_coro/warnings.h>
@@ -20,9 +21,9 @@ class task_handle;
 namespace async_coro::internal {
 
 template <size_t I, class TAwaiter>
-class any_awaiter_continue_callback : public callback<void, bool> {
+class any_awaiter_continue_callback : public continue_callback {
  public:
-  any_awaiter_continue_callback(TAwaiter& awaiter) noexcept : callback<void, bool>(&executor, &deleter), _awaiter(awaiter) {}
+  any_awaiter_continue_callback(TAwaiter& awaiter) noexcept : continue_callback(&executor, &deleter), _awaiter(awaiter) {}
 
   any_awaiter_continue_callback(const any_awaiter_continue_callback&) = delete;
   any_awaiter_continue_callback(any_awaiter_continue_callback&&) noexcept = default;
@@ -31,8 +32,8 @@ class any_awaiter_continue_callback : public callback<void, bool> {
   any_awaiter_continue_callback& operator=(any_awaiter_continue_callback&&) = delete;
 
  private:
-  static void executor(callback_base* base, bool cancelled) {
-    static_cast<any_awaiter_continue_callback*>(base)->_awaiter.on_continue(cancelled, I);
+  static continue_callback::return_type executor(callback_base* base, bool cancelled) {
+    return static_cast<any_awaiter_continue_callback*>(base)->_awaiter.on_continue(cancelled, I);
   }
 
   static void deleter(callback_base* base) noexcept {
@@ -144,20 +145,23 @@ class any_awaiter {
         _awaiters);
 
     if (!_was_continued.exchange(true, std::memory_order::relaxed)) {
-      if (callback<void, bool>::ptr continue_f{std::exchange(_continue_f, nullptr)}) {
-        continue_f->execute(true);
+      continue_callback::ptr continuation{std::exchange(_continue_f, nullptr)};
+      bool cancel = true;
+
+      while (continuation) {
+        std::tie(continuation, cancel) = continuation->execute(cancel);
       }
     }
   }
 
-  void continue_after_complete(callback<void, bool>& continue_f) {
+  void continue_after_complete(continue_callback& continue_f) {
     ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
     _was_continued.store(false, std::memory_order::relaxed);
     _continue_f = &continue_f;
 
     const auto iter_awaiters = [&]<size_t... TI>(std::index_sequence<TI...>) {
-      const auto set_continue = [&](auto& awaiter, callback<void, bool>& callback) {
+      const auto set_continue = [&](auto& awaiter, continue_callback& callback) {
         _num_await_free.fetch_add(1, std::memory_order::relaxed);
         awaiter.continue_after_complete(callback);
         return _result_index.load(std::memory_order::relaxed) == 0;
@@ -170,7 +174,7 @@ class any_awaiter {
     iter_awaiters(std::index_sequence_for<TAwaiters...>{});
   }
 
-  void on_continue(bool cancelled, size_t awaiter_index) {
+  continue_callback::return_type on_continue(bool cancelled, size_t awaiter_index) {
     size_t expected_index = 0;
     if (_result_index.compare_exchange_strong(expected_index, awaiter_index + 1, std::memory_order::relaxed)) {
       // cancel other coroutines
@@ -185,11 +189,14 @@ class any_awaiter {
 
       // continue execution
       if (!_was_continued.exchange(true, std::memory_order::relaxed)) {
-        callback<void, bool>::ptr continuation{std::exchange(_continue_f, nullptr)};
+        continue_callback::ptr continuation{std::exchange(_continue_f, nullptr)};
         ASYNC_CORO_ASSERT(continuation);
-        continuation->execute(cancelled);
+
+        return {std::move(continuation), cancelled};
       }
     }
+
+    return {nullptr, false};
   }
 
   void on_continuation_freed() noexcept {
@@ -264,7 +271,7 @@ class any_awaiter {
 
   std::tuple<TAwaiters...> _awaiters;
   TCallbacks _callbacks = create_callbacks(*this);
-  callback<void, bool>* _continue_f = nullptr;
+  continue_callback* _continue_f = nullptr;
   std::atomic_size_t _result_index{0};  // 1 based index
   std::atomic_size_t _num_await_free{0};
   std::atomic_bool _was_continued{false};
