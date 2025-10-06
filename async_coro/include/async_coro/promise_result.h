@@ -44,9 +44,11 @@ class promise_result : public internal::promise_result_base<T> {
 
  protected:
   bool execute_continuation(bool cancelled) override {
-    if (auto* continue_with = static_cast<callback<void, promise_result<T>&, bool>*>(this->release_continuation_functor())) {
+    using callback_t = callback<void, promise_result<T>&, bool>;
+
+    typename callback_t::ptr continue_with{static_cast<callback_t*>(this->release_continuation_functor())};
+    if (continue_with) {
       continue_with->execute(*this, cancelled);
-      continue_with->destroy();
       return true;
     }
     return false;
@@ -85,7 +87,9 @@ class promise_result<void> : public internal::promise_result_base<void> {
 
  protected:
   bool execute_continuation(bool cancelled) override {
-    callback<void, promise_result<void>&, bool>::ptr continue_with{static_cast<callback<void, promise_result<void>&, bool>*>(this->release_continuation_functor())};
+    using callback_t = callback<void, promise_result<void>&, bool>;
+
+    typename callback_t::ptr continue_with{static_cast<callback_t*>(this->release_continuation_functor())};
     if (continue_with) {
       continue_with->execute(*this, cancelled);
       return true;
