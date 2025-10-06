@@ -32,7 +32,7 @@ class await_callback_base {
 
   void reset_continue_callback() noexcept {
     bool expected = false;
-    while (!_change_in_process.compare_exchange_strong(expected, true, std::memory_order::acq_rel)) {
+    while (!_continue_lock.compare_exchange_strong(expected, true, std::memory_order::acq_rel)) {
       expected = false;
     }
 
@@ -40,9 +40,11 @@ class await_callback_base {
       clb->change_continue(nullptr, true);
     }
 
-    _change_in_process.store(false, std::memory_order::release);
+    _continue_lock.store(false, std::memory_order::release);
   }
 
+  // This callback will be handled externally from any thread.
+  // As we dont want to use any extra allocation we use double lock technic to sync access between await_callback and this external callback.
   class continue_callback {
    public:
     continue_callback(await_callback_base& c) noexcept : callback(&c) {
@@ -79,7 +81,7 @@ class await_callback_base {
 
       // busy wait self
       bool expected = false;
-      while (!change_in_process.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
+      while (!callback_lock.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
         expected = false;
       }
 
@@ -87,11 +89,11 @@ class await_callback_base {
       do {
         if (clb != callback.load(std::memory_order::relaxed)) {
           callback.store(nullptr, std::memory_order::relaxed);
-          change_in_process.store(false, std::memory_order_release);
+          callback_lock.store(false, std::memory_order_release);
           return false;
         }
         expected = false;
-      } while (!callback_write_granted && !clb->_change_in_process.compare_exchange_strong(expected, true, std::memory_order_relaxed));
+      } while (!callback_write_granted && !clb->_continue_lock.compare_exchange_strong(expected, true, std::memory_order_relaxed));
 
       if (new_ptr) {
         new_ptr->callback.store(clb, std::memory_order::relaxed);
@@ -99,8 +101,8 @@ class await_callback_base {
       clb->_continue.store(new_ptr, std::memory_order::relaxed);
       callback.store(nullptr, std::memory_order::relaxed);
 
-      clb->_change_in_process.store(false, std::memory_order_release);
-      change_in_process.store(false, std::memory_order_release);
+      clb->_continue_lock.store(false, std::memory_order_release);
+      callback_lock.store(false, std::memory_order_release);
       return true;
     }
 
@@ -116,7 +118,7 @@ class await_callback_base {
 
       // busy wait self
       bool expected = false;
-      while (!change_in_process.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
+      while (!callback_lock.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
         expected = false;
       }
 
@@ -126,24 +128,24 @@ class await_callback_base {
           return;
         }
         expected = false;
-      } while (!clb->_change_in_process.compare_exchange_strong(expected, true, std::memory_order_relaxed));
+      } while (!clb->_continue_lock.compare_exchange_strong(expected, true, std::memory_order_relaxed));
 
       // release self lock
-      change_in_process.store(false, std::memory_order_release);
+      callback_lock.store(false, std::memory_order_release);
 
       if (!clb->_was_done.exchange(true, std::memory_order::relaxed)) {
         // no cancel here should be done. clb cant be destroyed so we can release lock
-        clb->_change_in_process.store(false, std::memory_order_release);
+        clb->_continue_lock.store(false, std::memory_order_release);
 
         clb->_suspension.try_to_continue_from_any_thread(false);
         return;
       }
 
-      clb->_change_in_process.store(false, std::memory_order_release);
+      clb->_continue_lock.store(false, std::memory_order_release);
     }
 
     std::atomic<await_callback_base*> callback;
-    mutable std::atomic_bool change_in_process = false;
+    mutable std::atomic_bool callback_lock = false;
   };
 
   class on_cancel_callback {
@@ -165,7 +167,7 @@ class await_callback_base {
   callback_on_stack<on_cancel_callback, void> _on_cancel;
   std::atomic<continue_callback*> _continue = nullptr;
   std::atomic_bool _was_done = false;
-  std::atomic_bool _change_in_process = false;
+  std::atomic_bool _continue_lock = false;
 };
 
 template <typename T>
