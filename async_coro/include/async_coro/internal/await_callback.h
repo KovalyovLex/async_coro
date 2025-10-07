@@ -164,7 +164,7 @@ class await_callback_base {
 
  protected:
   coroutine_suspender _suspension;
-  callback_on_stack<on_cancel_callback, void> _on_cancel;
+  callback_on_stack<on_cancel_callback, void()> _on_cancel;
   std::atomic<continue_callback*> _continue = nullptr;
   std::atomic_bool _was_done = false;
   std::atomic_bool _continue_lock = false;

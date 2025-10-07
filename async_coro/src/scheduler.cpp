@@ -93,8 +93,8 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
       parent->_current_child = nullptr;
 
       if (cancelled_without_finish) {
-        if (callback<void>::ptr on_cancel{handle_impl._on_cancel.exchange(nullptr, std::memory_order::relaxed)}) {
-          on_cancel->execute();
+        if (auto* on_cancel = handle_impl._on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
+          on_cancel->execute_and_destroy();
         }
 
         parent->request_cancel();
@@ -112,8 +112,8 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
       curren_data->external_continuation_request = true;
 
       if (cancelled_without_finish) {
-        if (callback<void>::ptr on_cancel{handle_impl._on_cancel.exchange(nullptr, std::memory_order::relaxed)}) {
-          on_cancel->execute();
+        if (auto* on_cancel = handle_impl._on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
+          on_cancel->execute_and_destroy();
         }
       }
 

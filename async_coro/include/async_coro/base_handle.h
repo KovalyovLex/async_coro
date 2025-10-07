@@ -247,7 +247,7 @@ class base_handle {
    *
    * @see `coroutine_suspender`
    */
-  auto suspend(std::uint32_t suspend_count, callback<void>* on_cancel) noexcept {
+  auto suspend(std::uint32_t suspend_count, callback<void()>* on_cancel) noexcept {
     ASYNC_CORO_ASSERT_VARIABLE auto prev = this->_on_cancel.exchange(on_cancel, std::memory_order::relaxed);
     ASYNC_CORO_ASSERT(prev == nullptr);
 
@@ -375,7 +375,7 @@ class base_handle {
   std::coroutine_handle<> _handle;
   scheduler* _scheduler = nullptr;
   callback_base::ptr _start_function;
-  std::atomic<callback<void>*> _on_cancel = nullptr;  // callback for our coroutine (not continuation of others) to be cancelled
+  std::atomic<callback<void()>*> _on_cancel = nullptr;  // callback for our coroutine (not continuation of others) to be cancelled
   base_handle* _current_child = nullptr;
   std::thread::id _execution_thread = {};
   execution_queue_mark _execution_queue = execution_queues::main;

@@ -90,8 +90,8 @@ bool base_handle::request_cancel() {
       if (_current_child) {
         _current_child->request_cancel();
       }
-      if (callback<void>::ptr on_cancel{_on_cancel.exchange(nullptr, std::memory_order::relaxed)}) {
-        on_cancel->execute();
+      if (auto* on_cancel = _on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
+        on_cancel->execute_and_destroy();
       }
     }
     execute_continuation(true);

@@ -3,7 +3,7 @@
 
 TEST(callback, create_and_execute) {
   int result{0};
-  auto callback = async_coro::callback<int, int>::allocate([&](int value) noexcept {
+  auto callback = async_coro::callback<int(int)>::allocate([&](int value) noexcept {
     result = value;
     return value;
   });
@@ -73,7 +73,7 @@ TEST(callback, check_destructor_manual_destroy) {
     ~destructor_checker() { _destructed = true; }
   };
 
-  auto callback = async_coro::callback<void>::allocate([c = destructor_checker{destructed}]() noexcept {});
+  auto callback = async_coro::callback<void()>::allocate([c = destructor_checker{destructed}]() noexcept {});
   callback->destroy();
 
   EXPECT_TRUE(destructed);

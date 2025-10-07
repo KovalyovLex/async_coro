@@ -68,7 +68,7 @@ execution_system::execution_system(const execution_system_config& config, const 
       auto& worker_config = config.worker_configs[i];
 
       thread_data.thread = std::thread([this, &thread_data, &num_threads_to_wait_start]() {
-        if (num_threads_to_wait_start.fetch_sub(1, std::memory_order::relaxed) == 1) {
+        if (num_threads_to_wait_start.fetch_sub(1, std::memory_order::release) == 1) {
           num_threads_to_wait_start.notify_one();
         }
 
@@ -85,10 +85,10 @@ execution_system::execution_system(const execution_system_config& config, const 
     }
   }
 
-  auto num_started = num_threads_to_wait_start.load(std::memory_order::relaxed);
+  auto num_started = num_threads_to_wait_start.load(std::memory_order::acquire);
   while (num_started != 0) {
     num_threads_to_wait_start.wait(num_started, std::memory_order::relaxed);
-    num_started = num_threads_to_wait_start.load(std::memory_order::relaxed);
+    num_started = num_threads_to_wait_start.load(std::memory_order::acquire);
   }
 }
 

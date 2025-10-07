@@ -33,7 +33,9 @@ class any_awaiter_continue_callback : public continue_callback {
   any_awaiter_continue_callback& operator=(any_awaiter_continue_callback&&) = delete;
 
  private:
-  static continue_callback::return_type executor(callback_base* base, bool cancelled) {
+  static continue_callback::return_type executor(callback_base* base, bool with_destroy, bool cancelled) {
+    ASYNC_CORO_ASSERT(with_destroy);
+
     return static_cast<any_awaiter_continue_callback*>(base)->_awaiter.on_continue(cancelled, I);
   }
 
@@ -150,7 +152,7 @@ class any_awaiter {
       bool cancel = true;
 
       while (continuation) {
-        std::tie(continuation, cancel) = continuation->execute(cancel);
+        std::tie(continuation, cancel) = continuation.release()->execute_and_destroy(cancel);
       }
     }
   }
@@ -193,10 +195,12 @@ class any_awaiter {
         continue_callback::ptr continuation{std::exchange(_continue_f, nullptr)};
         ASYNC_CORO_ASSERT(continuation);
 
+        on_continuation_freed();
         return {std::move(continuation), cancelled};
       }
     }
 
+    on_continuation_freed();
     return {nullptr, false};
   }
 

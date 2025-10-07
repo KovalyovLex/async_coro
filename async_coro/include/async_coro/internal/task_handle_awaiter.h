@@ -72,8 +72,8 @@ class task_handle_awaiter {
  private:
   task_handle<R> _th;
   coroutine_suspender _suspension;
-  callback_on_stack<on_cancel_callback, void> _on_cancel_callback;
-  callback_on_stack<on_continue_callback, void, promise_result<R>&, bool> _on_continue_callback;
+  callback_on_stack<on_cancel_callback, void()> _on_cancel_callback;
+  callback_on_stack<on_continue_callback, void(promise_result<R>&, bool)> _on_continue_callback;
   std::atomic_bool _was_done{false};
 };
 

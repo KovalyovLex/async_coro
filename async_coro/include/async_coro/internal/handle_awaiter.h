@@ -67,7 +67,7 @@ class handle_awaiter {
       bool cancel = true;
 
       while (continuation) {
-        std::tie(continuation, cancel) = continuation->execute(cancel);
+        std::tie(continuation, cancel) = continuation.release()->execute_and_destroy(cancel);
       }
     }
   }
@@ -93,7 +93,7 @@ class handle_awaiter {
         ASYNC_CORO_ASSERT(continuation != nullptr);
 
         do {
-          std::tie(continuation, canceled) = continuation->execute(canceled);
+          std::tie(continuation, canceled) = continuation.release()->execute_and_destroy(canceled);
         } while (continuation);
       }
     }
@@ -104,7 +104,7 @@ class handle_awaiter {
  private:
   task_handle<TRes> _handle;
   continue_callback* _continue_f = nullptr;
-  callback_on_stack<on_continue_callback, void, promise_result<TRes>&, bool> _continue_callback;
+  callback_on_stack<on_continue_callback, void(promise_result<TRes>&, bool)> _continue_callback;
   std::atomic_bool _was_continued{false};
 };
 

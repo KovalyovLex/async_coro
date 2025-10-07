@@ -109,7 +109,7 @@ class internal::callback_def<Noexcept, R(TArgs...)> : public callback_base {
    * @param value The arguments to pass to the callback.
    */
   R execute(TArgs... value) noexcept(Noexcept) {
-    return _executor(this, std::forward<TArgs>(value)...);
+    return _executor(this, false, std::forward<TArgs>(value)...);
   }
 
   /**
@@ -117,7 +117,7 @@ class internal::callback_def<Noexcept, R(TArgs...)> : public callback_base {
    * @param value The arguments to pass to the callback.
    */
   R execute_and_destroy(TArgs... value) noexcept(Noexcept) {
-    return _executor(this, std::forward<TArgs>(value)...);
+    return _executor(this, true, std::forward<TArgs>(value)...);
   }
 
   /**
@@ -168,7 +168,7 @@ class callback<R(TArgs...)> : public internal::callback_def<false, R(TArgs...)> 
 
 template <typename R, typename... TArgs>
 class callback<R(TArgs...) noexcept> : public internal::callback_def<true, R(TArgs...)> {
-  using super = internal::callback_def<false, R(TArgs...)>;
+  using super = internal::callback_def<true, R(TArgs...)>;
 
  public:
   /**
@@ -238,9 +238,9 @@ class callback_impl<Fx, Noexcept, R(TArgs...)> final : public std::conditional_t
 
     if (with_destroy) {
       callback_raii_deleter t{clb};
-      return clb->_fx(std::forward<TArgs>(value)...);
+      return clb._fx(std::forward<TArgs>(value)...);
     } else {
-      return clb->_fx(std::forward<TArgs>(value)...);
+      return clb._fx(std::forward<TArgs>(value)...);
     }
   }
 

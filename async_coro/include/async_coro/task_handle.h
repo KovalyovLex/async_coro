@@ -34,7 +34,7 @@ template <typename R = void>
 class task_handle final {
   using promise_type = async_coro::internal::promise_type<R>;
   using handle_type = std::coroutine_handle<promise_type>;
-  using callback_type = callback<void, promise_result<R>&, bool>;
+  using callback_type = callback<void(promise_result<R>&, bool)>;
 
  public:
   task_handle() noexcept = default;
@@ -176,14 +176,14 @@ class task_handle final {
     if (done()) {
       f(promise, false);
     } else {
-      auto continue_f = callback_type::allocate(std::forward<Fx>(f));
+      const auto continue_f = callback_type::allocate(std::forward<Fx>(f));
       promise.set_continuation_functor(continue_f, internal::passkey{this});
       auto [state, cancelled] = promise.get_coroutine_state_and_cancelled(std::memory_order::acquire);
       if (state == async_coro::coroutine_state::finished || cancelled) {
-        if (callback_base::ptr f_base{promise.get_continuation_functor(internal::passkey{this})}) {
-          ASYNC_CORO_ASSERT(f_base.get() == continue_f);
+        if (auto* f_base = promise.get_continuation_functor(internal::passkey{this})) {
+          ASYNC_CORO_ASSERT(f_base == continue_f);
           (void)f_base;
-          continue_f->execute(promise, cancelled);
+          continue_f->execute_and_destroy(promise, cancelled);
         }
       }
     }
@@ -208,9 +208,9 @@ class task_handle final {
       promise.set_continuation_functor(ptr, internal::passkey{this});
       const auto [state, cancelled] = promise.get_coroutine_state_and_cancelled(std::memory_order::acquire);
       if (state == async_coro::coroutine_state::finished || cancelled) {
-        if (callback_base::ptr f_base{promise.get_continuation_functor(internal::passkey{this})}) {
-          ASYNC_CORO_ASSERT(f_base.get() == ptr);
-          ptr->execute(promise, cancelled);
+        if (auto* f_base = promise.get_continuation_functor(internal::passkey{this})) {
+          ASYNC_CORO_ASSERT(f_base == ptr);
+          ptr->execute_and_destroy(promise, cancelled);
         }
       };
     }

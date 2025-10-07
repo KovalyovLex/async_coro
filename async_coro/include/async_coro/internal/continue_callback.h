@@ -7,48 +7,44 @@
 
 namespace async_coro::internal {
 
-template <class... TArgs>
-class recurrent_callback : public callback<std::tuple<std::unique_ptr<recurrent_callback<TArgs...>, callback_base::deleter>, TArgs...>, TArgs...> {
-  using super = callback<std::tuple<std::unique_ptr<recurrent_callback<TArgs...>, callback_base::deleter>, TArgs...>, TArgs...>;
+class continue_callback;
+
+using callback_sig = std::tuple<std::unique_ptr<continue_callback, callback_base::deleter>, bool>(bool);
+
+class continue_callback : public callback<callback_sig> {
+  using super = callback<callback_sig>;
 
  public:
-  using ptr = std::unique_ptr<recurrent_callback<TArgs...>, callback_base::deleter>;
-  using return_type = std::tuple<ptr, TArgs...>;
+  using ptr = std::unique_ptr<continue_callback, callback_base::deleter>;
+  using return_type = std::tuple<ptr, bool>;
 
-  recurrent_callback(super::executor_t executor, super::deleter_t deleter = nullptr) noexcept
+  continue_callback(super::executor_t executor, super::deleter_t deleter = nullptr) noexcept
       : super(executor, deleter) {}
 };
 
-template <typename Fx, typename... TArgs>
-class recurrent_callback_on_stack : public recurrent_callback<TArgs...> {
-  using super = recurrent_callback<TArgs...>;
-
+template <typename Fx>
+class continue_callback_on_stack : public continue_callback {
  public:
   template <class... TArgs2>
-  recurrent_callback_on_stack(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
-      : super(&executor, nullptr),
+  continue_callback_on_stack(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
+      : continue_callback(&executor, nullptr),
         _fx(std::forward<TArgs2>(args)...) {}
 
-  recurrent_callback_on_stack(const recurrent_callback_on_stack&) = delete;
-  recurrent_callback_on_stack(recurrent_callback_on_stack&&) = delete;
+  continue_callback_on_stack(const continue_callback_on_stack&) = delete;
+  continue_callback_on_stack(continue_callback_on_stack&&) = delete;
 
-  recurrent_callback_on_stack& operator=(const recurrent_callback_on_stack&) = delete;
-  recurrent_callback_on_stack& operator=(recurrent_callback_on_stack&&) = delete;
+  continue_callback_on_stack& operator=(const continue_callback_on_stack&) = delete;
+  continue_callback_on_stack& operator=(continue_callback_on_stack&&) = delete;
 
-  ~recurrent_callback_on_stack() noexcept = default;
+  ~continue_callback_on_stack() noexcept = default;
 
  private:
-  static super::return_type executor(callback_base* base, TArgs... value) {
-    return static_cast<recurrent_callback_on_stack*>(base)->_fx(std::forward<TArgs>(value)...);
+  static continue_callback::return_type executor(callback_base* base, bool /*with_destroy*/, bool cancel) {
+    return static_cast<continue_callback_on_stack*>(base)->_fx(cancel);
   }
 
  private:
   Fx _fx;
 };
-
-using continue_callback = recurrent_callback<bool>;
-
-template <typename Fx>
-using continue_callback_on_stack = recurrent_callback_on_stack<Fx, bool>;
 
 }  // namespace async_coro::internal
