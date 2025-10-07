@@ -94,8 +94,10 @@
   "cSpell.words": [
     "coro",
     "coros",
-    "COTHREAD"
+    "COTHREAD",
+    "NOLINTNEXTLINE"
   ],
   "cmake.copyCompileCommands": "${workspaceFolder}/compile_commands.json",
-  "cmake.exportCompileCommandsFile": true
+  "cmake.exportCompileCommandsFile": true,
+  "C_Cpp.default.cppStandard": "c++20"
 }

@@ -14,16 +14,15 @@ Checks: >
   hicpp-*,
   readability-identifier-naming,
   hicpp-avoid-goto,
-  -modernize-use-trailing-return-type,     # often noisy for codebases that prefer explicit returns
+  -readability-redundant-access-specifiers,
+  -modernize-use-trailing-return-type,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
 
 # Treat all warnings as errors to enforce fixes.
 WarningsAsErrors: '*'
 
 # Run checks over all headers in the project.
-HeaderFilterRegex: 'async_coro'
-
-# Ask clang-tidy to consider temporary dtors during analysis
-AnalyzeTemporaryDtors: true
+HeaderFilterRegex: 'async_coro/**/*.cpp|async_coro/**/*.h|async_coro/**/*.hpp'
 
 # Use project .clang-format when available
 FormatStyle: file
