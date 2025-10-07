@@ -33,7 +33,7 @@ class any_awaiter_continue_callback : public continue_callback {
   any_awaiter_continue_callback& operator=(any_awaiter_continue_callback&&) = delete;
 
  private:
-  static continue_callback::return_type executor(callback_base* base, bool with_destroy, bool cancelled) {
+  static continue_callback::return_type executor(callback_base* base, ASYNC_CORO_ASSERT_VARIABLE bool with_destroy, bool cancelled) {
     ASYNC_CORO_ASSERT(with_destroy);
 
     return static_cast<any_awaiter_continue_callback*>(base)->_awaiter.on_continue(cancelled, I);
