@@ -94,7 +94,7 @@ class internal::callback_def<Noexcept, R(TArgs...)> : public callback_base {
   /**
    * @brief A function pointer type for the callback's executor function.
    */
-  using executor_t = R (*)(callback_base*, bool /*with_destroy*/, TArgs...) noexcept(Noexcept);
+  using executor_t = std::conditional_t<Noexcept, R (*)(callback_base*, bool /*with_destroy*/, TArgs...) noexcept, R (*)(callback_base*, bool /*with_destroy*/, TArgs...)>;
 
  protected:
   callback_def(executor_t executor, deleter_t deleter = &callback_base::default_deleter) noexcept
