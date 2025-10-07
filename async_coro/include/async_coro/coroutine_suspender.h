@@ -10,17 +10,19 @@ namespace async_coro {
 
 class base_handle;
 
-/// @brief Manages the suspension and resumption of a coroutine based on a suspend count.
-///
-/// The `coroutine_suspender` class is responsible for controlling the suspension state of a coroutine.
-/// It tracks the number of outstanding suspensions and resumes the coroutine when the suspend count reaches zero.
-/// This class is move-only and not copyable.
-///
-/// @note The suspend count is managed atomically. The coroutine is resumed either immediately or scheduled
-/// for execution on any thread, depending on which method is called. Method `try_to_continue_immediately` should be called at least once.
-///
-/// @see try_to_continue_from_any_thread
-/// @see try_to_continue_immediately
+/**
+ * @brief Manages the suspension and resumption of a coroutine based on a suspend count.
+ *
+ * The `coroutine_suspender` class is responsible for controlling the suspension state of a coroutine.
+ * It tracks the number of outstanding suspensions and resumes the coroutine when the suspend count reaches zero.
+ * This class is move-only and not copyable.
+ *
+ * @note The suspend count is managed atomically. The coroutine is resumed either immediately or scheduled
+ * for execution on any thread, depending on which method is called. Method `try_to_continue_immediately` should be called at least once.
+ *
+ * @see try_to_continue_from_any_thread
+ * @see try_to_continue_immediately
+ */
 class coroutine_suspender {
  public:
   coroutine_suspender() noexcept {}
@@ -48,10 +50,11 @@ class coroutine_suspender {
     return *this;
   }
 
-  ~coroutine_suspender() noexcept = default;
+  ~coroutine_suspender() noexcept;
 
   /// Decrements suspend_count and if it zero schedules coroutine.
-  void try_to_continue_from_any_thread();
+  /// If cancel is true - cancels coroutine
+  void try_to_continue_from_any_thread(bool cancel);
 
   /// Decrements suspend_count and if it zero schedules coroutine.
   ///
@@ -61,7 +64,7 @@ class coroutine_suspender {
 
  private:
   base_handle* _handle = nullptr;
-  std::atomic<std::uint32_t> _suspend_count{0};
+  std::atomic_uint32_t _suspend_count{0};
   bool _was_continued_immediately{false};
 };
 

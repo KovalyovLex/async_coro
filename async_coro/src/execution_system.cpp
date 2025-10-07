@@ -32,15 +32,15 @@ namespace async_coro {
 execution_system::execution_system(const execution_system_config& config, const execution_queue_mark max_queue)
     : _main_thread_id(std::this_thread::get_id()),
       _main_thread_mask(config.main_thread_allowed_tasks),
-      _num_workers(static_cast<uint32_t>(config.worker_configs.size())),
+      _num_workers(static_cast<std::uint32_t>(config.worker_configs.size())),
       _max_q(max_queue) {
   _thread_data = std::make_unique<worker_thread_data[]>(_num_workers);
 
   _tasks_queues = std::make_unique<task_queue[]>(max_queue.get_value() + 1);
 
-  std::atomic<size_t> num_threads_to_wait_start = 0;
+  std::atomic<std::size_t> num_threads_to_wait_start = 0;
 
-  for (uint32_t i = 0; i < _num_workers; i++) {
+  for (std::uint32_t i = 0; i < _num_workers; i++) {
     auto& worker_config = config.worker_configs[i];
     auto& thread_data = _thread_data[i];
 
@@ -57,9 +57,20 @@ execution_system::execution_system(const execution_system_config& config, const 
     thread_data.num_loops_before_sleep = worker_config.num_loops_before_sleep;
 
     if (!thread_data.task_queues.empty()) {
-      num_threads_to_wait_start.fetch_add(1, std::memory_order::release);
+      num_threads_to_wait_start.fetch_add(1, std::memory_order::relaxed);
+    }
+  }
+
+  for (std::uint32_t i = 0; i < _num_workers; i++) {
+    auto& thread_data = _thread_data[i];
+
+    if (!thread_data.task_queues.empty()) {
+      auto& worker_config = config.worker_configs[i];
+
       thread_data.thread = std::thread([this, &thread_data, &num_threads_to_wait_start]() {
-        num_threads_to_wait_start.fetch_sub(1, std::memory_order::release);
+        if (num_threads_to_wait_start.fetch_sub(1, std::memory_order::release) == 1) {
+          num_threads_to_wait_start.notify_one();
+        }
 
         worker_loop(thread_data);
       });
@@ -74,25 +85,21 @@ execution_system::execution_system(const execution_system_config& config, const 
     }
   }
 
-  size_t num_spins = 0;
-  while (num_threads_to_wait_start.load(std::memory_order::acquire) != 0) {
-    if (num_spins++ > 1000000) {
-      // this platform\libc probably dont support yield
-      std::this_thread::sleep_for(std::chrono::milliseconds{1});
-      num_spins = 0;
-    }
-    std::this_thread::yield();
+  auto num_started = num_threads_to_wait_start.load(std::memory_order::acquire);
+  while (num_started != 0) {
+    num_threads_to_wait_start.wait(num_started, std::memory_order::relaxed);
+    num_started = num_threads_to_wait_start.load(std::memory_order::acquire);
   }
 }
 
 execution_system::~execution_system() noexcept {
   _is_stopping.store(true, std::memory_order::release);
 
-  for (uint32_t i = 0; i < _num_workers; i++) {
+  for (std::uint32_t i = 0; i < _num_workers; i++) {
     _thread_data[i].notifier.notify();
   }
 
-  for (uint32_t i = 0; i < _num_workers; i++) {
+  for (std::uint32_t i = 0; i < _num_workers; i++) {
     if (_thread_data[i].thread.joinable()) {
       _thread_data[i].thread.join();
     }
@@ -142,7 +149,7 @@ bool execution_system::is_current_thread_fits(execution_queue_mark execution_que
     }
   }
 
-  for (uint32_t i = 0; i < _num_workers; i++) {
+  for (std::uint32_t i = 0; i < _num_workers; i++) {
     if (_thread_data[i].thread.get_id() == current_thread_id) {
       if (_thread_data[i].mask.allowed(execution_queue)) {
         return true;
@@ -168,12 +175,12 @@ void execution_system::update_from_main() {
   }
 }
 
-uint32_t execution_system::get_num_workers_for_queue(execution_queue_mark execution_queue) const noexcept {
+std::uint32_t execution_system::get_num_workers_for_queue(execution_queue_mark execution_queue) const noexcept {
   ASYNC_CORO_ASSERT(execution_queue.get_value() <= _max_q.get_value());
 
   auto& task_q = _tasks_queues[execution_queue.get_value()];
 
-  return static_cast<uint32_t>(task_q.workers_data.size()) + (_main_thread_mask.allowed(execution_queue) ? 1 : 0);
+  return static_cast<std::uint32_t>(task_q.workers_data.size()) + (_main_thread_mask.allowed(execution_queue) ? 1 : 0);
 }
 
 void execution_system::worker_loop(worker_thread_data& data) {

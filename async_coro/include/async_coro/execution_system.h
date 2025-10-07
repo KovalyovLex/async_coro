@@ -179,7 +179,7 @@ class execution_system : public i_execution_system {
    *
    * @note This count does not include the main thread
    */
-  uint32_t get_num_worker_threads() const noexcept { return _num_workers; }
+  std::uint32_t get_num_worker_threads() const noexcept { return _num_workers; }
 
   /**
    * @brief Returns the number of workers that can process tasks from the specified queue
@@ -192,7 +192,7 @@ class execution_system : public i_execution_system {
    *
    * @note This includes both worker threads and the main thread if it has appropriate permissions
    */
-  uint32_t get_num_workers_for_queue(execution_queue_mark execution_queue) const noexcept;
+  std::uint32_t get_num_workers_for_queue(execution_queue_mark execution_queue) const noexcept;
 
  private:
   struct worker_thread_data;
@@ -286,7 +286,7 @@ class execution_system : public i_execution_system {
   const execution_thread_mask _main_thread_mask;
 
   /** @brief Number of worker threads in the system */
-  const uint32_t _num_workers;
+  const std::uint32_t _num_workers;
 
   /** @brief Maximum execution queue mark that this system can handle */
   const execution_queue_mark _max_q;

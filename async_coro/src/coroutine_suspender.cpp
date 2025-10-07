@@ -9,14 +9,34 @@
 
 namespace async_coro {
 
-void coroutine_suspender::try_to_continue_from_any_thread() {
+coroutine_suspender::~coroutine_suspender() noexcept {
+  if (_suspend_count.load(std::memory_order::relaxed) != 0) {
+    // probably exception was thrown
+
+    // reset our cancel
+    if (auto cancel = _handle->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
+      cancel->destroy();
+    }
+  }
+}
+
+void coroutine_suspender::try_to_continue_from_any_thread(bool cancel) {
   ASYNC_CORO_ASSERT(_handle);
 
   const auto prev_count = _suspend_count.fetch_sub(1, std::memory_order::release);
   ASYNC_CORO_ASSERT(prev_count != 0);
 
+  if (cancel) {
+    _handle->request_cancel();
+  }
+
   if (prev_count == 1) {
     (void)_suspend_count.load(std::memory_order::acquire);
+
+    // reset our cancel
+    if (auto on_cancel = _handle->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
+      on_cancel->destroy();
+    }
 
     if (_handle->is_finished()) [[unlikely]] {
       // some exception happened before callback call
@@ -54,6 +74,11 @@ void coroutine_suspender::try_to_continue_immediately() {
       // return flag as continue execution may throw exception that should be handled in finalizer
       run_data->external_continuation_request = false;
       _handle->_run_data.store(run_data, std::memory_order::release);
+    }
+
+    // reset our cancel
+    if (auto on_cancel = _handle->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
+      on_cancel->destroy();
     }
 
     if (_handle->is_finished()) [[unlikely]] {

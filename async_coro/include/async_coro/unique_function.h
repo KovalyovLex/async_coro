@@ -15,14 +15,14 @@
 namespace async_coro {
 namespace internal {
 
-template <size_t SFOSize, typename TFunc, typename T>
+template <std::size_t SFOSize, typename TFunc, typename T>
 class function_impl_call {
   static_assert(always_false<T>::value,
                 "unique_function only accepts function types as template arguments, "
                 "with possibly noexcept qualifiers.");
 };
 
-template <size_t SFOSize, typename TFunc, typename R, typename... TArgs>
+template <std::size_t SFOSize, typename TFunc, typename R, typename... TArgs>
 class function_impl_call<SFOSize, TFunc, R(TArgs...)> {
  protected:
   using t_small_buffer = small_buffer<SFOSize>;
@@ -60,7 +60,7 @@ class function_impl_call<SFOSize, TFunc, R(TArgs...)> {
   t_invoke_f _invoke;
 };
 
-template <size_t SFOSize, typename TFunc, typename R, typename... TArgs>
+template <std::size_t SFOSize, typename TFunc, typename R, typename... TArgs>
 class function_impl_call<SFOSize, TFunc, R(TArgs...) noexcept> {
  protected:
   using t_small_buffer = small_buffer<SFOSize>;
@@ -113,9 +113,9 @@ class function_impl_call<SFOSize, TFunc, R(TArgs...) noexcept> {
  * @tparam FTy The function signature, e.g., `R(Args...)`, where `R` is the return type
  *             and `Args...` are the parameter types.
  * @tparam SFOSize The size (in bytes) of the internal buffer used for small object optimization.
- *                 Defaults to `sizeof(void*)`.
+ *                 Defaults to `sizeof(void*) * 2`.
  */
-template <typename FTy, size_t SFOSize = sizeof(void*)>
+template <typename FTy, std::size_t SFOSize = sizeof(void*) * 2>
 class unique_function : private internal::function_impl_call<SFOSize, unique_function<FTy, SFOSize>, FTy>,
                         private unique_function_storage<SFOSize> {
   using super = internal::function_impl_call<SFOSize, unique_function<FTy, SFOSize>, FTy>;
@@ -139,7 +139,7 @@ class unique_function : private internal::function_impl_call<SFOSize, unique_fun
       is_small_f<std::remove_cvref_t<Fx>> &&
       std::is_nothrow_constructible_v<Fx, Fx&&>;
 
-  struct no_init {};
+  class no_init {};
 
   unique_function(no_init) noexcept : storage(typename storage::no_init{}) {}
 

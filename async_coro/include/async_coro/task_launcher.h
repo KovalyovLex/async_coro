@@ -28,7 +28,7 @@ class task_launcher {
    * @param start_function A callback function that returns a task<R> when executed
    * @param execution_queue The execution queue where the task should be scheduled
    */
-  task_launcher(callback<task<R>>::ptr start_function, execution_queue_mark execution_queue) noexcept
+  task_launcher(callback<task<R>()>::ptr start_function, execution_queue_mark execution_queue) noexcept
       : _start_function(std::move(start_function)),
         _coro(typename task<R>::handle_type(nullptr)),
         _execution_queue(execution_queue) {}
@@ -38,7 +38,7 @@ class task_launcher {
    *
    * @param start_function A callback function that returns a task<R> when executed
    */
-  task_launcher(callback<task<R>>::ptr start_function) noexcept
+  task_launcher(callback<task<R>()>::ptr start_function) noexcept
       : task_launcher(std::move(start_function), execution_queues::main) {}
 
   /**
@@ -47,8 +47,8 @@ class task_launcher {
    * @param start_function A noexcept callback function that returns a task<R> when executed
    * @param execution_queue The execution queue where the task should be scheduled
    */
-  task_launcher(callback_noexcept<task<R>>::ptr start_function, execution_queue_mark execution_queue) noexcept
-      : _start_function(reinterpret_cast<callback<task<R>>*>(start_function.release())),
+  task_launcher(callback<task<R>() noexcept>::ptr start_function, execution_queue_mark execution_queue) noexcept
+      : _start_function(reinterpret_cast<callback<task<R>()>*>(start_function.release())),
         _coro(typename task<R>::handle_type(nullptr)),
         _execution_queue(execution_queue) {}
 
@@ -57,7 +57,7 @@ class task_launcher {
    *
    * @param start_function A noexcept callback function that returns a task<R> when executed
    */
-  task_launcher(callback_noexcept<task<R>>::ptr start_function) noexcept
+  task_launcher(callback<task<R>() noexcept>::ptr start_function) noexcept
       : task_launcher(std::move(start_function), execution_queues::main) {}
 
   /**
@@ -70,9 +70,22 @@ class task_launcher {
    * @param execution_queue The execution queue where the task should be scheduled
    */
   template <typename T>
-    requires(std::is_invocable_r_v<task<R>, T>)
-  task_launcher(T&& start_function, execution_queue_mark execution_queue) noexcept
+    requires(std::is_invocable_r_v<task<R>, T> && !std::is_convertible_v<T &&, task<R> (*)()>)
+  task_launcher(T&& start_function, execution_queue_mark execution_queue)
       : task_launcher(allocate_callback(std::forward<T>(start_function)), execution_queue) {}
+
+  /**
+   * @brief Constructs a task launcher with any callable that returns a task<R> and execution queue.
+   *
+   * This constructor accepts static functions that returns a task<R> when invoked.
+   *
+   * @param start_function A callable that returns a task<R> when invoked
+   * @param execution_queue The execution queue where the task should be scheduled
+   */
+  template <typename T>
+    requires(std::is_invocable_r_v<task<R>, T> && std::is_convertible_v<T &&, task<R> (*)()>)
+  task_launcher(T&& start_function, execution_queue_mark execution_queue)
+      : task_launcher(start_function(), execution_queue) {}
 
   /**
    * @brief Constructs a task launcher with any callable that returns a task<R> on the main execution queue.
@@ -84,7 +97,7 @@ class task_launcher {
    */
   template <typename T>
     requires(std::is_invocable_r_v<task<R>, T>)
-  task_launcher(T&& start_function) noexcept
+  task_launcher(T&& start_function)
       : task_launcher(std::forward<T>(start_function), execution_queues::main) {}
 
   /**
@@ -139,20 +152,20 @@ class task_launcher {
   }
 
  private:
-  callback<task<R>>::ptr _start_function;
+  callback<task<R>()>::ptr _start_function;
   task<R> _coro;
   execution_queue_mark _execution_queue;
 };
 
 template <typename R>
-task_launcher(std::unique_ptr<callback<task<R>>, callback_base::deleter>) -> task_launcher<R>;
+task_launcher(std::unique_ptr<callback<task<R>()>, callback_base::deleter>) -> task_launcher<R>;
 template <typename R>
-task_launcher(std::unique_ptr<callback<task<R>>, callback_base::deleter>, execution_queue_mark) -> task_launcher<R>;
+task_launcher(std::unique_ptr<callback<task<R>()>, callback_base::deleter>, execution_queue_mark) -> task_launcher<R>;
 
 template <typename R>
-task_launcher(std::unique_ptr<callback_noexcept<task<R>>, callback_base::deleter>) -> task_launcher<R>;
+task_launcher(std::unique_ptr<callback<task<R>() noexcept>, callback_base::deleter>) -> task_launcher<R>;
 template <typename R>
-task_launcher(std::unique_ptr<callback_noexcept<task<R>>, callback_base::deleter>, execution_queue_mark) -> task_launcher<R>;
+task_launcher(std::unique_ptr<callback<task<R>() noexcept>, callback_base::deleter>, execution_queue_mark) -> task_launcher<R>;
 
 template <typename R>
 task_launcher(task<R>) -> task_launcher<R>;

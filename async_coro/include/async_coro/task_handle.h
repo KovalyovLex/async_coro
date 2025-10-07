@@ -1,12 +1,15 @@
 #pragma once
 
+#include <async_coro/base_handle.h>
 #include <async_coro/callback.h>
 #include <async_coro/config.h>
+#include <async_coro/internal/all_awaiter.h>
+#include <async_coro/internal/any_awaiter.h>
 #include <async_coro/internal/passkey.h>
 #include <async_coro/internal/promise_type.h>
-#include <async_coro/internal/task_awaiters.h>
 #include <async_coro/internal/task_handle_awaiter.h>
 
+#include <atomic>
 #include <coroutine>
 #include <type_traits>
 #include <utility>
@@ -31,6 +34,7 @@ template <typename R = void>
 class task_handle final {
   using promise_type = async_coro::internal::promise_type<R>;
   using handle_type = std::coroutine_handle<promise_type>;
+  using callback_type = callback<void(promise_result<R>&, bool)>;
 
  public:
   task_handle() noexcept = default;
@@ -106,6 +110,8 @@ class task_handle final {
    * This function suspends current coroutine and waits for any one of the specified tasks to complete before proceeding.
    * The function returns as soon as the first task completes, with the result of that task.
    *
+   * @note When first task finishes other tasks get canceled
+   *
    * @return An awaitable of std::variant<TArgs> containing the result of the first completed task.
    *
    * @example
@@ -158,28 +164,55 @@ class task_handle final {
   // Sets callback that will be called after coroutine finish on thread that finished the coroutine.
   // If coroutine is already finished, the callback will be called immediately.
   template <class Fx>
-    requires(internal::is_runnable<std::remove_cvref_t<Fx>, void, promise_result<R>&>)
-  void continue_with(Fx&& f) noexcept(internal::is_noexcept_runnable<std::remove_cvref_t<Fx>, void, promise_result<R>&>) {
+    requires(internal::is_runnable<std::remove_cvref_t<Fx>, void, promise_result<R>&, bool>)
+  void continue_with(Fx&& f) noexcept(internal::is_noexcept_runnable<std::remove_cvref_t<Fx>, void, promise_result<R>&, bool>) {
     ASYNC_CORO_ASSERT(!_handle.promise().is_coro_embedded());
 
     if (!_handle) {
       return;
     }
 
-    auto& promise = _handle.promise();
+    promise_type& promise = _handle.promise();
     if (done()) {
-      f(promise);
+      f(promise, false);
     } else {
-      auto continue_f = callback<void, promise_result<R>&>::allocate(std::forward<Fx>(f));
+      const auto continue_f = callback_type::allocate(std::forward<Fx>(f));
       promise.set_continuation_functor(continue_f, internal::passkey{this});
-      if (done()) {
-        if (auto f_base = promise.get_continuation_functor(internal::passkey{this})) {
+      auto [state, cancelled] = promise.get_coroutine_state_and_cancelled(std::memory_order::acquire);
+      if (state == async_coro::coroutine_state::finished || cancelled) {
+        if (auto* f_base = promise.get_continuation_functor(internal::passkey{this})) {
           ASYNC_CORO_ASSERT(f_base == continue_f);
           (void)f_base;
-          continue_f->execute(promise);
-          continue_f->destroy();
+          continue_f->execute_and_destroy(promise, cancelled);
         }
       }
+    }
+  }
+
+  // Sets callback that will be called after coroutine finish on thread that finished the coroutine.
+  // If coroutine is already finished, the callback will be called and destroyed immediately.
+  void continue_with(callback_type& f) {
+    ASYNC_CORO_ASSERT(!_handle.promise().is_coro_embedded());
+
+    typename callback_type::ptr uniq_ptr{&f};
+
+    if (!_handle) {
+      return;
+    }
+
+    promise_type& promise = _handle.promise();
+    if (done()) {
+      f.execute(promise, false);
+    } else {
+      const auto ptr = uniq_ptr.release();
+      promise.set_continuation_functor(ptr, internal::passkey{this});
+      const auto [state, cancelled] = promise.get_coroutine_state_and_cancelled(std::memory_order::acquire);
+      if (state == async_coro::coroutine_state::finished || cancelled) {
+        if (auto* f_base = promise.get_continuation_functor(internal::passkey{this})) {
+          ASYNC_CORO_ASSERT(f_base == ptr);
+          ptr->execute_and_destroy(promise, cancelled);
+        }
+      };
     }
   }
 
@@ -195,8 +228,26 @@ class task_handle final {
     promise.set_continuation_functor(nullptr, internal::passkey{this});
   }
 
-  void check_exception() const noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
-    _handle.promise().check_exception();
+  /**
+   * @brief Requests coroutine to stop. Stop will happen on next suspension point of coroutine.
+   *
+   * @return previous state of cancel request
+   */
+  bool request_cancel() noexcept {
+    if (!_handle) {
+      return false;
+    }
+
+    auto& promise = _handle.promise();
+    return promise.request_cancel();
+  }
+
+  bool is_cancelled() noexcept {
+    if (!_handle) {
+      return false;
+    }
+
+    return _handle.promise().is_cancelled();
   }
 
   internal::task_handle_awaiter<R> coro_await_transform(base_handle&) && {

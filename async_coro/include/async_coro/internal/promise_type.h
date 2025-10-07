@@ -13,7 +13,7 @@ template <typename R>
 class task_handle;
 
 template <typename R>
-struct task;
+class task;
 
 }  // namespace async_coro
 
@@ -24,7 +24,8 @@ concept await_transformable =
     requires(T a) { std::forward<T>(a).coro_await_transform(std::declval<async_coro::base_handle&>()); };
 
 template <typename R>
-struct promise_type final : internal::promise_result_holder<R> {
+class promise_type final : public internal::promise_result_holder<R> {
+ public:
   // constructs promise from this
   constexpr auto get_return_object() noexcept {
     return std::coroutine_handle<promise_type>::from_promise(*this);

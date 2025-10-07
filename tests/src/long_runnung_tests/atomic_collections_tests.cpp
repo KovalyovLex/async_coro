@@ -9,11 +9,11 @@
 
 #include "memory_hooks.h"
 
-class atomic_collections : public ::testing::TestWithParam<std::tuple<uint32_t, uint32_t>> {
+class atomic_collections : public ::testing::TestWithParam<std::tuple<std::uint32_t, std::uint32_t>> {
 };
 
 TEST_P(atomic_collections, int_queue) {
-  constexpr uint32_t num_values = 1000000;
+  constexpr std::uint32_t num_values = 1000000;
 
   std::atomic_int sum = 0;
   std::atomic_int sum_pushed = 0;
@@ -36,7 +36,7 @@ TEST_P(atomic_collections, int_queue) {
       std::vector<std::pair<std::thread, std::unique_ptr<std::atomic_bool>>> consumers;
       std::vector<std::thread> prods;
 
-      for (uint32_t i = 0; i < num_cons; i++) {
+      for (std::uint32_t i = 0; i < num_cons; i++) {
         auto stop_ptr = std::make_unique<std::atomic_bool>(false);
         auto thread_body = [&q, &sum, &num_pops, stop = stop_ptr.get()]() {
           while (!*stop) {
@@ -53,9 +53,9 @@ TEST_P(atomic_collections, int_queue) {
 
       auto num_values_by_prod = num_values / num_prods;
 
-      for (uint32_t i = 0; i < num_prods - 1; i++) {
+      for (std::uint32_t i = 0; i < num_prods - 1; i++) {
         prods.emplace_back([num_values_by_prod, &q, &num_pushes, &sum_pushed]() {
-          for (uint32_t i = 0; i < num_values_by_prod; i++) {
+          for (std::uint32_t i = 0; i < num_values_by_prod; i++) {
             const int val = i % 4;
             sum_pushed += val;
             q.push(val);
@@ -67,7 +67,7 @@ TEST_P(atomic_collections, int_queue) {
       std::this_thread::sleep_for(std::chrono::milliseconds{20});
 
       auto final_portion = num_values_by_prod + (num_values % num_prods);
-      for (uint32_t i = 0; i < final_portion; i++) {
+      for (std::uint32_t i = 0; i < final_portion; i++) {
         const int val = i % 4;
         sum_pushed += val;
         q.push(val);
@@ -104,7 +104,7 @@ TEST_P(atomic_collections, int_queue) {
 }
 
 TEST_P(atomic_collections, int_stack) {
-  constexpr uint32_t num_values = 1000000;
+  constexpr std::uint32_t num_values = 1000000;
 
   std::atomic_int sum = 0;
   std::atomic_int sum_pushed = 0;
@@ -127,7 +127,7 @@ TEST_P(atomic_collections, int_stack) {
       std::vector<std::pair<std::thread, std::unique_ptr<std::atomic_bool>>> consumers;
       std::vector<std::thread> prods;
 
-      for (uint32_t i = 0; i < num_cons; i++) {
+      for (std::uint32_t i = 0; i < num_cons; i++) {
         auto stop_ptr = std::make_unique<std::atomic_bool>(false);
         auto thread_body = [&q, &sum, &num_pops, stop = stop_ptr.get()]() {
           while (!*stop) {
@@ -144,9 +144,9 @@ TEST_P(atomic_collections, int_stack) {
 
       auto num_values_by_prod = num_values / num_prods;
 
-      for (uint32_t i = 0; i < num_prods - 1; i++) {
+      for (std::uint32_t i = 0; i < num_prods - 1; i++) {
         prods.emplace_back([num_values_by_prod, &q, &num_pushes, &sum_pushed]() {
-          for (uint32_t i = 0; i < num_values_by_prod; i++) {
+          for (std::uint32_t i = 0; i < num_values_by_prod; i++) {
             const int val = i % 4;
             sum_pushed += val;
             q.push(val);
@@ -158,7 +158,7 @@ TEST_P(atomic_collections, int_stack) {
       std::this_thread::sleep_for(std::chrono::milliseconds{20});
 
       auto final_portion = num_values_by_prod + (num_values % num_prods);
-      for (uint32_t i = 0; i < final_portion; i++) {
+      for (std::uint32_t i = 0; i < final_portion; i++) {
         const int val = i % 4;
         sum_pushed += val;
         q.push(val);

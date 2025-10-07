@@ -11,7 +11,8 @@ class scheduler;
 
 namespace async_coro::internal {
 
-struct get_scheduler_awaiter {
+class get_scheduler_awaiter {
+ public:
   explicit get_scheduler_awaiter() noexcept {}
 
   get_scheduler_awaiter(const get_scheduler_awaiter&) = delete;

@@ -5,7 +5,8 @@
 namespace async_coro::internal {
 
 template <typename T>
-struct promise_result_holder : async_coro::promise_result<T> {
+class promise_result_holder : public async_coro::promise_result<T> {
+ public:
   // C++ coroutine api
   template <typename... TArgs>
   void return_value(TArgs&&... args) noexcept {
@@ -17,7 +18,8 @@ struct promise_result_holder : async_coro::promise_result<T> {
 };
 
 template <>
-struct promise_result_holder<void> : async_coro::promise_result<void> {
+class promise_result_holder<void> : public async_coro::promise_result<void> {
+ public:
   // C++ coroutine api
   void return_void() noexcept {
     ASYNC_CORO_ASSERT(!_is_initialized);
