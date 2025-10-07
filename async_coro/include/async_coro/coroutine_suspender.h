@@ -64,7 +64,7 @@ class coroutine_suspender {
 
  private:
   base_handle* _handle = nullptr;
-  std::atomic<std::uint32_t> _suspend_count{0};
+  std::atomic_uint32_t _suspend_count{0};
   bool _was_continued_immediately{false};
 };
 

@@ -32,15 +32,15 @@ namespace async_coro {
 execution_system::execution_system(const execution_system_config& config, const execution_queue_mark max_queue)
     : _main_thread_id(std::this_thread::get_id()),
       _main_thread_mask(config.main_thread_allowed_tasks),
-      _num_workers(static_cast<uint32_t>(config.worker_configs.size())),
+      _num_workers(static_cast<std::uint32_t>(config.worker_configs.size())),
       _max_q(max_queue) {
   _thread_data = std::make_unique<worker_thread_data[]>(_num_workers);
 
   _tasks_queues = std::make_unique<task_queue[]>(max_queue.get_value() + 1);
 
-  std::atomic<size_t> num_threads_to_wait_start = 0;
+  std::atomic<std::size_t> num_threads_to_wait_start = 0;
 
-  for (uint32_t i = 0; i < _num_workers; i++) {
+  for (std::uint32_t i = 0; i < _num_workers; i++) {
     auto& worker_config = config.worker_configs[i];
     auto& thread_data = _thread_data[i];
 
@@ -61,7 +61,7 @@ execution_system::execution_system(const execution_system_config& config, const 
     }
   }
 
-  for (uint32_t i = 0; i < _num_workers; i++) {
+  for (std::uint32_t i = 0; i < _num_workers; i++) {
     auto& thread_data = _thread_data[i];
 
     if (!thread_data.task_queues.empty()) {
@@ -95,11 +95,11 @@ execution_system::execution_system(const execution_system_config& config, const 
 execution_system::~execution_system() noexcept {
   _is_stopping.store(true, std::memory_order::release);
 
-  for (uint32_t i = 0; i < _num_workers; i++) {
+  for (std::uint32_t i = 0; i < _num_workers; i++) {
     _thread_data[i].notifier.notify();
   }
 
-  for (uint32_t i = 0; i < _num_workers; i++) {
+  for (std::uint32_t i = 0; i < _num_workers; i++) {
     if (_thread_data[i].thread.joinable()) {
       _thread_data[i].thread.join();
     }
@@ -149,7 +149,7 @@ bool execution_system::is_current_thread_fits(execution_queue_mark execution_que
     }
   }
 
-  for (uint32_t i = 0; i < _num_workers; i++) {
+  for (std::uint32_t i = 0; i < _num_workers; i++) {
     if (_thread_data[i].thread.get_id() == current_thread_id) {
       if (_thread_data[i].mask.allowed(execution_queue)) {
         return true;
@@ -175,12 +175,12 @@ void execution_system::update_from_main() {
   }
 }
 
-uint32_t execution_system::get_num_workers_for_queue(execution_queue_mark execution_queue) const noexcept {
+std::uint32_t execution_system::get_num_workers_for_queue(execution_queue_mark execution_queue) const noexcept {
   ASYNC_CORO_ASSERT(execution_queue.get_value() <= _max_q.get_value());
 
   auto& task_q = _tasks_queues[execution_queue.get_value()];
 
-  return static_cast<uint32_t>(task_q.workers_data.size()) + (_main_thread_mask.allowed(execution_queue) ? 1 : 0);
+  return static_cast<std::uint32_t>(task_q.workers_data.size()) + (_main_thread_mask.allowed(execution_queue) ? 1 : 0);
 }
 
 void execution_system::worker_loop(worker_thread_data& data) {

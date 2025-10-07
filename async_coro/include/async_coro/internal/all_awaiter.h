@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <tuple>
 #include <utility>
 
@@ -22,7 +23,7 @@ class task_handle;
 
 namespace async_coro::internal {
 
-template <size_t I, class TAwaiter>
+template <std::size_t I, class TAwaiter>
 class all_awaiter_continue_callback : public continue_callback {
  public:
   all_awaiter_continue_callback(TAwaiter& awaiter) noexcept : continue_callback(&executor, &deleter), _awaiter(awaiter) {}
@@ -147,10 +148,10 @@ class all_awaiter {
 
     _was_continued.store(false, std::memory_order::relaxed);
     _continue_f = &continue_f;
-    _num_not_finished.store(sizeof...(TAwaiters), std::memory_order::relaxed);
-    _num_await_free.store(sizeof...(TAwaiters), std::memory_order::relaxed);
+    _num_not_finished.store(std::uint32_t(sizeof...(TAwaiters)), std::memory_order::relaxed);
+    _num_await_free.store(std::uint32_t(sizeof...(TAwaiters)), std::memory_order::relaxed);
 
-    const auto iter_awaiters = [&]<size_t... TI>(std::index_sequence<TI...>) {
+    const auto iter_awaiters = [&]<std::size_t... TI>(std::index_sequence<TI...>) {
       const auto set_continue = [&](auto& awaiter, continue_callback& callback) {
         awaiter.continue_after_complete(callback);
       };
@@ -161,11 +162,11 @@ class all_awaiter {
     iter_awaiters(std::index_sequence_for<TAwaiters...>{});
   }
 
-  continue_callback::return_type on_continue(bool cancelled, size_t awaiter_index) {
+  continue_callback::return_type on_continue(bool cancelled, std::size_t awaiter_index) {
     if (cancelled && !_was_any_cancelled.exchange(true, std::memory_order::relaxed)) {
       // immediately notify others to cancel
-      const auto iter_awaiters = [&]<size_t... TI>(std::index_sequence<TI...>) {
-        const auto cancel_awaiter = [&](auto& awaiter, size_t index) {
+      const auto iter_awaiters = [&]<std::size_t... TI>(std::index_sequence<TI...>) {
+        const auto cancel_awaiter = [&](auto& awaiter, std::size_t index) {
           if (index != awaiter_index) {
             awaiter.cancel_await();
           }
@@ -200,8 +201,8 @@ class all_awaiter {
   result_type await_resume() {
     using voids_index_seq = decltype(get_tuple_index_seq_of_voids<std::tuple<typename TAwaiters::result_type...>>());
 
-    if constexpr (!std::is_same_v<voids_index_seq, std::integer_sequence<size_t>>) {
-      [&]<size_t... Ints>(std::integer_sequence<size_t, Ints...>) {
+    if constexpr (!std::is_same_v<voids_index_seq, std::integer_sequence<std::size_t>>) {
+      [&]<std::size_t... Ints>(std::integer_sequence<std::size_t, Ints...>) {
         (std::get<Ints>(std::move(_awaiters)).await_resume(), ...);
       }(voids_index_seq{});
     }
@@ -211,7 +212,7 @@ class all_awaiter {
     } else {
       using result_index_seq = decltype(get_tuple_index_seq_without_voids<std::tuple<typename TAwaiters::result_type...>>());
 
-      return [&]<size_t... Ints>(std::integer_sequence<size_t, Ints...>) -> result_type {
+      return [&]<std::size_t... Ints>(std::integer_sequence<std::size_t, Ints...>) -> result_type {
         return {std::get<Ints>(std::move(_awaiters)).await_resume()...};
       }(result_index_seq{});
     }
@@ -222,7 +223,7 @@ class all_awaiter {
   }
 
   static auto create_callbacks(all_awaiter& await) noexcept {
-    const auto iter_awaiters = [&]<size_t... TI>(std::index_sequence<TI...>) {
+    const auto iter_awaiters = [&]<std::size_t... TI>(std::index_sequence<TI...>) {
       return std::make_tuple(all_awaiter_continue_callback<TI, all_awaiter>{await}...);
     };
 

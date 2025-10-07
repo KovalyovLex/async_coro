@@ -17,7 +17,7 @@
 
 namespace async_coro {
 
-template <typename T, uint32_t BlockSize = 64>
+template <typename T, std::uint32_t BlockSize = 64>
 class atomic_stack {
   ASYNC_CORO_WARNINGS_MSVC_PUSH
   ASYNC_CORO_WARNINGS_MSVC_IGNORE(4324)
@@ -38,11 +38,11 @@ class atomic_stack {
   ASYNC_CORO_WARNINGS_MSVC_POP
 
   struct values_array {
-    values_array(uint32_t index)
+    values_array(std::uint32_t index)
         : free_index(index) {}
 
     std::array<value_holder, BlockSize> values;
-    std::atomic<uint32_t> free_index;
+    std::atomic<std::uint32_t> free_index;
   };
 
  public:

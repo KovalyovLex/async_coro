@@ -1362,7 +1362,7 @@ TEST(task, multiple_workers_async_execution) {
   auto handle = scheduler.start_task(routine, async_coro::execution_queues::worker);
   ASSERT_FALSE(handle.done());
 
-  size_t num_repeats = 0;
+  std::size_t num_repeats = 0;
   while (!handle.done() && num_repeats++ < 1000000) {
     scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
     std::this_thread::yield();
@@ -1431,7 +1431,7 @@ TEST(task, multiple_workers_any_execution) {
 
   auto handle = scheduler.start_task(routine, async_coro::execution_queues::main);
 
-  size_t num_repeats = 0;
+  std::size_t num_repeats = 0;
   while (!handle.done() && num_repeats++ < 1000000) {
     scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
     std::this_thread::yield();

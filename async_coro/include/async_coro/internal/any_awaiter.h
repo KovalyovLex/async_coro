@@ -8,6 +8,7 @@
 #include <async_coro/warnings.h>
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <tuple>
 #include <utility>
@@ -21,7 +22,7 @@ class task_handle;
 
 namespace async_coro::internal {
 
-template <size_t I, class TAwaiter>
+template <std::size_t I, class TAwaiter>
 class any_awaiter_continue_callback : public continue_callback {
  public:
   any_awaiter_continue_callback(TAwaiter& awaiter) noexcept : continue_callback(&executor, &deleter), _awaiter(awaiter) {}
@@ -119,12 +120,12 @@ class any_awaiter {
   }
 
   bool await_ready() noexcept {
-    const auto func = [this](size_t awaiter_index) noexcept {
+    const auto func = [this](std::size_t awaiter_index) noexcept {
       std::uint32_t expected_index = 0;
-      if (_result_index.compare_exchange_strong(expected_index, awaiter_index + 1, std::memory_order::relaxed)) {
+      if (_result_index.compare_exchange_strong(expected_index, std::uint32_t(awaiter_index + 1), std::memory_order::relaxed)) {
         // cancel other coroutines
         call_functor_while_true(
-            [&](auto& awaiter_to_cancel, auto, size_t index) {
+            [&](auto& awaiter_to_cancel, auto, std::size_t index) {
               if (index != awaiter_index) {
                 awaiter_to_cancel.cancel_await();
               }
@@ -163,7 +164,7 @@ class any_awaiter {
     _was_continued.store(false, std::memory_order::relaxed);
     _continue_f = &continue_f;
 
-    const auto iter_awaiters = [&]<size_t... TI>(std::index_sequence<TI...>) {
+    const auto iter_awaiters = [&]<std::size_t... TI>(std::index_sequence<TI...>) {
       const auto set_continue = [&](auto& awaiter, continue_callback& callback) {
         _num_await_free.fetch_add(1, std::memory_order::relaxed);
         awaiter.continue_after_complete(callback);
@@ -177,12 +178,12 @@ class any_awaiter {
     iter_awaiters(std::index_sequence_for<TAwaiters...>{});
   }
 
-  continue_callback::return_type on_continue(bool cancelled, size_t awaiter_index) {
+  continue_callback::return_type on_continue(bool cancelled, std::size_t awaiter_index) {
     std::uint32_t expected_index = 0;
-    if (_result_index.compare_exchange_strong(expected_index, awaiter_index + 1, std::memory_order::relaxed)) {
+    if (_result_index.compare_exchange_strong(expected_index, std::uint32_t(awaiter_index + 1), std::memory_order::relaxed)) {
       // cancel other coroutines
       call_functor_while_true(
-          [&](auto& awaiter_to_cancel, auto, size_t index) {
+          [&](auto& awaiter_to_cancel, auto, std::size_t index) {
             if (index != awaiter_index) {
               awaiter_to_cancel.cancel_await();
             }
@@ -212,11 +213,11 @@ class any_awaiter {
 
   result_type await_resume() {
     union_res res;
-    auto index = _result_index.load(std::memory_order::relaxed);
+    std::size_t index = _result_index.load(std::memory_order::relaxed);
     ASYNC_CORO_ASSERT(index > 0);
     --index;
 
-    const auto func = [&](auto& awaiter, auto variant_index, size_t awaiter_index) {
+    const auto func = [&](auto& awaiter, auto variant_index, std::size_t awaiter_index) {
       using result_t = decltype(awaiter.await_resume());
 
       if (index == awaiter_index) {
@@ -246,18 +247,18 @@ class any_awaiter {
   }
 
  private:
-  template <class F, size_t... TI>
-  auto calculate_is_ready(const F& store_result, std::integer_sequence<size_t, TI...>) noexcept {
+  template <class F, std::size_t... TI>
+  auto calculate_is_ready(const F& store_result, std::integer_sequence<std::size_t, TI...>) noexcept {
     return ((std::get<TI>(_awaiters).await_ready() && store_result(TI)) || ...);
   }
 
-  template <class F, size_t... TI>
-  void call_functor_while_true(const F& func, std::integer_sequence<size_t, TI...>) {
+  template <class F, std::size_t... TI>
+  void call_functor_while_true(const F& func, std::integer_sequence<std::size_t, TI...>) {
     ((func(std::get<TI>(_awaiters), std::in_place_index_t<TI>{}, TI)) && ...);
   }
 
   static auto create_callbacks(any_awaiter& await) noexcept {
-    const auto iter_awaiters = [&]<size_t... TI>(std::index_sequence<TI...>) {
+    const auto iter_awaiters = [&]<std::size_t... TI>(std::index_sequence<TI...>) {
       return std::make_tuple(any_awaiter_continue_callback<TI, any_awaiter>{await}...);
     };
 

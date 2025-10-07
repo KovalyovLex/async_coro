@@ -16,7 +16,7 @@ enum class deinit_op {
   destroy,
 };
 
-template <size_t Size>
+template <std::size_t Size>
 union small_buffer {
   static_assert(Size >= sizeof(void*), "Size of buffer to small");
 
@@ -46,7 +46,7 @@ union small_buffer {
   }
 };
 
-template <size_t SFOSize, typename TFunc, typename T>
+template <std::size_t SFOSize, typename TFunc, typename T>
 class function_impl_call;
 
 }  // namespace internal
@@ -63,7 +63,7 @@ class function_impl_call;
  * @tparam SFOSize The size (in bytes) of the internal buffer used for
  *                 small object optimization. Defaults to `sizeof(void*) * 2`.
  */
-template <size_t SFOSize = sizeof(void*) * 2>
+template <std::size_t SFOSize = sizeof(void*) * 2>
 class unique_function_storage {
   using t_small_buffer = internal::small_buffer<SFOSize>;
   using t_move_or_destroy_f = typename t_small_buffer::t_move_or_destroy_f;

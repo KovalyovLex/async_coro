@@ -11,7 +11,7 @@ template <bool is_noexcept>
 static auto test_small_f() {
   using namespace async_coro;
 
-  const size_t before = mem_hook::num_allocated;
+  const std::size_t before = mem_hook::num_allocated;
 
   unique_function<void() noexcept(is_noexcept)> f;
 
@@ -65,7 +65,7 @@ template <bool is_noexcept>
 static auto test_large_f() {
   using namespace async_coro;
 
-  const size_t before = mem_hook::num_allocated;
+  const std::size_t before = mem_hook::num_allocated;
 
   unique_function<void() noexcept(is_noexcept)> f;
 
@@ -181,7 +181,7 @@ TEST(unique_function, num_moves_large_f_except) {
   num_moves_large_f<true>();
 }
 
-template <bool is_noexcept, size_t add_size>
+template <bool is_noexcept, std::size_t add_size>
 static auto num_moves_small_f() {
   using namespace async_coro;
 

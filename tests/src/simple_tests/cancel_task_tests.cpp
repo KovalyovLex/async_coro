@@ -172,7 +172,7 @@ TEST(cancel_task, cross_queue_cancel) {
   auto handle = scheduler.start_task(parent());
 
   // wait for worker run
-  size_t tries = 0;
+  std::size_t tries = 0;
   while (!worker_done && ++tries < 1000) {
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }

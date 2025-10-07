@@ -19,7 +19,7 @@ namespace async_coro {
  * @tparam T The type of the values to be stored in the queue.
  * @tparam BlockSize The number of values to be preallocated in a single bank.
  */
-template <typename T, uint32_t BlockSize = 64>
+template <typename T, std::uint32_t BlockSize = 64>
 class atomic_queue {
   union union_store {
     T value;
