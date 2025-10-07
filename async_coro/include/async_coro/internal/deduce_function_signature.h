@@ -6,11 +6,8 @@
 
 namespace async_coro {
 
-template <class R, class... TArgs>
+template <class R>
 class callback;
-
-template <class R, class... TArgs>
-class callback_noexcept;
 
 namespace internal {
 
@@ -25,37 +22,37 @@ struct deduce_function_signature_impl {
 template <typename R, typename T, typename... TArgs>
 struct deduce_function_signature_impl<R (T::*)(TArgs...) const> {
   using type = R(TArgs...);
-  using callback_type = callback<R, TArgs...>;
+  using callback_type = callback<R(TArgs...)>;
 };
 
 template <typename R, typename T, typename... TArgs>
 struct deduce_function_signature_impl<R (T::*)(TArgs...)> {
   using type = R(TArgs...);
-  using callback_type = callback<R, TArgs...>;
+  using callback_type = callback<R(TArgs...)>;
 };
 
 template <typename R, typename... TArgs>
 struct deduce_function_signature_impl<R (*)(TArgs...)> {
   using type = R(TArgs...);
-  using callback_type = callback<R, TArgs...>;
+  using callback_type = callback<R(TArgs...)>;
 };
 
 template <typename R, typename T, typename... TArgs>
 struct deduce_function_signature_impl<R (T::*)(TArgs...) const noexcept> {
   using type = R(TArgs...) noexcept;
-  using callback_type = callback_noexcept<R, TArgs...>;
+  using callback_type = callback<R(TArgs...) noexcept>;
 };
 
 template <typename R, typename T, typename... TArgs>
 struct deduce_function_signature_impl<R (T::*)(TArgs...) noexcept> {
   using type = R(TArgs...) noexcept;
-  using callback_type = callback_noexcept<R, TArgs...>;
+  using callback_type = callback<R(TArgs...) noexcept>;
 };
 
 template <typename R, typename... TArgs>
 struct deduce_function_signature_impl<R (*)(TArgs...) noexcept> {
   using type = R(TArgs...) noexcept;
-  using callback_type = callback_noexcept<R, TArgs...>;
+  using callback_type = callback<R(TArgs...) noexcept>;
 };
 
 template <typename Fx>
