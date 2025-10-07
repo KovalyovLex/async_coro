@@ -25,10 +25,14 @@ namespace async_coro::internal {
 template <std::size_t I, class TAwaiter>
 class any_awaiter_continue_callback : public continue_callback {
  public:
-  any_awaiter_continue_callback(TAwaiter& awaiter) noexcept : continue_callback(&executor, &deleter), _awaiter(awaiter) {}
+  explicit any_awaiter_continue_callback(TAwaiter& awaiter) noexcept
+      : continue_callback(&executor, &deleter),
+        _awaiter(&awaiter) {}
 
   any_awaiter_continue_callback(const any_awaiter_continue_callback&) = delete;
   any_awaiter_continue_callback(any_awaiter_continue_callback&&) noexcept = default;
+
+  ~any_awaiter_continue_callback() noexcept = default;
 
   any_awaiter_continue_callback& operator=(const any_awaiter_continue_callback&) = delete;
   any_awaiter_continue_callback& operator=(any_awaiter_continue_callback&&) = delete;
@@ -37,15 +41,15 @@ class any_awaiter_continue_callback : public continue_callback {
   static continue_callback::return_type executor(callback_base* base, ASYNC_CORO_ASSERT_VARIABLE bool with_destroy, bool cancelled) {
     ASYNC_CORO_ASSERT(with_destroy);
 
-    return static_cast<any_awaiter_continue_callback*>(base)->_awaiter.on_continue(cancelled, I);
+    return static_cast<any_awaiter_continue_callback*>(base)->_awaiter->on_continue(cancelled, I);
   }
 
   static void deleter(callback_base* base) noexcept {
-    static_cast<any_awaiter_continue_callback*>(base)->_awaiter.on_continuation_freed();
+    static_cast<any_awaiter_continue_callback*>(base)->_awaiter->on_continuation_freed();
   }
 
  private:
-  TAwaiter& _awaiter;
+  TAwaiter* _awaiter;
 };
 
 // awaiter for coroutines scheduled with || op
@@ -83,7 +87,7 @@ class any_awaiter {
   template <class TAwaiter>
     requires(std::is_rvalue_reference_v<TAwaiter &&>)
   auto operator||(TAwaiter&& other) && noexcept {
-    return any_awaiter<TAwaiters..., TAwaiter>{std::tuple_cat(std::move(_awaiters), std::tuple<TAwaiter>{std::move(other)})};
+    return any_awaiter<TAwaiters..., TAwaiter>{std::tuple_cat(std::move(_awaiters), std::tuple<TAwaiter>{std::forward<TAwaiter>(other)})};
   }
 
   template <class TRes>
@@ -92,6 +96,7 @@ class any_awaiter {
   }
 
   template <class... TAwaiters2>
+  // NOLINTNEXTLINE(*-param-not-moved)
   auto operator||(any_awaiter<TAwaiters2...>&& other) && noexcept {
     return any_awaiter<TAwaiters..., TAwaiters2...>{std::tuple_cat(std::move(_awaiters), std::move(other._awaiters))};
   }
@@ -102,7 +107,7 @@ class any_awaiter {
   auto operator&&(TAwaiter&& other) && noexcept {
     static_assert(!std::is_reference_v<TAwaiter>);
 
-    return all_awaiter{std::tuple<any_awaiter, TAwaiter>{std::move(*this), std::move(other)}};
+    return all_awaiter{std::tuple<any_awaiter, TAwaiter>{std::move(*this), std::forward<TAwaiter>(other)}};
   }
 
   // || ... && task - case. Operator && has less precedence so this can happen only in (|| ...) && task case
@@ -116,7 +121,7 @@ class any_awaiter {
   auto prepend_awaiter(TAwaiter&& other) && noexcept {
     static_assert(!std::is_reference_v<TAwaiter>);
 
-    return internal::any_awaiter{std::tuple_cat(std::tuple<TAwaiter>(std::move(other)), std::move(_awaiters))};
+    return internal::any_awaiter{std::tuple_cat(std::tuple<TAwaiter>(std::forward<TAwaiter>(other)), std::move(_awaiters))};
   }
 
   bool await_ready() noexcept {
@@ -242,18 +247,18 @@ class any_awaiter {
     ASYNC_CORO_WARNINGS_GCC_POP
   }
 
-  await_suspension_wrapper<any_awaiter> coro_await_transform(base_handle&) && {
+  await_suspension_wrapper<any_awaiter> coro_await_transform(base_handle& /*handle*/) && {
     return {std::move(*this)};
   }
 
  private:
   template <class F, std::size_t... TI>
-  auto calculate_is_ready(const F& store_result, std::integer_sequence<std::size_t, TI...>) noexcept {
+  auto calculate_is_ready(const F& store_result, std::integer_sequence<std::size_t, TI...> /*seq*/) noexcept {
     return ((std::get<TI>(_awaiters).await_ready() && store_result(TI)) || ...);
   }
 
   template <class F, std::size_t... TI>
-  void call_functor_while_true(const F& func, std::integer_sequence<std::size_t, TI...>) {
+  void call_functor_while_true(const F& func, std::integer_sequence<std::size_t, TI...> /*seq*/) {
     ((func(std::get<TI>(_awaiters), std::in_place_index_t<TI>{}, TI)) && ...);
   }
 
@@ -268,6 +273,11 @@ class any_awaiter {
   union union_res {
     union_res() noexcept {}
     ~union_res() noexcept(std::is_nothrow_destructible_v<result_type>) { r.~result_type(); }
+    union_res(const union_res&) = delete;
+    union_res(union_res&&) = delete;
+
+    union_res& operator=(const union_res&) = delete;
+    union_res& operator=(union_res&&) = delete;
 
     result_type r;
   };

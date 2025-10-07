@@ -2,7 +2,6 @@
 #include <async_coro/execution_system.h>
 
 #include <atomic>
-#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <thread>
@@ -34,20 +33,22 @@ execution_system::execution_system(const execution_system_config& config, const 
       _main_thread_mask(config.main_thread_allowed_tasks),
       _num_workers(static_cast<std::uint32_t>(config.worker_configs.size())),
       _max_q(max_queue) {
+  std::atomic<std::size_t> num_threads_to_wait_start = 0;
+
+  // NOLINTBEGIN(*-avoid-c-arrays)
   _thread_data = std::make_unique<worker_thread_data[]>(_num_workers);
 
   _tasks_queues = std::make_unique<task_queue[]>(max_queue.get_value() + 1);
-
-  std::atomic<std::size_t> num_threads_to_wait_start = 0;
+  // NOLINTEND(*-avoid-c-arrays)
 
   for (std::uint32_t i = 0; i < _num_workers; i++) {
-    auto& worker_config = config.worker_configs[i];
+    const auto& worker_config = config.worker_configs[i];
     auto& thread_data = _thread_data[i];
 
-    for (uint8_t q = 0; q <= max_queue.get_value(); q++) {
-      execution_thread_mask mask{execution_queue_mark{q}};
+    for (uint8_t q_id = 0; q_id <= max_queue.get_value(); q_id++) {
+      execution_thread_mask mask{execution_queue_mark{q_id}};
       if (mask.allowed(worker_config.allowed_tasks)) {
-        auto& task_q = _tasks_queues[q];
+        auto& task_q = _tasks_queues[q_id];
         thread_data.task_queues.push_back(std::addressof(task_q.queue));
         task_q.workers_data.push_back(std::addressof(thread_data));
       }
@@ -65,9 +66,9 @@ execution_system::execution_system(const execution_system_config& config, const 
     auto& thread_data = _thread_data[i];
 
     if (!thread_data.task_queues.empty()) {
-      auto& worker_config = config.worker_configs[i];
+      const auto& worker_config = config.worker_configs[i];
 
-      thread_data.thread = std::thread([this, &thread_data, &num_threads_to_wait_start]() {
+      thread_data.thread = std::thread([this, &thread_data, &num_threads_to_wait_start]() -> void {
         if (num_threads_to_wait_start.fetch_sub(1, std::memory_order::release) == 1) {
           num_threads_to_wait_start.notify_one();
         }
@@ -78,10 +79,10 @@ execution_system::execution_system(const execution_system_config& config, const 
     }
   }
 
-  for (uint8_t q = 0; q <= max_queue.get_value(); q++) {
-    execution_thread_mask mask{execution_queue_mark{q}};
+  for (uint8_t q_id = 0; q_id <= max_queue.get_value(); q_id++) {
+    execution_thread_mask mask{execution_queue_mark{q_id}};
     if (mask.allowed(_main_thread_mask)) {
-      _main_thread_queues.push_back(std::addressof(_tasks_queues[q].queue));
+      _main_thread_queues.push_back(std::addressof(_tasks_queues[q_id].queue));
     }
   }
 
@@ -106,33 +107,33 @@ execution_system::~execution_system() noexcept {
   }
 }
 
-void execution_system::plan_execution(task_function f, execution_queue_mark execution_queue) {
+void execution_system::plan_execution(task_function func, execution_queue_mark execution_queue) {
   ASYNC_CORO_ASSERT(execution_queue.get_value() <= _max_q.get_value());
-  if (!f) [[unlikely]] {
+  if (!func) [[unlikely]] {
     return;
   }
 
   auto& task_q = _tasks_queues[execution_queue.get_value()];
-  task_q.queue.push(std::move(f));
+  task_q.queue.push(std::move(func));
 
   for (auto* worker : task_q.workers_data) {
     worker->notifier.notify();
   }
 }
 
-void execution_system::execute_or_plan_execution(task_function f, execution_queue_mark execution_queue) {
-  if (!f) [[unlikely]] {
+void execution_system::execute_or_plan_execution(task_function func, execution_queue_mark execution_queue) {
+  if (!func) [[unlikely]] {
     return;
   }
 
   if (execution_system::is_current_thread_fits(execution_queue)) {
-    f();
+    func();
     return;
   }
 
   // plan execution
   auto& task_q = _tasks_queues[execution_queue.get_value()];
-  task_q.queue.push(std::move(f));
+  task_q.queue.push(std::move(func));
 
   for (auto* worker : task_q.workers_data) {
     worker->notifier.notify();
@@ -164,13 +165,13 @@ bool execution_system::is_current_thread_fits(execution_queue_mark execution_que
 void execution_system::update_from_main() {
   ASYNC_CORO_ASSERT(_main_thread_id == std::this_thread::get_id());
 
-  task_function f;
+  task_function func;
 
   // trying to execute one task from each q
   for (auto* task_q : _main_thread_queues) {
-    if (task_q->try_pop(f)) {
-      f();
-      f = nullptr;
+    if (task_q->try_pop(func)) {
+      func();
+      func = nullptr;
     }
   }
 }
@@ -189,13 +190,13 @@ void execution_system::worker_loop(worker_thread_data& data) {
   while (!_is_stopping.load(std::memory_order::relaxed)) {
     data.notifier.reset_notification();
 
-    task_function f;
+    task_function func;
     bool is_empty_loop = true;
     for (auto* task_q : data.task_queues) {
-      if (task_q->try_pop(f)) {
+      if (task_q->try_pop(func)) {
         is_empty_loop = false;
-        f();
-        f = nullptr;
+        func();
+        func = nullptr;
 
         if (_is_stopping.load(std::memory_order::relaxed)) {
           break;

@@ -26,10 +26,11 @@ namespace async_coro::internal {
 template <std::size_t I, class TAwaiter>
 class all_awaiter_continue_callback : public continue_callback {
  public:
-  all_awaiter_continue_callback(TAwaiter& awaiter) noexcept : continue_callback(&executor, &deleter), _awaiter(awaiter) {}
+  explicit all_awaiter_continue_callback(TAwaiter& awaiter) noexcept : continue_callback(&executor, &deleter), _awaiter(&awaiter) {}
 
   all_awaiter_continue_callback(const all_awaiter_continue_callback&) = delete;
   all_awaiter_continue_callback(all_awaiter_continue_callback&&) noexcept = default;
+  ~all_awaiter_continue_callback() noexcept = default;
 
   all_awaiter_continue_callback& operator=(const all_awaiter_continue_callback&) = delete;
   all_awaiter_continue_callback& operator=(all_awaiter_continue_callback&&) = delete;
@@ -38,15 +39,14 @@ class all_awaiter_continue_callback : public continue_callback {
   static continue_callback::return_type executor(callback_base* base, ASYNC_CORO_ASSERT_VARIABLE bool with_destroy, bool cancelled) {
     ASYNC_CORO_ASSERT(with_destroy);
 
-    return static_cast<all_awaiter_continue_callback*>(base)->_awaiter.on_continue(cancelled, I);
+    return static_cast<all_awaiter_continue_callback*>(base)->_awaiter->on_continue(cancelled, I);
   }
 
   static void deleter(callback_base* base) noexcept {
-    static_cast<all_awaiter_continue_callback*>(base)->_awaiter.on_continuation_freed();
+    static_cast<all_awaiter_continue_callback*>(base)->_awaiter->on_continuation_freed();
   }
 
- private:
-  TAwaiter& _awaiter;
+  TAwaiter* _awaiter;
 };
 
 // awaiter for coroutines scheduled with && op
@@ -77,14 +77,17 @@ class all_awaiter {
     }
   }
 
+  all_awaiter& operator=(const all_awaiter&) = delete;
+  all_awaiter& operator=(all_awaiter&&) = delete;
+
   template <class TAwaiter>
     requires(std::is_rvalue_reference_v<TAwaiter &&>)
   auto operator&&(TAwaiter&& other) && noexcept {
-    return all_awaiter<TAwaiters..., TAwaiter>{std::tuple_cat(std::move(_awaiters), std::tuple<TAwaiter>{std::move(other)})};
+    return all_awaiter<TAwaiters..., TAwaiter>{std::tuple_cat(std::move(_awaiters), std::tuple<TAwaiter>{std::forward<TAwaiter>(other)})};
   }
 
   template <class... TAwaiters2>
-  auto operator&&(all_awaiter<TAwaiters2...>&& other) && noexcept {
+  auto operator&&(all_awaiter<TAwaiters2...>&& other) && noexcept {  // NOLINT(*-not-moved)
     return all_awaiter<TAwaiters..., TAwaiters2...>{std::tuple_cat(std::move(_awaiters), std::move(other._awaiters))};
   }
 
@@ -99,7 +102,7 @@ class all_awaiter {
   auto operator||(TAwaiter&& other) && noexcept {
     static_assert(!std::is_reference_v<TAwaiter>);
 
-    return any_awaiter{std::tuple<all_awaiter, TAwaiter>{std::move(*this), std::move(other)}};
+    return any_awaiter{std::tuple<all_awaiter, TAwaiter>{std::move(*this), std::forward<TAwaiter>(other)}};
   }
 
   // && ... || task - case. Operator && has less precedence so its equal to (&& ...) || task case
@@ -113,7 +116,7 @@ class all_awaiter {
   auto prepend_awaiter(TAwaiter&& other) && noexcept {
     static_assert(!std::is_reference_v<TAwaiter>);
 
-    return internal::all_awaiter{std::tuple_cat(std::tuple<TAwaiter>(std::move(other)), std::move(_awaiters))};
+    return internal::all_awaiter{std::tuple_cat(std::tuple<TAwaiter>(std::forward<TAwaiter>(other)), std::move(_awaiters))};
   }
 
   bool await_ready() noexcept {
@@ -218,7 +221,7 @@ class all_awaiter {
     }
   }
 
-  await_suspension_wrapper<all_awaiter> coro_await_transform(base_handle&) && {
+  await_suspension_wrapper<all_awaiter> coro_await_transform(base_handle& /*handle*/) && {
     return {std::move(*this)};
   }
 
