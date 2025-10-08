@@ -28,7 +28,7 @@ struct test_exception : std::runtime_error {
 };
 
 struct test_exception_with_time : test_exception {
-  test_exception_with_time(const std::string& message, std::chrono::steady_clock::time_point t = std::chrono::steady_clock::now())
+  explicit test_exception_with_time(const std::string& message, std::chrono::steady_clock::time_point t = std::chrono::steady_clock::now())
       : test_exception(message), raise_time(t) {}
 
   std::chrono::steady_clock::time_point raise_time;
@@ -650,7 +650,7 @@ TEST(exception_handling, exception_propagation_across_queues) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(main_coroutine());
 

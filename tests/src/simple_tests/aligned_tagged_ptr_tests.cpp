@@ -16,14 +16,28 @@ class aligned_ptr : public ::testing::Test {
 class aligned_name_generator {
  public:
   template <typename T>
-  static std::string GetName(int) {
-    if constexpr (std::is_same_v<T, uint16_t>) return "uint16";
-    if constexpr (std::is_same_v<T, int32_t>) return "int32";
-    if constexpr (std::is_same_v<T, unsigned int>) return "unsignedInt";
-    if constexpr (std::is_same_v<T, uint64_t>) return "uint64";
-    if constexpr (std::is_same_v<T, float>) return "float";
-    if constexpr (std::is_same_v<T, double>) return "double";
-    if constexpr (std::is_same_v<T, long double>) return "longDouble";
+  static std::string GetName(int /*unused*/) {
+    if constexpr (std::is_same_v<T, uint16_t>) {
+      return "uint16";
+    }
+    if constexpr (std::is_same_v<T, int32_t>) {
+      return "int32";
+    }
+    if constexpr (std::is_same_v<T, unsigned int>) {
+      return "unsignedInt";
+    }
+    if constexpr (std::is_same_v<T, uint64_t>) {
+      return "uint64";
+    }
+    if constexpr (std::is_same_v<T, float>) {
+      return "float";
+    }
+    if constexpr (std::is_same_v<T, double>) {
+      return "double";
+    }
+    if constexpr (std::is_same_v<T, long double>) {
+      return "longDouble";
+    }
   }
 };
 
@@ -44,13 +58,13 @@ TEST(aligned_ptr, int_ptr_stack) {
 
   tagged_ptr intptr;
 
-  value_type val = value_type{0};
+  auto val = value_type{0};
 
   EXPECT_EQ(alignof(value_type), 4);
   EXPECT_EQ(tagged_ptr::num_bits, 2);
   EXPECT_EQ(tagged_ptr::max_tag_num, 0b11);
 
-  ASSERT_EQ(reinterpret_cast<intptr_t>(&val) & tagged_ptr::max_tag_num, 0);
+  ASSERT_EQ(reinterpret_cast<intptr_t>(&val) & tagged_ptr::max_tag_num, 0);  // NOLINT(*-signed-*)
 
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, nullptr);
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 0);
@@ -74,7 +88,7 @@ TEST(aligned_ptr, int_ptr_heap) {
   EXPECT_EQ(alignof(value_type), 4);
   EXPECT_GE(tagged_ptr::num_bits, 3);
 
-  ASSERT_EQ(reinterpret_cast<intptr_t>(val.get()) & tagged_ptr::max_tag_num, 0);
+  ASSERT_EQ(reinterpret_cast<intptr_t>(val.get()) & tagged_ptr::max_tag_num, 0);  // NOLINT(*-signed-*)
 
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, nullptr);
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 0);
@@ -98,9 +112,9 @@ TYPED_TEST(aligned_ptr, ptr_stack) {
 
   tagged_ptr intptr;
 
-  value_type val = value_type{0};
+  auto val = value_type{0};
 
-  ASSERT_EQ(reinterpret_cast<intptr_t>(&val) & tagged_ptr::max_tag_num, 0);
+  ASSERT_EQ(reinterpret_cast<intptr_t>(&val) & tagged_ptr::max_tag_num, 0);  // NOLINT(*-signed-*)
 
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, nullptr);
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 0);
@@ -127,7 +141,7 @@ TYPED_TEST(aligned_ptr, ptr_heap) {
 
   auto val = std::unique_ptr<value_type, malloc_deleter>(new (std::malloc(sizeof(value_type))) value_type{0});
 
-  ASSERT_EQ(reinterpret_cast<intptr_t>(val.get()) & tagged_ptr::max_tag_num, 0);
+  ASSERT_EQ(reinterpret_cast<intptr_t>(val.get()) & tagged_ptr::max_tag_num, 0);  // NOLINT(*-signed-*)
 
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, nullptr);
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 0);

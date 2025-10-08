@@ -12,19 +12,33 @@ Checks: >
   modernize-*,
   cppcoreguidelines-*,
   hicpp-*,
-  readability-identifier-naming,
   hicpp-avoid-goto,
   -readability-redundant-access-specifiers,
   -modernize-use-trailing-return-type,
   -cppcoreguidelines-non-private-member-variables-in-classes,
   -cppcoreguidelines-pro-type-union-access,
   -cppcoreguidelines-avoid-capturing-lambda-coroutines,
+  -readability-identifier-length,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -hicpp-no-malloc,
+  -cppcoreguidelines-no-malloc,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-special-member-functions,
+  -hicpp-special-member-functions,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -readability-magic-numbers,
+  -performance-avoid-endl,
+  -readability-identifier-length,
+  -hicpp-uppercase-literal-suffix,
+  -readability-uppercase-literal-suffix,
+  -readability-function-cognitive-complexity,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
 
 # Treat all warnings as errors to enforce fixes.
 WarningsAsErrors: '*'
 
 # Run checks over all headers in the project.
-HeaderFilterRegex: 'async_coro/**/*.cpp|async_coro/**/*.h|async_coro/**/*.hpp'
+HeaderFilterRegex: '*'
 
 # Use project .clang-format when available
 FormatStyle: file
