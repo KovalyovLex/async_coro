@@ -29,7 +29,7 @@ class await_start_task {
   template <typename U>
     requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> /* handle*/) noexcept {
-    ASYNC_CORO_ASSERT(false);  // we should newer suspend this immediate coroutine
+    ASYNC_CORO_ASSERT(false);  // NOLINT(*static-assert) // we should newer suspend this immediate coroutine
   }
 
   auto await_resume() noexcept {

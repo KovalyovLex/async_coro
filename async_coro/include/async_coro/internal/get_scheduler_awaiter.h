@@ -27,7 +27,7 @@ class get_scheduler_awaiter {
 
   template <typename U>
   void await_suspend(std::coroutine_handle<U> /*handle*/) noexcept {
-    ASYNC_CORO_ASSERT(false);  // we should newer suspend this immediate coroutine
+    ASYNC_CORO_ASSERT(false);  // NOLINT(*static-assert) // we should newer suspend this immediate coroutine
   }
 
   scheduler& await_resume() noexcept {

@@ -34,7 +34,7 @@ class await_cancel_task {
   }
 
   void await_resume() noexcept {  // NOLINT(*static)
-    ASYNC_CORO_ASSERT(false);
+    ASYNC_CORO_ASSERT(false);     // NOLINT(*static-assert)
   }
 };
 

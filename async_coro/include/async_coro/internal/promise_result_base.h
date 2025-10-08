@@ -37,7 +37,7 @@ class promise_result_base : public base_handle, protected store_type<T> {
 #if ASYNC_CORO_WITH_EXCEPTIONS
     new (&this->exception) std::exception_ptr(std::current_exception());
 #else
-    ASYNC_CORO_ASSERT(false);
+    ASYNC_CORO_ASSERT(false);  // NOLINT(*static-assert)
 #endif
     _is_initialized = true;
     _is_result = false;
