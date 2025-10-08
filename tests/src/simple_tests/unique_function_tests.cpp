@@ -268,7 +268,7 @@ TEST(unique_function, forward_value) {
 
   cleaner clean{};
 
-  unique_function<void(test_struct)> f = [](const auto& s) {
+  unique_function<void(test_struct)> f = [](auto s) {  // NOLINT(*-value-param*)
     EXPECT_NE(&s, nullptr);
   };
 
@@ -355,7 +355,7 @@ TEST(unique_function, rvalue_forward) {
   }
 
   {
-    unique_function<void(test_struct&&)> f = [](const auto& s) {
+    unique_function<void(test_struct&&)> f = [](auto s) {  // NOLINT(*-value-param*)
       EXPECT_NE(&s, nullptr);
     };
 

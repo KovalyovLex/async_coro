@@ -1354,7 +1354,7 @@ TEST(task, multiple_workers_async_execution) {
     EXPECT_EQ(res_int, 3);
 
     const auto res_double = co_await std::move(handle_double);
-    EXPECT_DOUBLE_EQ(res_double, 3.1415);
+    EXPECT_DOUBLE_EQ(res_double, std::numbers::pi);
 
     const auto res_float = co_await std::move(handle_float);
     EXPECT_FLOAT_EQ(res_float, 2.34f);
