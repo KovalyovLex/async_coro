@@ -8,6 +8,8 @@
 
 #include "memory_hooks.h"
 
+// NOLINTBEGIN(*-narrowing-*)
+
 class atomic_collections : public ::testing::TestWithParam<std::tuple<std::uint32_t, std::uint32_t>> {
 };
 
@@ -39,7 +41,7 @@ TEST_P(atomic_collections, int_queue) {
         auto stop_ptr = std::make_unique<std::atomic_bool>(false);
         auto thread_body = [&q, &sum, &num_pops, stop = stop_ptr.get()]() {
           while (!*stop) {
-            int val;
+            int val = -153;
             if (q.try_pop(val)) {
               sum += val;
               num_pops++;
@@ -52,6 +54,7 @@ TEST_P(atomic_collections, int_queue) {
 
       auto num_values_by_prod = num_values / num_prods;
 
+      prods.reserve(num_prods - 1);
       for (std::uint32_t i = 0; i < num_prods - 1; i++) {
         prods.emplace_back([num_values_by_prod, &q, &num_pushes, &sum_pushed]() {
           for (std::uint32_t i = 0; i < num_values_by_prod; i++) {
@@ -135,3 +138,5 @@ INSTANTIATE_TEST_SUITE_P(
     [](const testing::TestParamInfo<atomic_collections::ParamType>& info) {
       return "consumers_" + std::to_string(std::get<0>(info.param)) + "_producers_" + std::to_string(std::get<1>(info.param));
     });
+
+// NOLINTEND(*-narrowing-*)

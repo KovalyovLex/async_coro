@@ -22,7 +22,7 @@ struct lifetime_tracker {
 
   int value;
 
-  lifetime_tracker(int v = 0) : value(v) {
+  explicit lifetime_tracker(int v = 0) : value(v) {
     num_instances++;
     num_constructors++;
   }
@@ -81,7 +81,7 @@ TEST(lambda_lifetime, start_task_with_scheduler) {
   lifetime_tracker::reset();
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   async_coro::task_handle<int> handle;
 
@@ -136,7 +136,7 @@ TEST(lambda_lifetime, start_task_in_coroutine) {
   lifetime_tracker::reset();
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   async_coro::task_handle<int> handle;
   async_coro::unique_function<void()> continue_f;
@@ -198,7 +198,7 @@ TEST(lambda_lifetime, when_all_tasks) {
   lifetime_tracker::reset();
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   async_coro::task_handle<int> handle;
   async_coro::unique_function<void()> continue_f1;
@@ -295,7 +295,7 @@ TEST(lambda_lifetime, when_any_tasks) {
   lifetime_tracker::reset();
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   async_coro::task_handle<int> handle;
   async_coro::unique_function<void()> continue_f1;

@@ -2,8 +2,11 @@
 #include <new>
 
 namespace mem_hook {
-inline std::atomic_size_t num_allocated = 0;
+inline std::atomic_size_t num_allocated = 0;  // NOLINT(*-global-*)
 }
+
+// NOLINTBEGIN(readability-*)
+// NOLINTBEGIN(*-macro-*)
 
 #if defined(__clang__) && defined(__has_feature)
 #if __has_feature(thread_sanitizer)
@@ -28,3 +31,6 @@ void operator delete(void* ptr, const std::nothrow_t& tag) noexcept;
 void operator delete(void* ptr, std::size_t size) noexcept;
 
 #endif
+
+// NOLINTEND(*-macro-*)
+// NOLINTEND(readability-*)

@@ -30,7 +30,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           ignore: .github|.vscode|build
-          ignore-tidy: tests
           version: 20
           database: build
           style: 'file'  # Use .clang-format config file

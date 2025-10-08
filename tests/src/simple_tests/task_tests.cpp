@@ -10,6 +10,7 @@
 
 #include <chrono>
 #include <memory>
+#include <numbers>
 #include <semaphore>
 #include <thread>
 #include <type_traits>
@@ -26,11 +27,11 @@ struct coro_runner {
 };
 
 struct release_sema_in_destructor {
-  release_sema_in_destructor(std::binary_semaphore& ref) noexcept : sema_ref(ref) {}
+  explicit release_sema_in_destructor(std::binary_semaphore& ref) noexcept : sema_ref(ref) {}
   ~release_sema_in_destructor() {
     sema_ref.release();
   }
-  std::binary_semaphore& sema_ref;
+  std::binary_semaphore& sema_ref;  // NOLINT(*-ref-*)
 };
 
 }  // namespace task_tests
@@ -89,7 +90,7 @@ TEST(task, resume_on_callback_deep) {
 TEST(task, resume_on_callback) {
   async_coro::unique_function<void()> continue_f;
 
-  auto routine = [](auto& cnt) -> async_coro::task<int> {
+  auto routine = [](auto& cnt) -> async_coro::task<int> {  // NOLINT(*-reference-coroutine-*)
     co_await async_coro::await_callback([&cnt](auto f) { cnt = std::move(f); });
     co_return 3;
   }(continue_f);
@@ -201,7 +202,7 @@ TEST(task, async_no_switch) {
   }(routine_1);
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   ASSERT_FALSE(routine.done());
   auto handle = scheduler.start_task(std::move(routine));
@@ -260,7 +261,7 @@ TEST(task, when_all) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_FALSE(handle.done());
@@ -308,7 +309,7 @@ TEST(task, when_all_void) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_FALSE(handle.done());
@@ -364,7 +365,7 @@ TEST(task, when_all_with_void) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_FALSE(handle.done());
@@ -421,7 +422,7 @@ TEST(task, when_all_with_void_first) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_FALSE(handle.done());
@@ -478,7 +479,7 @@ TEST(task, when_all_with_void_last) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_FALSE(handle.done());
@@ -522,7 +523,7 @@ TEST(task, when_all_no_wait) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
 
@@ -552,7 +553,7 @@ TEST(task, when_any_no_wait_sleep) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
@@ -594,7 +595,7 @@ TEST(task, when_any_no_wait) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
@@ -633,7 +634,7 @@ TEST(task, when_any_void_all) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
@@ -683,7 +684,7 @@ TEST(task, when_any_void_first) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
@@ -734,7 +735,7 @@ TEST(task, when_any_void_last) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
@@ -785,7 +786,7 @@ TEST(task, when_any_void_mid) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
@@ -836,7 +837,7 @@ TEST(task, when_any_index_check) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
@@ -890,7 +891,7 @@ TEST(task, when_any_index_check_last) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine());
   EXPECT_TRUE(handle.done());
@@ -910,7 +911,7 @@ TEST(task, when_any_continue_after_parent_complete) {
   async_coro::unique_function<void()> continue_f2;
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   {
     auto routine1 = [&]() -> async_coro::task<int> {
@@ -987,7 +988,7 @@ TEST(task, when_any) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}, {"worker2"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}, {"worker2"}}})};
 
   auto handle = scheduler.start_task(routine());
 
@@ -1032,7 +1033,7 @@ TEST(task, when_any_immediate_execution_order) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine);
 
@@ -1072,7 +1073,7 @@ TEST(task, when_all_immediate_execution_order) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(routine);
 
@@ -1086,7 +1087,7 @@ TEST(task, task_handle_outlive) {
 
   struct destructible {
     destructible() { num_instances++; }
-    destructible(const destructible&) { num_instances++; }
+    destructible(const destructible& /*unused*/) { num_instances++; }
     ~destructible() { num_instances--; }
   };
 
@@ -1115,7 +1116,7 @@ TEST(task, task_handle_move_to_thread) {
 
   struct destructible {
     destructible() { num_instances++; }
-    destructible(const destructible&) { num_instances++; }
+    destructible(const destructible& /*unused*/) { num_instances++; }
     ~destructible() { num_instances--; }
   };
 
@@ -1130,7 +1131,7 @@ TEST(task, task_handle_move_to_thread) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   EXPECT_EQ(num_instances, 0);
 
@@ -1144,7 +1145,7 @@ TEST(task, task_handle_move_to_thread) {
       std::this_thread::sleep_for(std::chrono::milliseconds{1});
     });
 
-    ASSERT_TRUE(handle.done());
+    ASSERT_TRUE(handle.done());  // NOLINT(*-move*)
 
     while (!ready) {
       std::this_thread::yield();
@@ -1244,7 +1245,7 @@ TEST(task, task_const_ref_result_await) {
   };
 
   auto routine2 = [&]() -> async_coro::task<const int&> {
-    auto& res = co_await routine1();
+    const auto& res = co_await routine1();
     co_return res;
   };
 
@@ -1263,8 +1264,8 @@ TEST(task, lambda_lifetime) {
 
   struct destructible {
     destructible() { num_instances++; }
-    destructible(const destructible&) { num_instances++; }
-    destructible(destructible&&) noexcept { num_instances++; }
+    destructible(const destructible& /*unused*/) { num_instances++; }
+    destructible(destructible&& /*unused*/) noexcept { num_instances++; }
     ~destructible() { num_instances--; }
   };
 
@@ -1345,7 +1346,7 @@ TEST(task, multiple_workers_async_execution) {
 
     auto handle_double = co_await async_coro::start_task(
         []() -> async_coro::task<double> {
-          co_return 3.1415;
+          co_return std::numbers::pi;
         },
         async_coro::execution_queues::main);
 
@@ -1353,7 +1354,7 @@ TEST(task, multiple_workers_async_execution) {
     EXPECT_EQ(res_int, 3);
 
     const auto res_double = co_await std::move(handle_double);
-    EXPECT_DOUBLE_EQ(res_double, 3.1415);
+    EXPECT_DOUBLE_EQ(res_double, std::numbers::pi);
 
     const auto res_float = co_await std::move(handle_float);
     EXPECT_FLOAT_EQ(res_float, 2.34f);
@@ -1411,7 +1412,7 @@ TEST(task, multiple_workers_any_execution) {
     auto handle_double = co_await async_coro::start_task(
         []() -> async_coro::task<double> {
           std::this_thread::sleep_for(std::chrono::milliseconds{1});
-          co_return 3.1415;
+          co_return std::numbers::pi;
         },
         async_coro::execution_queues::worker);
 
