@@ -3,8 +3,10 @@ name: Linter checks for C++ code
 on:
   push:
     branches: [ "main" ]
+    paths: ['**.c', '**.cpp', '**.h', '**.hpp', '**.cxx', '**.hxx', '**.cc', '**.hh', '**CMakeLists.txt', '**.cmake']
   pull_request:
     branches: [ "main" ]
+    paths: ['**.c', '**.cpp', '**.h', '**.hpp', '**.cxx', '**.hxx', '**.cc', '**.hh', '**CMakeLists.txt', '**.cmake']
 
 jobs:
   linter-check:
