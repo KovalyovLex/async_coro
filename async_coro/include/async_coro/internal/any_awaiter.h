@@ -146,7 +146,7 @@ class any_awaiter {
     return calculate_is_ready(func, std::index_sequence_for<TAwaiters...>{});
   }
 
-  void cancel_await() noexcept {
+  void cancel_await() {
     std::apply(
         [&](auto&... awaiters) {
           (awaiters.cancel_await(), ...);
@@ -247,8 +247,8 @@ class any_awaiter {
     ASYNC_CORO_WARNINGS_GCC_POP
   }
 
-  await_suspension_wrapper<any_awaiter> coro_await_transform(base_handle& /*handle*/) && {
-    return {std::move(*this)};
+  auto coro_await_transform(base_handle& /*handle*/) && {
+    return await_suspension_wrapper<any_awaiter>{std::move(*this)};
   }
 
  private:

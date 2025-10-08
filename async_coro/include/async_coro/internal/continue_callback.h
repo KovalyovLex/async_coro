@@ -11,6 +11,7 @@ class continue_callback;
 
 using callback_sig = std::tuple<std::unique_ptr<continue_callback, callback_base::deleter>, bool>(bool);
 
+// Callback type to store on stack. For use in continue_after_complete method for advanced awaiters
 class continue_callback : public callback<callback_sig> {
   using super = callback<callback_sig>;
 
@@ -18,7 +19,7 @@ class continue_callback : public callback<callback_sig> {
   using ptr = std::unique_ptr<continue_callback, callback_base::deleter>;
   using return_type = std::tuple<ptr, bool>;
 
-  continue_callback(super::executor_t executor, super::deleter_t deleter = nullptr) noexcept
+  explicit continue_callback(super::executor_t executor, super::deleter_t deleter = nullptr) noexcept
       : super(executor, deleter) {}
 };
 
@@ -26,7 +27,7 @@ template <typename Fx>
 class continue_callback_on_stack : public continue_callback {
  public:
   template <class... TArgs2>
-  continue_callback_on_stack(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
+  explicit continue_callback_on_stack(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
       : continue_callback(&executor, nullptr),
         _fx(std::forward<TArgs2>(args)...) {}
 

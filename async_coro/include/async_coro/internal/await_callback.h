@@ -24,7 +24,7 @@ class await_callback_base {
 
  protected:
   await_callback_base() noexcept
-      : _on_cancel(on_cancel_callback{*this}) {
+      : _on_cancel(on_cancel_callback{this}) {
   }
 
   ~await_callback_base() noexcept {
@@ -87,7 +87,7 @@ class await_callback_base {
       }
 
       // busy wait callback
-      do {
+      do {  // NOLINT(*do-while)
         if (clb != callback.load(std::memory_order::relaxed)) {
           callback.store(nullptr, std::memory_order::relaxed);
           callback_lock.store(false, std::memory_order_release);
@@ -124,7 +124,7 @@ class await_callback_base {
       }
 
       // busy wait callback
-      do {
+      do {  // NOLINT(*do-while)
         if (clb != callback.load(std::memory_order::relaxed)) {
           return;
         }
@@ -152,15 +152,15 @@ class await_callback_base {
   class on_cancel_callback {
    public:
     void operator()() const {
-      if (!clb._was_done.exchange(true, std::memory_order::relaxed)) {
+      if (!clb->_was_done.exchange(true, std::memory_order::relaxed)) {
         // cancel
-        clb.reset_continue_callback();
+        clb->reset_continue_callback();
 
-        clb._suspension.try_to_continue_from_any_thread(true);
+        clb->_suspension.try_to_continue_from_any_thread(true);
       }
     }
 
-    await_callback_base& clb;
+    await_callback_base* clb;
   };
 
  protected:
@@ -174,10 +174,16 @@ class await_callback_base {
 template <typename T>
 class await_callback : private await_callback_base {
  public:
-  explicit await_callback(T&& callback) noexcept(std::is_nothrow_constructible_v<T, T&&>)
+  explicit await_callback(T&& callback) noexcept(std::is_nothrow_constructible_v<T, T&&>)  // NOLINT(*-not-moved)
       : _on_await(std::forward<T>(callback)) {}
 
+  await_callback(const await_callback&) = delete;
+  await_callback(await_callback&&) = delete;
+
   ~await_callback() noexcept = default;
+
+  await_callback& operator=(await_callback&&) = delete;
+  await_callback& operator=(const await_callback&) = delete;
 
   [[nodiscard]] bool await_ready() const noexcept { return false; }
 

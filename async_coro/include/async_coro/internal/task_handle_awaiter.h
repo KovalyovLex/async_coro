@@ -20,23 +20,27 @@ namespace async_coro::internal {
 template <class R>
 class task_handle_awaiter {
  public:
-  explicit task_handle_awaiter(task_handle<R>&& th) noexcept
-      : _th(std::move(th)),
-        _on_cancel_callback(on_cancel_callback{*this}),
-        _on_continue_callback(on_continue_callback{*this}) {}
+  explicit task_handle_awaiter(task_handle<R>&& t_handle) noexcept
+      : _th(std::move(t_handle)),
+        _on_cancel_callback(on_cancel_callback{this}),
+        _on_continue_callback(on_continue_callback{this}) {}
 
   task_handle_awaiter(const task_handle_awaiter&) = delete;
   task_handle_awaiter(task_handle_awaiter&&) = delete;
+
   ~task_handle_awaiter() noexcept = default;
 
-  bool await_ready() const noexcept { return _th.done(); }
+  task_handle_awaiter& operator=(const task_handle_awaiter&) = delete;
+  task_handle_awaiter& operator=(task_handle_awaiter&&) = delete;
+
+  [[nodiscard]] bool await_ready() const noexcept { return _th.done(); }
 
   template <typename T>
     requires(std::derived_from<T, base_handle>)
-  void await_suspend(std::coroutine_handle<T> h) {
+  void await_suspend(std::coroutine_handle<T> handle) {
     _was_done.store(false, std::memory_order::relaxed);
 
-    _suspension = h.promise().suspend(2, &_on_cancel_callback);
+    _suspension = handle.promise().suspend(2, &_on_cancel_callback);
 
     _th.continue_with(_on_continue_callback);
 
@@ -50,23 +54,23 @@ class task_handle_awaiter {
  private:
   struct on_cancel_callback {
     void operator()() const {
-      if (!clb._was_done.exchange(true, std::memory_order::relaxed)) {
+      if (!clb->_was_done.exchange(true, std::memory_order::relaxed)) {
         // cancel
-        clb._suspension.try_to_continue_from_any_thread(true);
+        clb->_suspension.try_to_continue_from_any_thread(true);
       }
     }
 
-    task_handle_awaiter& clb;
+    task_handle_awaiter* clb;
   };
 
   struct on_continue_callback {
-    void operator()(promise_result<R>&, bool canceled) const {
-      if (!clb._was_done.exchange(true, std::memory_order::relaxed)) {
-        clb._suspension.try_to_continue_from_any_thread(canceled);
+    void operator()(promise_result<R>& /*result*/, bool canceled) const {
+      if (!clb->_was_done.exchange(true, std::memory_order::relaxed)) {
+        clb->_suspension.try_to_continue_from_any_thread(canceled);
       }
     }
 
-    task_handle_awaiter& clb;
+    task_handle_awaiter* clb;
   };
 
  private:

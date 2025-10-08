@@ -12,6 +12,9 @@ class promise_result_base : public base_handle, protected store_type<T> {
  public:
   promise_result_base() noexcept = default;
 
+  promise_result_base(const promise_result_base&) = delete;
+  promise_result_base(promise_result_base&&) = delete;
+
   ~promise_result_base() noexcept override {
     if (_is_initialized) {
       if (_is_result) {
@@ -22,8 +25,11 @@ class promise_result_base : public base_handle, protected store_type<T> {
     }
   }
 
+  promise_result_base& operator=(const promise_result_base&) = delete;
+  promise_result_base& operator=(promise_result_base&&) = delete;
+
   // Checks has result
-  bool has_result() const noexcept { return _is_initialized && _is_result; }
+  [[nodiscard]] bool has_result() const noexcept { return _is_initialized && _is_result; }
 
 #if ASYNC_CORO_COMPILE_WITH_EXCEPTIONS
   void unhandled_exception() noexcept {

@@ -36,7 +36,7 @@ void base_handle::set_owning_by_task_handle(bool owning) {
 void base_handle::set_continuation_functor(callback_base* func) noexcept {
   ASYNC_CORO_ASSERT(!is_embedded());
 
-  auto* old_value = _continuation.exchange(func, std::memory_order::release);  // NOLINT(*union-access)
+  auto* old_value = _continuation.exchange(func, std::memory_order::release);
   if (old_value != nullptr) {
     old_value->destroy();
   }

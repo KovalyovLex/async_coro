@@ -127,7 +127,7 @@ class all_awaiter {
         _awaiters);
   }
 
-  void cancel_await() noexcept {
+  void cancel_await() {
     _was_any_cancelled.store(true, std::memory_order::relaxed);
 
     std::apply(
@@ -221,8 +221,8 @@ class all_awaiter {
     }
   }
 
-  await_suspension_wrapper<all_awaiter> coro_await_transform(base_handle& /*handle*/) && {
-    return {std::move(*this)};
+  auto coro_await_transform(base_handle& /*handle*/) && {
+    return await_suspension_wrapper<all_awaiter>{std::move(*this)};
   }
 
   static auto create_callbacks(all_awaiter& await) noexcept {

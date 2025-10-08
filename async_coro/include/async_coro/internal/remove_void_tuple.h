@@ -10,9 +10,9 @@ using tuple_cat_t = decltype(std::tuple_cat(std::declval<Ts>()...));
 
 template <typename... Ts>
 using remove_void_tuple_t = tuple_cat_t<
-    typename std::conditional<
-        std::is_void<Ts>::value,
+    std::conditional_t<
+        std::is_void_v<Ts>,
         std::tuple<>,
-        std::tuple<Ts>>::type...>;
+        std::tuple<Ts>>...>;
 
 }  // namespace async_coro::internal

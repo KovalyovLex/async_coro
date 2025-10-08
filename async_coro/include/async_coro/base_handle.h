@@ -302,7 +302,7 @@ class base_handle {
   void set_owning_by_task_handle(bool owning);
 
   callback_base* release_continuation_functor() noexcept {
-    return is_embedded() ? nullptr : _continuation.exchange(nullptr, std::memory_order::acquire);  // NOLINT(*union-access)
+    return is_embedded() ? nullptr : _continuation.exchange(nullptr, std::memory_order::acquire);
   }
 
   void set_continuation_functor(callback_base* func) noexcept;
@@ -311,11 +311,11 @@ class base_handle {
   void destroy_impl();
 
   [[nodiscard]] base_handle* get_parent() const noexcept {
-    return is_embedded() ? _parent : nullptr;  // NOLINT(*union-access)
+    return is_embedded() ? _parent : nullptr;
   }
 
   void set_parent(base_handle& parent) noexcept {
-    _parent = &parent;  // NOLINT(*union-access)
+    _parent = &parent;
     parent._current_child = this;
     set_embedded(true);
   }

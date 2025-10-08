@@ -20,8 +20,9 @@ class task;
 namespace async_coro::internal {
 
 template <typename T>
-concept await_transformable =
-    requires(T a) { std::forward<T>(a).coro_await_transform(std::declval<async_coro::base_handle&>()); };
+concept await_transformable = requires(T awaiter) {
+  std::forward<T>(awaiter).coro_await_transform(std::declval<async_coro::base_handle&>());
+};
 
 template <typename R>
 class promise_type final : public internal::promise_result_holder<R> {
@@ -44,29 +45,29 @@ class promise_type final : public internal::promise_result_holder<R> {
   }
 
   template <typename T>
-  constexpr decltype(auto) await_transform(T&& in) noexcept {
+  constexpr decltype(auto) await_transform(T&& awaiter) noexcept {
     // return non standard awaiters as is
-    return std::move(in);
+    return std::forward<T>(awaiter);
   }
 
   template <await_transformable T>
-  constexpr decltype(auto) await_transform(T&& in) {
-    return std::forward<T>(in).coro_await_transform(*this);
+  constexpr decltype(auto) await_transform(T&& awaiter) {
+    return std::forward<T>(awaiter).coro_await_transform(*this);
   }
 
-  void set_owning_by_task_handle(bool owning, internal::passkey_any<task_handle<R>>) {
+  void set_owning_by_task_handle(bool owning, internal::passkey_any<task_handle<R>> /*key*/) {
     base_handle::set_owning_by_task_handle(owning);
   }
 
-  void try_free_task(internal::passkey_any<task<R>>) {
+  void try_free_task(internal::passkey_any<task<R>> /*key*/) {
     this->on_task_freed_by_scheduler();
   }
 
-  void set_continuation_functor(callback_base* f, internal::passkey_any<task_handle<R>>) noexcept {
-    base_handle::set_continuation_functor(f);
+  void set_continuation_functor(callback_base* func, internal::passkey_any<task_handle<R>> /*key*/) noexcept {
+    base_handle::set_continuation_functor(func);
   }
 
-  callback_base* get_continuation_functor(internal::passkey_any<task_handle<R>>) noexcept {
+  callback_base* get_continuation_functor(internal::passkey_any<task_handle<R>> /*key*/) noexcept {
     return base_handle::release_continuation_functor();
   }
 };

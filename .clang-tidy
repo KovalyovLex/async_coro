@@ -17,6 +17,7 @@ Checks: >
   -readability-redundant-access-specifiers,
   -modernize-use-trailing-return-type,
   -cppcoreguidelines-non-private-member-variables-in-classes,
+  -cppcoreguidelines-pro-type-union-access,
 
 # Treat all warnings as errors to enforce fixes.
 WarningsAsErrors: '*'
