@@ -4,6 +4,7 @@
 #include <async_coro/internal/passkey.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <utility>
 
@@ -11,7 +12,7 @@ namespace async_coro {
 
 namespace internal {
 
-enum class deinit_op {
+enum class deinit_op : std::uint8_t {
   move,
   destroy,
 };
@@ -22,18 +23,24 @@ union small_buffer {
 
   using t_move_or_destroy_f = void (*)(small_buffer& self,
                                        small_buffer* other,
-                                       internal::deinit_op op) noexcept;
+                                       internal::deinit_op operation) noexcept;
 
   void* fx;
-  std::byte mem[Size];
+  std::byte mem[Size];  // NOLINT(*-c-arrays)
 
-  small_buffer() noexcept {}
+  small_buffer() noexcept {}  // NOLINT(*-member-init)
   explicit small_buffer(std::nullptr_t) noexcept
       : fx(nullptr) {}
-  small_buffer(const small_buffer& other) noexcept {
+  small_buffer(const small_buffer& other) noexcept {  // NOLINT(*-member-init)
+    std::memcpy(&mem[0], &other.mem[0], Size);
+  }
+  small_buffer(small_buffer&& other) noexcept {  // NOLINT(*-member-init)
     std::memcpy(&mem[0], &other.mem[0], Size);
   }
   ~small_buffer() noexcept {}
+
+  small_buffer& operator=(small_buffer&&) = delete;
+  small_buffer& operator=(const small_buffer&) = delete;
 
   small_buffer& operator=(std::nullptr_t) noexcept {
     fx = nullptr;
@@ -71,12 +78,12 @@ class unique_function_storage {
  protected:
   struct no_init {};
 
-  unique_function_storage(no_init) noexcept {}
+  explicit unique_function_storage(no_init /*tag*/) noexcept {}
 
  public:
   unique_function_storage() noexcept : _move_or_destroy(nullptr), _buffer(nullptr) {}
 
-  unique_function_storage(std::nullptr_t) noexcept : unique_function_storage() {}
+  explicit unique_function_storage(std::nullptr_t) noexcept : unique_function_storage() {}
 
   unique_function_storage(const unique_function_storage&) = delete;
 
@@ -121,7 +128,7 @@ class unique_function_storage {
 
  public:
   template <typename TFunc, typename T>
-  t_small_buffer& get_buffer(internal::passkey<internal::function_impl_call<SFOSize, TFunc, T>>) {
+  t_small_buffer& get_buffer(internal::passkey<internal::function_impl_call<SFOSize, TFunc, T>> /*key*/) {
     return _buffer;
   }
 

@@ -35,12 +35,12 @@ class aligned_tagged_ptr {
   /**
    * @brief Number of low bits safely usable for tagging based on pointer alignment.
    */
-  inline static constexpr std::uint32_t num_bits = get_num_bits<std::uint32_t>((std::uint32_t)(OnlyMallocAllocated ? std::max(alignof(T), alignof(std::max_align_t)) : alignof(T)));
+  static constexpr std::uint32_t num_bits = get_num_bits<std::uint32_t>((std::uint32_t)(OnlyMallocAllocated ? std::max(alignof(T), alignof(std::max_align_t)) : alignof(T)));
 
   /**
    * @brief Maximum numeric tag value that can be stored in available bits.
    */
-  inline static constexpr std::uint32_t max_tag_num = get_mask<std::uint32_t>(num_bits);
+  static constexpr std::uint32_t max_tag_num = get_mask<std::uint32_t>(num_bits);
 
   /// Type representing a pair of a pointer and its associated tag.
   using tagged_ptr = tagged_pair<T>;
@@ -50,14 +50,14 @@ class aligned_tagged_ptr {
    *
    * @param ptr A pointer to a `T` instance.
    */
-  aligned_tagged_ptr(T* ptr) noexcept
+  explicit aligned_tagged_ptr(T* ptr) noexcept
       : _raw_ptr(convert_tagged_to_raw({ptr, 0})) {
   }
 
   /**
    * @brief Constructs a null tagged pointer.
    */
-  aligned_tagged_ptr(std::nullptr_t) noexcept
+  explicit aligned_tagged_ptr(std::nullptr_t) noexcept
       : _raw_ptr(0) {
   }
 
@@ -113,18 +113,18 @@ class aligned_tagged_ptr {
 
  private:
   /// Mask for extracting the aligned pointer from a tagged integer.
-  inline static constexpr std::uintptr_t address_mask = ~static_cast<std::uintptr_t>(max_tag_num);
+  static constexpr std::uintptr_t address_mask = ~static_cast<std::uintptr_t>(max_tag_num);
 
   /// Mask for extracting the tag from a tagged integer.
-  inline static constexpr std::uintptr_t tag_mask = max_tag_num;
+  static constexpr std::uintptr_t tag_mask = max_tag_num;
 
   static void convert_raw_to_tagged(tagged_ptr& value, std::uintptr_t ptr_bits) noexcept {
-    value.ptr = reinterpret_cast<T*>(ptr_bits & address_mask);
+    value.ptr = reinterpret_cast<T*>(ptr_bits & address_mask);  // NOLINT(*reinterpret-cast)
     value.tag = static_cast<std::uint32_t>(ptr_bits & tag_mask);
   }
 
   static std::uintptr_t convert_tagged_to_raw(const tagged_ptr& value) noexcept {
-    std::uintptr_t ptr_bits = reinterpret_cast<std::uintptr_t>(value.ptr);
+    auto ptr_bits = reinterpret_cast<std::uintptr_t>(value.ptr);  // NOLINT(*reinterpret-cast)
 
     ASYNC_CORO_ASSERT((ptr_bits & tag_mask) == 0);
 
@@ -135,7 +135,7 @@ class aligned_tagged_ptr {
 
  private:
   /// The atomic raw integer storing the tagged pointer.
-  std::atomic<std::uintptr_t> _raw_ptr;
+  std::atomic<std::uintptr_t> _raw_ptr{0};
 };
 
 }  // namespace async_coro::internal

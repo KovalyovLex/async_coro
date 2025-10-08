@@ -5,7 +5,7 @@
 namespace async_coro::internal {
 
 template <class T>
-constexpr inline T get_mask(std::uint32_t num_bits) {
+constexpr T get_mask(std::uint32_t num_bits) {
   if (num_bits == 0) {
     return T{0};
   }
@@ -13,7 +13,7 @@ constexpr inline T get_mask(std::uint32_t num_bits) {
 }
 
 template <class T>
-constexpr inline T get_num_bits(std::uint32_t pow_of_two, std::uint32_t cur_num = 0) {
+constexpr T get_num_bits(std::uint32_t pow_of_two, std::uint32_t cur_num = 0) {
   const auto value = T{1} << cur_num;
   if (pow_of_two == value) {
     return cur_num;

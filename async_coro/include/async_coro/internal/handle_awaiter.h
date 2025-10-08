@@ -33,15 +33,17 @@ class handle_awaiter {
 
   explicit handle_awaiter(task_handle<TRes> handle) noexcept
       : _handle(std::move(handle)),
-        _continue_callback(on_continue_callback{*this}) {
+        _continue_callback(on_continue_callback{this}) {
   }
 
   handle_awaiter(const handle_awaiter&) = delete;
   handle_awaiter(handle_awaiter&& other) noexcept
       : _handle(std::move(other._handle)),
-        _continue_callback(on_continue_callback{*this}) {
+        _continue_callback(on_continue_callback{this}) {
     ASYNC_CORO_ASSERT(other._continue_f == nullptr);
   }
+
+  ~handle_awaiter() noexcept = default;
 
   handle_awaiter& operator=(const handle_awaiter&) = delete;
   handle_awaiter& operator=(handle_awaiter&&) = delete;
@@ -56,9 +58,9 @@ class handle_awaiter {
     return any_awaiter{std::tuple<handle_awaiter<TRes>, handle_awaiter<TRes2>>{std::move(*this), handle_awaiter<TRes2>{std::move(other)}}};
   }
 
-  bool await_ready() const noexcept { return _handle.done(); }
+  [[nodiscard]] bool await_ready() const noexcept { return _handle.done(); }
 
-  void cancel_await() noexcept {
+  void cancel_await() {
     _handle.request_cancel();
     _handle.reset_continue();
 
@@ -87,18 +89,18 @@ class handle_awaiter {
 
  private:
   struct on_continue_callback {
-    void operator()(promise_result<TRes>&, bool canceled) const {
-      if (!clb._was_continued.exchange(true, std::memory_order::relaxed)) {
-        continue_callback::ptr continuation{std::exchange(clb._continue_f, nullptr)};
+    void operator()(promise_result<TRes>& /*result*/, bool canceled) const {
+      if (!clb->_was_continued.exchange(true, std::memory_order::relaxed)) {
+        continue_callback::ptr continuation{std::exchange(clb->_continue_f, nullptr)};
         ASYNC_CORO_ASSERT(continuation != nullptr);
 
-        do {
+        while (continuation) {
           std::tie(continuation, canceled) = continuation.release()->execute_and_destroy(canceled);
-        } while (continuation);
+        }
       }
     }
 
-    handle_awaiter& clb;
+    handle_awaiter* clb;
   };
 
  private:

@@ -10,20 +10,22 @@ namespace async_coro::internal {
 
 class await_cancel_task {
  public:
-  explicit await_cancel_task() noexcept {}
+  explicit await_cancel_task() noexcept = default;
 
   await_cancel_task(const await_cancel_task&) = delete;
   await_cancel_task(await_cancel_task&&) = delete;
 
+  ~await_cancel_task() noexcept = default;
+
   await_cancel_task& operator=(await_cancel_task&&) = delete;
   await_cancel_task& operator=(const await_cancel_task&) = delete;
 
-  bool await_ready() const noexcept { return false; }
+  [[nodiscard]] bool await_ready() const noexcept { return false; }  // NOLINT(*static)
 
   template <typename U>
     requires(std::derived_from<U, base_handle>)
-  void await_suspend(std::coroutine_handle<U> h) {
-    base_handle& promise = h.promise();
+  void await_suspend(std::coroutine_handle<U> handle) {
+    base_handle& promise = handle.promise();
 
     promise.request_cancel();
 
@@ -31,8 +33,8 @@ class await_cancel_task {
     suspension.try_to_continue_immediately();
   }
 
-  void await_resume() noexcept {
-    ASYNC_CORO_ASSERT(false);
+  void await_resume() noexcept {  // NOLINT(*static)
+    ASYNC_CORO_ASSERT(false);     // NOLINT(*static-assert)
   }
 };
 

@@ -10,7 +10,7 @@ namespace async_coro::internal {
 template <bool IsNoexcept, class R, class... TArgs>
 struct is_invocable_impl {
   template <class Fx>
-  static constexpr auto call(Fx&& obj, TArgs&&... args) noexcept(noexcept(obj(static_cast<TArgs&&>(args)...))) -> decltype(obj(static_cast<TArgs&&>(args)...)) {
+  static constexpr auto call(Fx&& obj, TArgs&&... args) noexcept(noexcept(obj(static_cast<TArgs&&>(args)...))) -> decltype(obj(static_cast<TArgs&&>(args)...)) {  // NOLINT(*-missing-std-forward)
     return obj(static_cast<TArgs&&>(args)...);
   }
 
@@ -31,7 +31,7 @@ struct function_signature {
 template <typename R, typename... TArgs>
 struct function_signature<R(TArgs...) noexcept> {
   using return_type = R;
-  inline static constexpr bool is_noexcept = true;
+  static constexpr bool is_noexcept = true;
 
   template <class Fx>
   using is_invocable = typename is_invocable_impl<is_noexcept, R, TArgs...>::template test<Fx>;
@@ -40,7 +40,7 @@ struct function_signature<R(TArgs...) noexcept> {
 template <typename R, typename... TArgs>
 struct function_signature<R(TArgs...)> {
   using return_type = R;
-  inline static constexpr bool is_noexcept = false;
+  static constexpr bool is_noexcept = false;
 
   template <class Fx>
   using is_invocable = typename is_invocable_impl<is_noexcept, R, TArgs...>::template test<Fx>;
@@ -48,7 +48,7 @@ struct function_signature<R(TArgs...)> {
 
 template <class FxSig, class Fx>
 struct is_invocable_by_signature {
-  inline static constexpr bool value = function_signature<FxSig>::template is_invocable<Fx>::value;
+  static constexpr bool value = function_signature<FxSig>::template is_invocable<Fx>::value;
 };
 
 }  // namespace async_coro::internal

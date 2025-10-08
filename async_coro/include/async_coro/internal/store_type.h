@@ -75,7 +75,7 @@ class result_coro_type<T&> {
 template <typename T>
 class store_type {
  public:
-  static inline constexpr bool nothrow_destructible =
+  static constexpr bool nothrow_destructible =
       std::is_nothrow_destructible_v<std::exception_ptr> &&
       (std::is_reference_v<T> || std::is_nothrow_destructible_v<T>);
 
@@ -86,6 +86,12 @@ class store_type {
 
   store_type() noexcept {}
   ~store_type() noexcept {}
+
+  store_type(const store_type&) = delete;
+  store_type(store_type&&) = delete;
+
+  store_type& operator=(const store_type&) = delete;
+  store_type& operator=(store_type&&) = delete;
 
   void destroy_exception() noexcept(std::is_nothrow_destructible_v<std::exception_ptr>) {
     std::destroy_at(&exception);
@@ -99,7 +105,7 @@ class store_type {
 template <>
 class store_type<void> {
  public:
-  static inline constexpr bool nothrow_destructible =
+  static constexpr bool nothrow_destructible =
       std::is_nothrow_destructible_v<std::exception_ptr>;
 
   union {
@@ -108,6 +114,12 @@ class store_type<void> {
 
   store_type() noexcept {}
   ~store_type() noexcept {}
+
+  store_type(const store_type&) = delete;
+  store_type(store_type&&) = delete;
+
+  store_type& operator=(const store_type&) = delete;
+  store_type& operator=(store_type&&) = delete;
 
   void destroy_exception() noexcept(std::is_nothrow_destructible_v<std::exception_ptr>) {
     std::destroy_at(&exception);

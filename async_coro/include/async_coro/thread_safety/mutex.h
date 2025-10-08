@@ -18,7 +18,12 @@ class CORO_THREAD_CAPABILITY("mutex") mutex : protected std::mutex {
 
   mutex() = default;
   mutex(const mutex&) = delete;
+  mutex(mutex&&) = delete;
+
+  ~mutex() noexcept = default;
+
   mutex& operator=(const mutex&) = delete;
+  mutex& operator=(mutex&&) = delete;
 
   void lock() CORO_THREAD_ACQUIRE() {
     super::lock();

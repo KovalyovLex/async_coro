@@ -53,9 +53,12 @@ class callback_base {
    * @param deleter A custom deleter function. If nullptr, the default `delete
    * this` is used.
    */
-  callback_base(deleter_t deleter = &default_deleter) noexcept : _deleter(deleter) {}
+  explicit callback_base(deleter_t deleter = &default_deleter) noexcept : _deleter(deleter) {}
   callback_base(const callback_base&) noexcept = default;
   callback_base(callback_base&&) noexcept = default;
+
+  callback_base& operator=(const callback_base&) noexcept = default;
+  callback_base& operator=(callback_base&&) noexcept = default;
 
   /**
    * @brief Destroys the callback object using either the custom deleter or the
@@ -66,7 +69,7 @@ class callback_base {
  protected:
   ~callback_base() noexcept = default;
 
-  deleter_t get_deleter() const noexcept { return _deleter; }
+  [[nodiscard]] deleter_t get_deleter() const noexcept { return _deleter; }
 
   static void default_deleter(callback_base*) noexcept;
 
@@ -97,11 +100,17 @@ class internal::callback_def<Noexcept, R(TArgs...)> : public callback_base {
   using executor_t = std::conditional_t<Noexcept, R (*)(callback_base*, bool /*with_destroy*/, TArgs...) noexcept, R (*)(callback_base*, bool /*with_destroy*/, TArgs...)>;
 
  protected:
-  callback_def(executor_t executor, deleter_t deleter = &callback_base::default_deleter) noexcept
+  explicit callback_def(executor_t executor, deleter_t deleter = &callback_base::default_deleter) noexcept
       : callback_base(deleter),
         _executor(executor) {
     ASYNC_CORO_ASSERT(executor);
   }
+
+  callback_def(const callback_def&) noexcept = default;
+  callback_def(callback_def&&) noexcept = default;
+
+  callback_def& operator=(const callback_def&) noexcept = default;
+  callback_def& operator=(callback_def&&) noexcept = default;
 
  public:
   /**
@@ -134,8 +143,8 @@ class internal::callback_def<Noexcept, R(TArgs...)> : public callback_base {
    */
   template <class Fx>
     requires(std::is_invocable_v<Fx, TArgs...> && std::is_same_v<R, std::invoke_result_t<Fx, TArgs...>>)
-  static callback_t* allocate(Fx&& fx) {
-    return new internal::callback_impl<std::remove_cvref_t<Fx>, Noexcept, R(TArgs...)>(std::forward<Fx>(fx));
+  static ptr allocate(Fx&& func) {
+    return ptr{new internal::callback_impl<std::remove_cvref_t<Fx>, Noexcept, R(TArgs...)>(std::forward<Fx>(func))};
   }
 
  protected:
@@ -161,7 +170,7 @@ class callback<R(TArgs...)> : public internal::callback_def<false, R(TArgs...)> 
    * invoked.
    * @param deleter A custom deleter function.
    */
-  callback(super::executor_t executor, super::deleter_t deleter = &callback_base::default_deleter) noexcept
+  explicit callback(super::executor_t executor, super::deleter_t deleter = &callback_base::default_deleter) noexcept
       : super(executor, deleter) {
   }
 };
@@ -177,7 +186,7 @@ class callback<R(TArgs...) noexcept> : public internal::callback_def<true, R(TAr
    * invoked.
    * @param deleter A custom deleter function.
    */
-  callback(super::executor_t executor, super::deleter_t deleter = &callback_base::default_deleter) noexcept
+  explicit callback(super::executor_t executor, super::deleter_t deleter = &callback_base::default_deleter) noexcept
       : super(executor, deleter) {
   }
 };
@@ -194,18 +203,27 @@ class callback<R(TArgs...) noexcept> : public internal::callback_def<true, R(TAr
  * @return A std::unique_ptr to the newly allocated callback.
  */
 template <class Fx>
-auto allocate_callback(Fx&& fx) {
+auto allocate_callback(Fx&& func) {
   using callback_type = typename internal::deduce_function_signature<std::remove_cvref_t<Fx>>::callback_type;
 
-  return typename callback_type::ptr{callback_type::allocate(std::forward<Fx>(fx))};
+  return callback_type::allocate(std::forward<Fx>(func));
 }
 
 namespace internal {
 
-struct callback_raii_deleter {
+class callback_raii_deleter {
+ public:
+  explicit callback_raii_deleter(callback_base& clb) noexcept
+      : callback(clb) {}
   ~callback_raii_deleter() noexcept {
     callback.destroy();
   }
+  callback_raii_deleter(const callback_raii_deleter&) = delete;
+  callback_raii_deleter(callback_raii_deleter&&) = delete;
+
+  callback_raii_deleter& operator=(const callback_raii_deleter&) = delete;
+  callback_raii_deleter& operator=(callback_raii_deleter&&) = delete;
+
   callback_base& callback;
 };
 
@@ -215,9 +233,16 @@ class callback_impl<Fx, Noexcept, R(TArgs...)> final : public std::conditional_t
 
  public:
   template <class T>
-  callback_impl(T&& fx) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
+    requires(!std::is_same_v<std::remove_cvref_t<T>, callback_impl<Fx, Noexcept, R(TArgs...)>>)
+  explicit callback_impl(T&& func) noexcept(std::is_nothrow_constructible_v<Fx, T&&>)
       : super(&executor, get_deleter()),
-        _fx(std::forward<T>(fx)) {}
+        _fx(std::forward<T>(func)) {}
+
+  callback_impl(const callback_impl&) noexcept(std::is_nothrow_copy_constructible_v<Fx>) = default;
+  callback_impl(callback_impl&&) noexcept(std::is_nothrow_move_constructible_v<Fx>) = default;
+
+  callback_impl& operator=(const callback_impl&) noexcept(std::is_nothrow_copy_constructible_v<Fx>) = default;
+  callback_impl& operator=(callback_impl&&) noexcept(std::is_nothrow_move_constructible_v<Fx>) = default;
 
  protected:
   ~callback_impl() noexcept = default;
@@ -228,7 +253,7 @@ class callback_impl<Fx, Noexcept, R(TArgs...)> final : public std::conditional_t
       return &callback_base::default_deleter;
     } else {
       return +[](callback_base* base) noexcept {
-        delete static_cast<callback_impl*>(base);
+        delete static_cast<callback_impl*>(base);  // NOLINT(*-owning-*)
       };
     }
   }
@@ -237,11 +262,10 @@ class callback_impl<Fx, Noexcept, R(TArgs...)> final : public std::conditional_t
     callback_impl& clb = *static_cast<callback_impl*>(base);
 
     if (with_destroy) {
-      callback_raii_deleter t{clb};
-      return clb._fx(std::forward<TArgs>(value)...);
-    } else {
+      callback_raii_deleter deleter{clb};
       return clb._fx(std::forward<TArgs>(value)...);
     }
+    return clb._fx(std::forward<TArgs>(value)...);
   }
 
  private:
@@ -259,7 +283,8 @@ template <typename Fx, typename R, typename... TArgs>
 class callback_on_stack<Fx, R(TArgs...)> : public callback<R(TArgs...)> {
  public:
   template <class... TArgs2>
-  callback_on_stack(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
+    requires(sizeof...(TArgs2) != 1 || (!std::is_same_v<std::remove_cvref_t<TArgs2>, callback_on_stack<Fx, R(TArgs...)>> && ...))
+  explicit callback_on_stack(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
       : callback<R(TArgs...)>(&executor, nullptr),
         _fx(std::forward<TArgs2>(args)...) {}
 
@@ -272,7 +297,7 @@ class callback_on_stack<Fx, R(TArgs...)> : public callback<R(TArgs...)> {
   ~callback_on_stack() noexcept = default;
 
  private:
-  static R executor(callback_base* base, bool, TArgs... value) {
+  static R executor(callback_base* base, bool /*destroy*/, TArgs... value) {
     // no destroy need
     return static_cast<callback_on_stack*>(base)->_fx(std::forward<TArgs>(value)...);
   }
@@ -285,7 +310,8 @@ template <typename Fx, typename R, typename... TArgs>
 class callback_on_stack<Fx, R(TArgs...) noexcept> : public callback<R(TArgs...) noexcept> {
  public:
   template <class... TArgs2>
-  callback_on_stack(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
+    requires(sizeof...(TArgs2) != 1 || (!std::is_same_v<std::remove_cvref_t<TArgs2>, callback_on_stack<Fx, R(TArgs...) noexcept>> && ...))
+  explicit callback_on_stack(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
       : callback<R(TArgs...)>(&executor, nullptr),
         _fx(std::forward<TArgs2>(args)...) {}
 
@@ -298,7 +324,7 @@ class callback_on_stack<Fx, R(TArgs...) noexcept> : public callback<R(TArgs...) 
   ~callback_on_stack() noexcept = default;
 
  private:
-  static R executor(callback_base* base, bool, TArgs... value) noexcept {
+  static R executor(callback_base* base, bool /*destroy*/, TArgs... value) noexcept {
     // no destroy need
     return static_cast<callback_on_stack*>(base)->_fx(std::forward<TArgs>(value)...);
   }

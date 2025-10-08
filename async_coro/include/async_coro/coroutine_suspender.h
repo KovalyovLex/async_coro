@@ -25,7 +25,7 @@ class base_handle;
  */
 class coroutine_suspender {
  public:
-  coroutine_suspender() noexcept {}
+  coroutine_suspender() noexcept = default;
   coroutine_suspender(base_handle& handle, std::uint32_t suspend_count) noexcept
       : _handle(&handle),
         _suspend_count(suspend_count) {

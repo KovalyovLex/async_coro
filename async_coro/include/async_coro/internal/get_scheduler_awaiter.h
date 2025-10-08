@@ -13,19 +13,21 @@ namespace async_coro::internal {
 
 class get_scheduler_awaiter {
  public:
-  explicit get_scheduler_awaiter() noexcept {}
+  explicit get_scheduler_awaiter() noexcept = default;
 
   get_scheduler_awaiter(const get_scheduler_awaiter&) = delete;
   get_scheduler_awaiter(get_scheduler_awaiter&&) = delete;
 
+  ~get_scheduler_awaiter() noexcept = default;
+
   get_scheduler_awaiter& operator=(get_scheduler_awaiter&&) = delete;
   get_scheduler_awaiter& operator=(const get_scheduler_awaiter&) = delete;
 
-  bool await_ready() const noexcept { return true; }
+  [[nodiscard]] bool await_ready() const noexcept { return true; }  // NOLINT(*static*)
 
   template <typename U>
-  void await_suspend(std::coroutine_handle<U>) noexcept {
-    ASYNC_CORO_ASSERT(false);  // we should newer suspend this immediate coroutine
+  void await_suspend(std::coroutine_handle<U> /*handle*/) noexcept {
+    ASYNC_CORO_ASSERT(false);  // NOLINT(*static-assert) // we should newer suspend this immediate coroutine
   }
 
   scheduler& await_resume() noexcept {

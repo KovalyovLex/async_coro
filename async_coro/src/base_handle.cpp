@@ -33,20 +33,20 @@ void base_handle::set_owning_by_task_handle(bool owning) {
   }
 }
 
-void base_handle::set_continuation_functor(callback_base* f) noexcept {
+void base_handle::set_continuation_functor(callback_base* func) noexcept {
   ASYNC_CORO_ASSERT(!is_embedded());
 
-  auto old_value = _continuation.exchange(f, std::memory_order::release);
-  if (old_value) {
+  auto* old_value = _continuation.exchange(func, std::memory_order::release);
+  if (old_value != nullptr) {
     old_value->destroy();
   }
 }
 
 void base_handle::destroy_impl() {
-  auto continuation = release_continuation_functor();
+  auto* continuation = release_continuation_functor();
 
   // continuation can hold something from coro. So destroy continuation first
-  if (continuation) {
+  if (continuation != nullptr) {
     continuation->destroy();
   }
 
@@ -62,7 +62,7 @@ uint8_t base_handle::dec_num_owners() noexcept {
     new_value = (expected - num_owners_step);
     ASYNC_CORO_ASSERT(expected >= num_owners_step);
   }
-  return (new_value & num_owners_mask) >> 4;
+  return (new_value & num_owners_mask) >> 4U;  // NOLINT(*-signed-bitwise)
 }
 
 void base_handle::inc_num_owners() noexcept {
@@ -82,12 +82,12 @@ bool base_handle::request_cancel() {
     // this is first cancel - notify continuation
 
     // sync data
-    get_coroutine_state(std::memory_order::acquire);
+    (void)get_coroutine_state(std::memory_order::acquire);
 
     if ((state == coroutine_state::suspended || state == coroutine_state::waiting_switch)) {
       // It should be unsafe to use this fields if state prior cancel request was suspended
       // as any continue after our request leaves this fields untouched
-      if (_current_child) {
+      if (_current_child != nullptr) {
         _current_child->request_cancel();
       }
       if (auto* on_cancel = _on_cancel.exchange(nullptr, std::memory_order::relaxed)) {

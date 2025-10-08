@@ -11,12 +11,17 @@ class CORO_THREAD_CAPABILITY("mutex") no_lock_shared_mutex {
 
   no_lock_shared_mutex() = default;
   no_lock_shared_mutex(const no_lock_shared_mutex&) = delete;
+  no_lock_shared_mutex(no_lock_shared_mutex&&) = delete;
+
+  ~no_lock_shared_mutex() noexcept = default;
+
   no_lock_shared_mutex& operator=(const no_lock_shared_mutex&) = delete;
+  no_lock_shared_mutex& operator=(no_lock_shared_mutex&&) = delete;
 
   constexpr void lock() CORO_THREAD_ACQUIRE() {
   }
 
-  [[nodiscard]] constexpr bool try_lock() noexcept CORO_THREAD_TRY_ACQUIRE(true) {
+  [[nodiscard]] constexpr bool try_lock() noexcept CORO_THREAD_TRY_ACQUIRE(true) {  // NOLINT(*-static)
     return true;
   }
 
@@ -29,7 +34,7 @@ class CORO_THREAD_CAPABILITY("mutex") no_lock_shared_mutex {
   constexpr void unlock_shared() noexcept CORO_THREAD_RELEASE_SHARED() {
   }
 
-  constexpr bool try_lock_shared() noexcept CORO_THREAD_TRY_ACQUIRE_SHARED(true) {
+  constexpr bool try_lock_shared() noexcept CORO_THREAD_TRY_ACQUIRE_SHARED(true) {  // NOLINT(*-static)
     return true;
   }
 };

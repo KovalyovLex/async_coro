@@ -52,8 +52,13 @@ class i_execution_system {
   using ptr = std::unique_ptr<i_execution_system>;
 
   i_execution_system() noexcept = default;
+  i_execution_system(const i_execution_system &) noexcept = default;
+  i_execution_system(i_execution_system &&) noexcept = default;
 
   virtual ~i_execution_system() noexcept = default;
+
+  i_execution_system &operator=(const i_execution_system &) noexcept = default;
+  i_execution_system &operator=(i_execution_system &&) noexcept = default;
 
   /**
    * @brief Schedules a task for execution on the specified queue
@@ -76,7 +81,7 @@ class i_execution_system {
    * @note Task execution order within a queue is not guaranteed unless specified by the implementation
    * @note The task function object will be moved into the execution system
    */
-  virtual void plan_execution(task_function f, execution_queue_mark execution_queue) = 0;
+  virtual void plan_execution(task_function func, execution_queue_mark execution_queue) = 0;
 
   /**
    * @brief Executes a task immediately if possible, otherwise schedules it
@@ -101,7 +106,7 @@ class i_execution_system {
    * @note This method provides better performance than plan_execution() when immediate
    *       execution is possible
    */
-  virtual void execute_or_plan_execution(task_function f, execution_queue_mark execution_queue) = 0;
+  virtual void execute_or_plan_execution(task_function func, execution_queue_mark execution_queue) = 0;
 
   /**
    * @brief Checks if the current thread can execute tasks from the specified queue
@@ -122,7 +127,7 @@ class i_execution_system {
    * @note This method is useful for optimizing task execution by avoiding
    *       unnecessary queuing when immediate execution is possible
    */
-  virtual bool is_current_thread_fits(execution_queue_mark execution_queue) const noexcept = 0;
+  [[nodiscard]] virtual bool is_current_thread_fits(execution_queue_mark execution_queue) const noexcept = 0;
 };
 
 }  // namespace async_coro

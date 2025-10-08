@@ -38,7 +38,7 @@ class task_launcher {
    *
    * @param start_function A callback function that returns a task<R> when executed
    */
-  task_launcher(callback<task<R>()>::ptr start_function) noexcept
+  explicit task_launcher(callback<task<R>()>::ptr start_function) noexcept
       : task_launcher(std::move(start_function), execution_queues::main) {}
 
   /**
@@ -48,7 +48,7 @@ class task_launcher {
    * @param execution_queue The execution queue where the task should be scheduled
    */
   task_launcher(callback<task<R>() noexcept>::ptr start_function, execution_queue_mark execution_queue) noexcept
-      : _start_function(reinterpret_cast<callback<task<R>()>*>(start_function.release())),
+      : _start_function(reinterpret_cast<callback<task<R>()>*>(start_function.release())),  // NOLINT(*-reinterpret-cast)
         _coro(typename task<R>::handle_type(nullptr)),
         _execution_queue(execution_queue) {}
 
@@ -57,7 +57,7 @@ class task_launcher {
    *
    * @param start_function A noexcept callback function that returns a task<R> when executed
    */
-  task_launcher(callback<task<R>() noexcept>::ptr start_function) noexcept
+  explicit task_launcher(callback<task<R>() noexcept>::ptr start_function) noexcept
       : task_launcher(std::move(start_function), execution_queues::main) {}
 
   /**
@@ -83,8 +83,8 @@ class task_launcher {
    * @param execution_queue The execution queue where the task should be scheduled
    */
   template <typename T>
-    requires(std::is_invocable_r_v<task<R>, T> && std::is_convertible_v<T &&, task<R> (*)()>)
-  task_launcher(T&& start_function, execution_queue_mark execution_queue)
+    requires(std::is_invocable_r_v<task<R>, T> && std::is_convertible_v<T, task<R> (*)()>)
+  task_launcher(const T& start_function, execution_queue_mark execution_queue)
       : task_launcher(start_function(), execution_queue) {}
 
   /**
@@ -97,7 +97,7 @@ class task_launcher {
    */
   template <typename T>
     requires(std::is_invocable_r_v<task<R>, T>)
-  task_launcher(T&& start_function)
+  explicit task_launcher(T&& start_function)
       : task_launcher(std::forward<T>(start_function), execution_queues::main) {}
 
   /**
@@ -114,7 +114,7 @@ class task_launcher {
    *
    * @param coro An existing task<R> object to be launched
    */
-  task_launcher(task<R> coro) noexcept
+  explicit task_launcher(task<R> coro) noexcept
       : task_launcher(std::move(coro), execution_queues::main) {}
 
   /**
@@ -147,7 +147,7 @@ class task_launcher {
    *
    * @return The execution queue where tasks from this launcher will be scheduled
    */
-  execution_queue_mark get_execution_queue() const noexcept {
+  [[nodiscard]] execution_queue_mark get_execution_queue() const noexcept {
     return _execution_queue;
   }
 
@@ -181,6 +181,6 @@ template <typename T>
 task_launcher(T&&, execution_queue_mark) -> task_launcher<internal::unwrap_task_t<std::invoke_result_t<T>>>;
 
 template <typename... TArgs>
-concept is_task_launchable = requires(TArgs&&... t) { task_launcher{std::forward<TArgs>(t)...}; };
+concept is_task_launchable = requires(TArgs&&... task) { task_launcher{std::forward<TArgs>(task)...}; };
 
 }  // namespace async_coro

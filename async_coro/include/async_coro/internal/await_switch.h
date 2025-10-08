@@ -13,18 +13,20 @@ struct await_switch {
   await_switch(const await_switch&) = delete;
   await_switch(await_switch&&) = delete;
 
+  ~await_switch() noexcept = default;
+
   await_switch& operator=(await_switch&&) = delete;
   await_switch& operator=(const await_switch&) = delete;
 
-  bool await_ready() const noexcept { return !need_switch; }
+  [[nodiscard]] bool await_ready() const noexcept { return !need_switch; }
 
   template <typename U>
     requires(std::derived_from<U, base_handle>)
-  void await_suspend(std::coroutine_handle<U> h) {
+  void await_suspend(std::coroutine_handle<U> handle) {
     ASYNC_CORO_ASSERT(need_switch);
 
-    base_handle& handle = h.promise();
-    handle.switch_execution_queue(execution_queue);
+    base_handle& promise = handle.promise();
+    promise.switch_execution_queue(execution_queue);
   }
 
   void await_resume() const noexcept {}

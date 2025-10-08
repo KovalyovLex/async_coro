@@ -28,21 +28,21 @@ struct execution_thread_config {
    * @brief Constructs a thread configuration with a name
    * @param name The name of the thread (used for debugging and identification)
    */
-  execution_thread_config(std::string name) : name(std::move(name)) {}
+  execution_thread_config(std::string name) : name(std::move(name)) {}  // NOLINT(*-explicit-*)
 
   /**
    * @brief Constructs a thread configuration with name and allowed task mask
    * @param name The name of the thread
    * @param m The execution thread mask defining which queues this thread can process
    */
-  execution_thread_config(std::string name, execution_thread_mask m) : name(std::move(name)), allowed_tasks(m) {}
+  execution_thread_config(std::string name, execution_thread_mask mark) : name(std::move(name)), allowed_tasks(mark) {}
 
   /**
    * @brief Constructs a thread configuration with name and queue mark
    * @param name The name of the thread
    * @param m The execution queue mark defining which queues this thread can process
    */
-  execution_thread_config(std::string name, execution_queue_mark m) : name(std::move(name)), allowed_tasks(m) {}
+  execution_thread_config(std::string name, execution_queue_mark mark) : name(std::move(name)), allowed_tasks(mark) {}
 
   /** @brief The name of the thread for debugging and identification purposes */
   std::string name;
@@ -51,7 +51,7 @@ struct execution_thread_config {
   execution_thread_mask allowed_tasks = execution_queues::worker | execution_queues::any;
 
   /** @brief Num empty worker loops to do before going to sleep on notifier */
-  std::size_t num_loops_before_sleep = 30;
+  std::size_t num_loops_before_sleep = 30;  // NOLINT(*-magic-*)
 };
 
 /**
@@ -101,7 +101,7 @@ class execution_system : public i_execution_system {
    * @note Should be created only from the "main" thread that will call update_from_main()
    * @note The execution system will start all worker threads immediately upon construction
    */
-  execution_system(const execution_system_config &config, execution_queue_mark max_queue = execution_queues::any);
+  explicit execution_system(const execution_system_config &config, execution_queue_mark max_queue = execution_queues::any);
 
   execution_system(const execution_system &) = delete;
   execution_system(execution_system &&) = delete;
@@ -129,7 +129,7 @@ class execution_system : public i_execution_system {
    * @note The task will be executed asynchronously by an appropriate thread
    * @note Thread safety: This method is thread-safe and can be called from any thread
    */
-  void plan_execution(task_function f, execution_queue_mark execution_queue) override;
+  void plan_execution(task_function func, execution_queue_mark execution_queue) override;
 
   /**
    * @brief Executes a task immediately if possible, otherwise schedules it
@@ -144,7 +144,7 @@ class execution_system : public i_execution_system {
    * @note This method provides better performance for tasks that can be executed immediately
    * @note Thread safety: This method is thread-safe and can be called from any thread
    */
-  void execute_or_plan_execution(task_function f, execution_queue_mark execution_queue) override;
+  void execute_or_plan_execution(task_function func, execution_queue_mark execution_queue) override;
 
   /**
    * @brief Checks if the current thread can execute tasks from the specified queue
@@ -157,7 +157,7 @@ class execution_system : public i_execution_system {
    *
    * @note This method is useful for determining if immediate execution is possible
    */
-  bool is_current_thread_fits(execution_queue_mark execution_queue) const noexcept override;
+  [[nodiscard]] bool is_current_thread_fits(execution_queue_mark execution_queue) const noexcept override;
 
   /**
    * @brief Processes one task from the main thread's execution queues
@@ -179,7 +179,7 @@ class execution_system : public i_execution_system {
    *
    * @note This count does not include the main thread
    */
-  std::uint32_t get_num_worker_threads() const noexcept { return _num_workers; }
+  [[nodiscard]] std::uint32_t get_num_worker_threads() const noexcept { return _num_workers; }
 
   /**
    * @brief Returns the number of workers that can process tasks from the specified queue
@@ -192,7 +192,7 @@ class execution_system : public i_execution_system {
    *
    * @note This includes both worker threads and the main thread if it has appropriate permissions
    */
-  std::uint32_t get_num_workers_for_queue(execution_queue_mark execution_queue) const noexcept;
+  [[nodiscard]] std::uint32_t get_num_workers_for_queue(execution_queue_mark execution_queue) const noexcept;
 
  private:
   struct worker_thread_data;
@@ -271,12 +271,14 @@ class execution_system : public i_execution_system {
   };
 
   /** @brief Array of task queues, one for each execution queue mark */
+  // NOLINTNEXTLINE(*-avoid-c-arrays)
   std::unique_ptr<task_queue[]> _tasks_queues;
 
   /** @brief Pointers to task queues that the main thread can process */
   std::vector<tasks *> _main_thread_queues;
 
   /** @brief Array of worker thread data structures */
+  // NOLINTNEXTLINE(*-avoid-c-arrays)
   std::unique_ptr<worker_thread_data[]> _thread_data;
 
   /** @brief ID of the main thread for identification purposes */

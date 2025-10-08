@@ -1,0 +1,61 @@
+name: Linter checks for C++ code
+
+on:
+  push:
+    branches: [ "main" ]
+    paths: ['**.c', '**.cpp', '**.h', '**.hpp', '**.cxx', '**.hxx', '**.cc', '**.hh', '**CMakeLists.txt', '**.cmake']
+  pull_request:
+    branches: [ "main" ]
+    paths: ['**.c', '**.cpp', '**.h', '**.hpp', '**.cxx', '**.hxx', '**.cc', '**.hh', '**CMakeLists.txt', '**.cmake']
+
+jobs:
+  linter-check:
+    name: Linter Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Configure CMake
+        run: >
+          cmake -B ${{ github.workspace }}/build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=TRUE
+          -S ${{ github.workspace }}
+
+      - uses: cpp-linter/cpp-linter-action@v2
+        id: linter
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          ignore: .github|.vscode|build
+          ignore-tidy: tests
+          version: 20
+          database: build
+          style: 'file'  # Use .clang-format config file
+          tidy-checks: '' # Use .clang-tidy config file
+          # only 'update' a single comment in a pull request thread.
+          thread-comments: ${{ github.event_name == 'pull_request' && 'update' }}
+          
+      - name: Fail fast?!
+        if: steps.linter.outputs.checks-failed > 0
+        run: exit 1
+
+  dispatch-pr:
+    needs: linter-check
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Trigger gatekeeper for PR approval
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          event-type: check-finished
+          client-payload: |
+            {
+              "sha": "${{ github.event.pull_request.head.sha }}",
+              "future_sha": "${{ github.sha }}",
+              "pr": "${{ github.event.pull_request.number }}"
+            }

@@ -12,13 +12,16 @@ class CORO_THREAD_SCOPED_CAPABILITY unique_lock : protected std::unique_lock<typ
 
  public:
   explicit unique_lock(T& mutex) CORO_THREAD_ACQUIRE(mutex) : super(mutex) {}
-  explicit unique_lock(T& mutex, std::adopt_lock_t) CORO_THREAD_REQUIRES(mutex) : super(mutex, std::adopt_lock) {}
-  explicit unique_lock(T& mutex, std::defer_lock_t) CORO_THREAD_EXCLUDES(mutex) : super(mutex, std::defer_lock) {}
+  explicit unique_lock(T& mutex, std::adopt_lock_t /*tag*/) CORO_THREAD_REQUIRES(mutex) : super(mutex, std::adopt_lock) {}
+  explicit unique_lock(T& mutex, std::defer_lock_t /*tag*/) CORO_THREAD_EXCLUDES(mutex) : super(mutex, std::defer_lock) {}
 
   unique_lock(unique_lock&&) noexcept = default;
-  unique_lock& operator=(unique_lock&&) noexcept = default;
+  unique_lock(const unique_lock&) = delete;
 
   ~unique_lock() noexcept CORO_THREAD_RELEASE() = default;
+
+  unique_lock& operator=(const unique_lock&) = delete;
+  unique_lock& operator=(unique_lock&&) noexcept = default;
 
   void lock() CORO_THREAD_ACQUIRE() { super::lock(); }
   void unlock() CORO_THREAD_RELEASE() { super::unlock(); }

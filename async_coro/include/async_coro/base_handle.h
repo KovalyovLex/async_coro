@@ -63,11 +63,11 @@ class base_handle {
   friend scheduler;
   friend coroutine_suspender;
 
-  static constexpr uint8_t coroutine_state_mask = (1 << 0) | (1 << 1) | (1 << 2);
-  static constexpr uint8_t is_embedded_mask = (1 << 3);
-  static constexpr uint8_t num_owners_step = (1 << 4);
-  static constexpr uint8_t num_owners_mask = (1 << 4) | (1 << 5);  // can have 2 owners max (1 is scheduler and another is task_handle)
-  static constexpr uint8_t is_cancel_requested_mask = (1 << 6);
+  static constexpr uint8_t coroutine_state_mask = (1U << 0U) | (1U << 1U) | (1U << 2U);
+  static constexpr uint8_t is_embedded_mask = (1U << 3U);
+  static constexpr uint8_t num_owners_step = (1U << 4U);
+  static constexpr uint8_t num_owners_mask = (1U << 4U) | (1U << 5U);  // can have 2 owners max (1 is scheduler and another is task_handle)
+  static constexpr uint8_t is_cancel_requested_mask = (1U << 6U);
 
  public:
   /**
@@ -81,12 +81,13 @@ class base_handle {
    * @note The handle must be initialized with a coroutine before use
    */
   base_handle() noexcept
-      : _parent(nullptr),
-        _is_initialized(false),
-        _is_result(false) {}
+      : _parent(nullptr) {}
 
   base_handle(const base_handle&) = delete;
   base_handle(base_handle&&) = delete;
+
+  base_handle& operator=(const base_handle&) = delete;
+  base_handle& operator=(base_handle&&) = delete;
 
   /**
    * @brief Destructor
@@ -110,7 +111,7 @@ class base_handle {
    * @note The scheduler must be properly initialized before calling this method
    * @note This method will assert if the scheduler is null
    */
-  scheduler& get_scheduler() noexcept {
+  [[nodiscard]] scheduler& get_scheduler() noexcept {
     ASYNC_CORO_ASSERT(_scheduler != nullptr);
     return *_scheduler;
   }
@@ -126,7 +127,7 @@ class base_handle {
    * @note The scheduler must be properly initialized before calling this method
    * @note This method will assert if the scheduler is null
    */
-  const scheduler& get_scheduler() const noexcept {
+  [[nodiscard]] const scheduler& get_scheduler() const noexcept {
     ASYNC_CORO_ASSERT(_scheduler != nullptr);
     return *_scheduler;
   }
@@ -143,7 +144,7 @@ class base_handle {
    * @note This method is useful for determining if immediate execution is safe
    * @note The result may change if the coroutine switches execution contexts
    */
-  bool is_current_thread_same() const noexcept {
+  [[nodiscard]] bool is_current_thread_same() const noexcept {
     return _execution_thread == std::this_thread::get_id();
   }
 
@@ -160,7 +161,7 @@ class base_handle {
    * @note Embedded handles are managed by their parent handle
    * @note This is an alias for is_embedded() for public API consistency
    */
-  bool is_coro_embedded() const noexcept { return is_embedded(); }
+  [[nodiscard]] bool is_coro_embedded() const noexcept { return is_embedded(); }
 
   /**
    * @brief Checks if the coroutine has finished using acquire memory ordering
@@ -174,7 +175,7 @@ class base_handle {
    * @note Uses acquire memory ordering for proper thread synchronization
    * @note This method provides stronger memory ordering guarantees than is_finished()
    */
-  bool is_finished_acquire() const noexcept { return get_coroutine_state(std::memory_order::acquire) == coroutine_state::finished; }
+  [[nodiscard]] bool is_finished_acquire() const noexcept { return get_coroutine_state(std::memory_order::acquire) == coroutine_state::finished; }
 
   /**
    * @brief Checks if the coroutine has finished using relaxed memory ordering
@@ -188,7 +189,7 @@ class base_handle {
    * @note Uses relaxed memory ordering for maximum performance
    * @note This method provides weaker memory ordering guarantees than is_finished_acquire()
    */
-  bool is_finished() const noexcept { return get_coroutine_state(std::memory_order::relaxed) == coroutine_state::finished; }
+  [[nodiscard]] bool is_finished() const noexcept { return get_coroutine_state(std::memory_order::relaxed) == coroutine_state::finished; }
 
   /**
    * @brief Checks if the coroutine is currently suspended
@@ -202,7 +203,7 @@ class base_handle {
    * @note Uses relaxed memory ordering for performance
    * @note Suspended coroutines are waiting for some condition to be met
    */
-  bool is_suspended() const noexcept { return get_coroutine_state() == coroutine_state::suspended; }
+  [[nodiscard]] bool is_suspended() const noexcept { return get_coroutine_state() == coroutine_state::suspended; }
 
   /**
    * @brief Switches the coroutine to a different execution queue
@@ -234,7 +235,7 @@ class base_handle {
    * @note The execution queue may change during the coroutine's lifetime
    * @note This method uses relaxed memory ordering for performance
    */
-  execution_queue_mark get_execution_queue() const noexcept {
+  [[nodiscard]] execution_queue_mark get_execution_queue() const noexcept {
     return _execution_queue;
   }
 
@@ -248,7 +249,7 @@ class base_handle {
    * @see `coroutine_suspender`
    */
   auto suspend(std::uint32_t suspend_count, callback<void()>* on_cancel) noexcept {
-    ASYNC_CORO_ASSERT_VARIABLE auto prev = this->_on_cancel.exchange(on_cancel, std::memory_order::relaxed);
+    ASYNC_CORO_ASSERT_VARIABLE auto* prev = this->_on_cancel.exchange(on_cancel, std::memory_order::relaxed);
     ASYNC_CORO_ASSERT(prev == nullptr);
 
     return coroutine_suspender{*this, suspend_count};
@@ -267,7 +268,7 @@ class base_handle {
    * @return previous state of cancel request
    */
   bool is_cancelled() noexcept {
-    return _atomic_state.load(std::memory_order::relaxed) & is_cancel_requested_mask;
+    return (_atomic_state.load(std::memory_order::relaxed) & is_cancel_requested_mask) != 0;
   }
 
   /**
@@ -275,7 +276,7 @@ class base_handle {
    *
    * @return std::pair of coroutine_state and state of cancel request
    */
-  std::pair<coroutine_state, bool> get_coroutine_state_and_cancelled(std::memory_order order = std::memory_order::relaxed) const noexcept {
+  [[nodiscard]] std::pair<coroutine_state, bool> get_coroutine_state_and_cancelled(std::memory_order order = std::memory_order::relaxed) const noexcept {
     const auto state = _atomic_state.load(order);
     return {static_cast<coroutine_state>(state & coroutine_state_mask), state & is_cancel_requested_mask};
   }
@@ -289,7 +290,7 @@ class base_handle {
   virtual void check_exception_base() = 0;
 #endif
 
-  void init_promise(std::coroutine_handle<> h) noexcept { _handle = h; }
+  void init_promise(std::coroutine_handle<> handle) noexcept { _handle = handle; }
   std::coroutine_handle<> get_handle() noexcept { return _handle; }
 
   void on_final_suspend() noexcept {
@@ -304,12 +305,12 @@ class base_handle {
     return is_embedded() ? nullptr : _continuation.exchange(nullptr, std::memory_order::acquire);
   }
 
-  void set_continuation_functor(callback_base* f) noexcept;
+  void set_continuation_functor(callback_base* func) noexcept;
 
  private:
   void destroy_impl();
 
-  base_handle* get_parent() const noexcept {
+  [[nodiscard]] base_handle* get_parent() const noexcept {
     return is_embedded() ? _parent : nullptr;
   }
 
@@ -328,7 +329,7 @@ class base_handle {
 
   void inc_num_owners() noexcept;
 
-  coroutine_state get_coroutine_state(std::memory_order order = std::memory_order::relaxed) const noexcept {
+  [[nodiscard]] coroutine_state get_coroutine_state(std::memory_order order = std::memory_order::relaxed) const noexcept {
     return static_cast<coroutine_state>(_atomic_state.load(order) & coroutine_state_mask);
   }
 
@@ -342,11 +343,11 @@ class base_handle {
 
   // atomically updates state and returns previous value of cancel request
   bool set_coroutine_state_and_get_cancelled(coroutine_state value) noexcept {
-    return update_value(static_cast<uint8_t>(value), get_inverted_mask(coroutine_state_mask)) & is_cancel_requested_mask;
+    return (update_value(static_cast<uint8_t>(value), get_inverted_mask(coroutine_state_mask)) & is_cancel_requested_mask) != 0;
   }
 
-  bool is_embedded() const noexcept {
-    return _atomic_state.load(std::memory_order::relaxed) & is_embedded_mask;
+  [[nodiscard]] bool is_embedded() const noexcept {
+    return (_atomic_state.load(std::memory_order::relaxed) & is_embedded_mask) != 0;
   }
 
   void set_embedded(bool value) noexcept {
@@ -361,7 +362,7 @@ class base_handle {
 
   uint8_t update_value(const uint8_t value, const uint8_t mask, std::memory_order read = std::memory_order::relaxed, std::memory_order write = std::memory_order::relaxed) noexcept {
     uint8_t expected = _atomic_state.load(read);
-    while (!_atomic_state.compare_exchange_strong(expected, (expected & mask) | value, write, read)) {
+    while (!_atomic_state.compare_exchange_strong(expected, (expected & mask) | value, write, read)) {  // NOLINT(*-signed-bitwise)
     }
     return expected;
   }
@@ -377,13 +378,13 @@ class base_handle {
   callback_base::ptr _start_function;
   std::atomic<callback<void()>*> _on_cancel = nullptr;  // callback for our coroutine (not continuation of others) to be cancelled
   base_handle* _current_child = nullptr;
-  std::thread::id _execution_thread = {};
+  std::thread::id _execution_thread;
   execution_queue_mark _execution_queue = execution_queues::main;
   std::atomic<uint8_t> _atomic_state{num_owners_step};  // 1 owner by default
 
  protected:
-  bool _is_initialized;
-  bool _is_result;
+  bool _is_initialized = false;  // NOLINT(*non-private-member*)
+  bool _is_result = false;       // NOLINT(*non-private-member*)
 };
 
 }  // namespace async_coro

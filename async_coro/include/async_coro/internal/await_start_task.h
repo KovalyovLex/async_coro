@@ -19,15 +19,17 @@ class await_start_task {
   await_start_task(const await_start_task&) = delete;
   await_start_task(await_start_task&&) = delete;
 
+  ~await_start_task() noexcept = default;
+
   await_start_task& operator=(await_start_task&&) = delete;
   await_start_task& operator=(const await_start_task&) = delete;
 
-  bool await_ready() const noexcept { return true; }
+  [[nodiscard]] bool await_ready() const noexcept { return true; }  // NOLINT(*static)
 
   template <typename U>
     requires(std::derived_from<U, base_handle>)
-  void await_suspend(std::coroutine_handle<U>) noexcept {
-    ASYNC_CORO_ASSERT(false);  // we should newer suspend this immediate coroutine
+  void await_suspend(std::coroutine_handle<U> /* handle*/) noexcept {
+    ASYNC_CORO_ASSERT(false);  // NOLINT(*static-assert) // we should newer suspend this immediate coroutine
   }
 
   auto await_resume() noexcept {
