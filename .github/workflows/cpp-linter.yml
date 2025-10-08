@@ -14,12 +14,12 @@ jobs:
       - uses: actions/checkout@v5
       - uses: cpp-linter/cpp-linter-action@v2
         id: linter
-        ignore: googletest
-        ignore-tidy: tests
-        version: 20
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          ignore: googletest
+          ignore-tidy: tests
+          version: 20
           style: 'file'  # Use .clang-format config file
           tidy-checks: '' # Use .clang-tidy config file
           # only 'update' a single comment in a pull request thread.
