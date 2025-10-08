@@ -12,13 +12,16 @@ class CORO_THREAD_SCOPED_CAPABILITY shared_lock : protected std::shared_lock<typ
 
  public:
   explicit shared_lock(T& mutex) CORO_THREAD_ACQUIRE_SHARED(mutex) : super(mutex) {}
-  explicit shared_lock(T& mutex, std::adopt_lock_t) CORO_THREAD_REQUIRES_SHARED(mutex) : super(mutex, std::adopt_lock) {}
-  explicit shared_lock(T& mutex, std::defer_lock_t) CORO_THREAD_EXCLUDES(mutex) : super(mutex, std::defer_lock) {}
+  explicit shared_lock(T& mutex, std::adopt_lock_t /*tag*/) CORO_THREAD_REQUIRES_SHARED(mutex) : super(mutex, std::adopt_lock) {}
+  explicit shared_lock(T& mutex, std::defer_lock_t /*tag*/) CORO_THREAD_EXCLUDES(mutex) : super(mutex, std::defer_lock) {}
 
+  shared_lock(const shared_lock&) noexcept = delete;
   shared_lock(shared_lock&&) noexcept = default;
-  shared_lock& operator=(shared_lock&&) noexcept = default;
 
   ~shared_lock() noexcept CORO_THREAD_RELEASE_SHARED() = default;
+
+  shared_lock& operator=(shared_lock&&) noexcept = default;
+  shared_lock& operator=(const shared_lock&) noexcept = delete;
 
   void lock() CORO_THREAD_ACQUIRE_SHARED() { super::lock(); }
   void unlock() CORO_THREAD_RELEASE_SHARED() { super::unlock(); }

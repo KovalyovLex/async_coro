@@ -38,8 +38,8 @@ class task_handle final {
 
  public:
   task_handle() noexcept = default;
-  explicit task_handle(handle_type h) noexcept
-      : _handle(std::move(h)) {
+  explicit task_handle(handle_type handle) noexcept
+      : _handle(std::move(handle)) {
     ASYNC_CORO_ASSERT(_handle);
     if (_handle) [[likely]] {
       _handle.promise().set_owning_by_task_handle(true, internal::passkey{this});
@@ -90,18 +90,18 @@ class task_handle final {
    * \endcode
    */
   template <class TRes2>
-  auto operator&&(task_handle<TRes2>&& b) && noexcept {
-    return internal::all_awaiter{std::make_tuple(internal::handle_awaiter<R>{std::move(*this)}, internal::handle_awaiter<TRes2>{std::move(b)})};
+  auto operator&&(task_handle<TRes2>&& other_awaiter) && noexcept {
+    return internal::all_awaiter{std::make_tuple(internal::handle_awaiter<R>{std::move(*this)}, internal::handle_awaiter<TRes2>{std::move(other_awaiter)})};
   }
 
   template <class... TAwaitables>
-  auto operator&&(internal::any_awaiter<TAwaitables...>&& b) && noexcept {
-    return internal::all_awaiter{std::make_tuple(internal::handle_awaiter<R>{std::move(*this)}, std::move(b))};
+  auto operator&&(internal::any_awaiter<TAwaitables...>&& other_awaiter) && noexcept {
+    return internal::all_awaiter{std::make_tuple(internal::handle_awaiter<R>{std::move(*this)}, std::move(other_awaiter))};
   }
 
   template <class... TAwaitables>
-  auto operator&&(internal::all_awaiter<TAwaitables...>&& b) && noexcept {
-    return std::move(b).prepend_awaiter(internal::handle_awaiter<R>{std::move(*this)});
+  auto operator&&(internal::all_awaiter<TAwaitables...>&& other_awaiter) && noexcept {
+    return std::move(other_awaiter).prepend_awaiter(internal::handle_awaiter<R>{std::move(*this)});
   }
 
   /**
@@ -123,18 +123,18 @@ class task_handle final {
    * \endcode
    */
   template <class TRes2>
-  auto operator||(task_handle<TRes2>&& b) && noexcept {
-    return internal::any_awaiter{std::make_tuple(internal::handle_awaiter<R>{std::move(*this)}, internal::handle_awaiter<TRes2>{std::move(b)})};
+  auto operator||(task_handle<TRes2>&& other_awaiter) && noexcept {
+    return internal::any_awaiter{std::make_tuple(internal::handle_awaiter<R>{std::move(*this)}, internal::handle_awaiter<TRes2>{std::move(other_awaiter)})};
   }
 
   template <class... TAwaitables>
-  auto operator||(internal::any_awaiter<TAwaitables...>&& b) && noexcept {
-    return std::move(b).prepend_awaiter(internal::handle_awaiter<R>{std::move(*this)});
+  auto operator||(internal::any_awaiter<TAwaitables...>&& other_awaiter) && noexcept {
+    return std::move(other_awaiter).prepend_awaiter(internal::handle_awaiter<R>{std::move(*this)});
   }
 
   template <class... TAwaitables>
-  auto operator||(internal::all_awaiter<TAwaitables...>&& b) && noexcept {
-    return internal::any_awaiter{std::make_tuple(internal::handle_awaiter<R>{std::move(*this)}, std::move(b))};
+  auto operator||(internal::all_awaiter<TAwaitables...>&& other_awaiter) && noexcept {
+    return internal::any_awaiter{std::make_tuple(internal::handle_awaiter<R>{std::move(*this)}, std::move(other_awaiter))};
   }
 
   // access for result
@@ -157,7 +157,7 @@ class task_handle final {
 
   // Checks if coroutine is finished.
   // If state is empty returns true as well
-  bool done() const {
+  [[nodiscard]] bool done() const {
     return !_handle || _handle.promise().is_finished_acquire();
   }
 
@@ -165,7 +165,7 @@ class task_handle final {
   // If coroutine is already finished, the callback will be called immediately.
   template <class Fx>
     requires(internal::is_runnable<std::remove_cvref_t<Fx>, void, promise_result<R>&, bool>)
-  void continue_with(Fx&& f) noexcept(internal::is_noexcept_runnable<std::remove_cvref_t<Fx>, void, promise_result<R>&, bool>) {
+  void continue_with(Fx&& func) noexcept(internal::is_noexcept_runnable<std::remove_cvref_t<Fx>, void, promise_result<R>&, bool>) {
     ASYNC_CORO_ASSERT(!_handle.promise().is_coro_embedded());
 
     if (!_handle) {
@@ -174,9 +174,9 @@ class task_handle final {
 
     promise_type& promise = _handle.promise();
     if (done()) {
-      f(promise, false);
+      func(promise, false);
     } else {
-      const auto continue_f = callback_type::allocate(std::forward<Fx>(f));
+      const auto continue_f = callback_type::allocate(std::forward<Fx>(func)).release();
       promise.set_continuation_functor(continue_f, internal::passkey{this});
       auto [state, cancelled] = promise.get_coroutine_state_and_cancelled(std::memory_order::acquire);
       if (state == async_coro::coroutine_state::finished || cancelled) {
@@ -191,10 +191,10 @@ class task_handle final {
 
   // Sets callback that will be called after coroutine finish on thread that finished the coroutine.
   // If coroutine is already finished, the callback will be called and destroyed immediately.
-  void continue_with(callback_type& f) {
+  void continue_with(callback_type& func) {
     ASYNC_CORO_ASSERT(!_handle.promise().is_coro_embedded());
 
-    typename callback_type::ptr uniq_ptr{&f};
+    typename callback_type::ptr uniq_ptr{&func};
 
     if (!_handle) {
       return;
@@ -202,7 +202,7 @@ class task_handle final {
 
     promise_type& promise = _handle.promise();
     if (done()) {
-      f.execute(promise, false);
+      func.execute(promise, false);
     } else {
       const auto ptr = uniq_ptr.release();
       promise.set_continuation_functor(ptr, internal::passkey{this});
@@ -250,7 +250,7 @@ class task_handle final {
     return _handle.promise().is_cancelled();
   }
 
-  internal::task_handle_awaiter<R> coro_await_transform(base_handle&) && {
+  internal::task_handle_awaiter<R> coro_await_transform(base_handle& /*handle*/) && {
     return internal::task_handle_awaiter<R>{std::move(*this)};
   }
 

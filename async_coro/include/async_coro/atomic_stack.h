@@ -17,7 +17,7 @@
 
 namespace async_coro {
 
-template <typename T, std::uint32_t BlockSize = 64>
+template <typename T, std::uint32_t BlockSize = 64>  // NOLINT(*-magic-*)
 class atomic_stack {
   ASYNC_CORO_WARNINGS_MSVC_PUSH
   ASYNC_CORO_WARNINGS_MSVC_IGNORE(4324)
@@ -33,12 +33,15 @@ class atomic_stack {
     value_holder(const value_holder&) = delete;
     value_holder(value_holder&&) = delete;
     ~value_holder() noexcept {}
+
+    value_holder& operator=(const value_holder&) = delete;
+    value_holder& operator=(value_holder&&) = delete;
   };
 
   ASYNC_CORO_WARNINGS_MSVC_POP
 
   struct values_array {
-    values_array(std::uint32_t index)
+    explicit values_array(std::uint32_t index)
         : free_index(index) {}
 
     std::array<value_holder, BlockSize> values;
@@ -46,7 +49,7 @@ class atomic_stack {
   };
 
  public:
-  atomic_stack() noexcept {}
+  atomic_stack() noexcept = default;
 
   ~atomic_stack() noexcept {
     auto head1 = _values.load(std::memory_order::relaxed);
@@ -67,8 +70,14 @@ class atomic_stack {
     ASYNC_CORO_ASSERT(_values.load(std::memory_order::acquire).ptr == nullptr);
   }
 
+  atomic_stack(const atomic_stack&) = delete;
+  atomic_stack(atomic_stack&&) = delete;
+
+  atomic_stack& operator=(const atomic_stack&) = delete;
+  atomic_stack& operator=(atomic_stack&&) = delete;
+
   template <typename... U>
-  void push(U&&... v) {
+  void push(U&&... value) {
     auto free_tagged = _free_chain.load(std::memory_order::relaxed);
 
     while (free_tagged.ptr) {
@@ -121,7 +130,7 @@ class atomic_stack {
       }
     }
 
-    new (&free_tagged.ptr->value) T{std::forward<U>(v)...};
+    new (&free_tagged.ptr->value) T{std::forward<U>(value)...};
 
     auto old_head = _values.load(std::memory_order::relaxed);
 
@@ -137,7 +146,7 @@ class atomic_stack {
   }
 
   template <typename... U>
-  bool try_push(U&&... v) noexcept(std::is_nothrow_constructible_v<T, U&&...>) {
+  bool try_push(U&&... value) noexcept(std::is_nothrow_constructible_v<T, U&&...>) {
     auto free_tagged = _free_chain.load(std::memory_order::relaxed);
 
     while (free_tagged.ptr) {
@@ -155,7 +164,7 @@ class atomic_stack {
       return false;
     }
 
-    new (&free_tagged.ptr->value) T{std::forward<U>(v)...};
+    new (&free_tagged.ptr->value) T{std::forward<U>(value)...};
 
     auto old_head = _values.load(std::memory_order::relaxed);
 
@@ -172,7 +181,7 @@ class atomic_stack {
     return true;
   }
 
-  bool try_pop(T& v) noexcept(std::is_nothrow_move_assignable_v<T>) {
+  bool try_pop(T& value) noexcept(std::is_nothrow_move_assignable_v<T>) {
     auto value_tagged = _values.load(std::memory_order::relaxed);
     while (value_tagged.ptr) {
       decltype(value_tagged) next_tagged = {value_tagged.ptr->next.load(std::memory_order::acquire), value_tagged.tag + 1};
@@ -189,7 +198,7 @@ class atomic_stack {
       return false;
     }
 
-    v = std::move(value_tagged.ptr->value);
+    value = std::move(value_tagged.ptr->value);
     std::destroy_at(&value_tagged.ptr->value);
 
     auto prev_free = _free_chain.load(std::memory_order::relaxed);
@@ -207,7 +216,7 @@ class atomic_stack {
     return true;
   }
 
-  bool has_value() const noexcept {
+  [[nodiscard]] bool has_value() const noexcept {
     auto head = _values.load(std::memory_order::relaxed);
     return head.ptr != nullptr;
   }
@@ -215,12 +224,12 @@ class atomic_stack {
  private:
   using value_ptr = internal::virtual_tagged_ptr<value_holder>;
 
-  value_ptr _values = nullptr;
+  value_ptr _values{nullptr};
   std::atomic<values_array*> _free_bank = &_head_bank;
   values_array _head_bank{0};
   spin_lock_mutex _banks_mutex;
   std::vector<std::unique_ptr<values_array>> _additional_banks CORO_THREAD_GUARDED_BY(_banks_mutex);
-  value_ptr _free_chain = nullptr;
+  value_ptr _free_chain{nullptr};
 };
 
 };  // namespace async_coro

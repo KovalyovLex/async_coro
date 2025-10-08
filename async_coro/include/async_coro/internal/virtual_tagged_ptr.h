@@ -27,20 +27,22 @@ namespace async_coro::internal {
  * @tparam NumAddressBits Number of bits used to store actual pointer addresses.
  *         Defaults to 48, matching common virtual memory architectures.
  */
-template <class T, std::uint32_t NumAddressBits = 48>
+template <class T, std::uint32_t NumAddressBits = 48>  // NOLINT(*-magic-*)
 class virtual_tagged_ptr {
-  static_assert(sizeof(void*) * 8 > NumAddressBits);
+  static constexpr uint32_t k_bits_in_byte = 8;
+
+  static_assert(sizeof(void*) * k_bits_in_byte > NumAddressBits);
 
  public:
   /**
    * @brief Number of high bits available for tagging.
    */
-  inline static constexpr std::uint32_t num_bits = sizeof(void*) * 8 - NumAddressBits;
+  static constexpr std::uint32_t num_bits = (sizeof(void*) * k_bits_in_byte) - NumAddressBits;
 
   /**
    * @brief Maximum tag value that can be stored in available high bits.
    */
-  inline static constexpr std::uint32_t max_tag_num = get_mask<std::uint32_t>(num_bits);
+  static constexpr std::uint32_t max_tag_num = get_mask<std::uint32_t>(num_bits);
 
   /// Type representing a pair of pointer and tag.
   using tagged_ptr = tagged_pair<T>;
@@ -49,14 +51,14 @@ class virtual_tagged_ptr {
    * @brief Constructs a tagged pointer from a raw pointer with a tag of 0.
    * @param ptr A pointer to a `T` instance.
    */
-  virtual_tagged_ptr(T* ptr) noexcept
+  explicit virtual_tagged_ptr(T* ptr) noexcept
       : _raw_ptr(convert_tagged_to_raw({ptr, 0})) {
   }
 
   /**
    * @brief Constructs a null tagged pointer.
    */
-  virtual_tagged_ptr(std::nullptr_t) noexcept
+  explicit virtual_tagged_ptr(std::nullptr_t) noexcept
       : _raw_ptr(0) {
   }
 
@@ -112,18 +114,18 @@ class virtual_tagged_ptr {
 
  private:
   /// Bitmask used to isolate the pointer portion of the stored integer.
-  inline static constexpr std::uintptr_t address_mask = get_mask<std::uintptr_t>(NumAddressBits);
+  static constexpr std::uintptr_t address_mask = get_mask<std::uintptr_t>(NumAddressBits);
 
   /// Bitmask used to isolate the tag portion of the stored integer.
-  inline static constexpr std::uintptr_t tag_mask = ~address_mask;
+  static constexpr std::uintptr_t tag_mask = ~address_mask;
 
   static void convert_raw_to_tagged(tagged_ptr& value, std::uintptr_t ptr_bits) noexcept {
-    value.ptr = reinterpret_cast<T*>(ptr_bits & address_mask);
+    value.ptr = reinterpret_cast<T*>(ptr_bits & address_mask);  // NOLINT(*-reinterpret-cast)
     value.tag = static_cast<std::uint32_t>((ptr_bits & tag_mask) >> NumAddressBits);
   }
 
   static std::uintptr_t convert_tagged_to_raw(const tagged_ptr& value) noexcept {
-    std::uintptr_t ptr_bits = reinterpret_cast<std::uintptr_t>(value.ptr);
+    auto ptr_bits = reinterpret_cast<std::uintptr_t>(value.ptr);  // NOLINT(*-reinterpret-cast)
 
     ASYNC_CORO_ASSERT((ptr_bits & tag_mask) == 0);
 

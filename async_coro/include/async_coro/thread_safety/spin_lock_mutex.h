@@ -13,7 +13,12 @@ class CORO_THREAD_CAPABILITY("mutex") spin_lock_mutex {
 
   spin_lock_mutex() = default;
   spin_lock_mutex(const spin_lock_mutex&) = delete;
+  spin_lock_mutex(spin_lock_mutex&&) = delete;
+
+  ~spin_lock_mutex() noexcept = default;
+
   spin_lock_mutex& operator=(const spin_lock_mutex&) = delete;
+  spin_lock_mutex& operator=(spin_lock_mutex&&) = delete;
 
   void lock() noexcept CORO_THREAD_ACQUIRE() {
     // Optimistically assume the lock is free on first the try
@@ -33,7 +38,7 @@ class CORO_THREAD_CAPABILITY("mutex") spin_lock_mutex {
   }
 
  private:
-  std::atomic_flag _lock{};
+  std::atomic_flag _lock;
 };
 
 }  // namespace async_coro

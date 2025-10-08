@@ -17,12 +17,12 @@ struct types_holder {
 // Implementations
 
 template <class... TArgs>
-constexpr types_holder<TArgs...> replace_void_type_in_holder_impl(types_holder<TArgs...>, types_holder<>) noexcept {
+constexpr types_holder<TArgs...> replace_void_type_in_holder_impl(types_holder<TArgs...> /*types1*/, types_holder<> /*types2*/) noexcept {
   return {};
 }
 
 template <class T, class... TArgs1, class... TArgs2>
-constexpr auto replace_void_type_in_holder_impl(types_holder<TArgs1...>, types_holder<T, TArgs2...>) noexcept {
+constexpr auto replace_void_type_in_holder_impl(types_holder<TArgs1...> /*types1*/, types_holder<T, TArgs2...> /*types2*/) noexcept {
   if constexpr (std::is_void_v<T>) {
     return replace_void_type_in_holder_impl(types_holder<TArgs1..., std::monostate>{}, types_holder<TArgs2...>{});
   } else {
@@ -31,22 +31,22 @@ constexpr auto replace_void_type_in_holder_impl(types_holder<TArgs1...>, types_h
 }
 
 template <std::size_t... Ints, class TTuple, class TElem>
-constexpr auto replace_last_tuple_elem_impl(std::integer_sequence<std::size_t, Ints...>, TTuple&& tuple, TElem&& new_last_elem) noexcept {
+constexpr auto replace_last_tuple_elem_impl(std::integer_sequence<std::size_t, Ints...> /*seq*/, TTuple&& tuple, TElem&& new_last_elem) noexcept {
   static_assert(!std::is_reference_v<TElem>);
 
-  using tuple_t = std::tuple<typename std::tuple_element<Ints, TTuple>::type..., TElem>;
+  using tuple_t = std::tuple<std::tuple_element_t<Ints, TTuple>..., TElem>;
 
-  return tuple_t{std::get<Ints>(std::move(tuple))..., std::move(new_last_elem)};
+  return tuple_t{std::get<Ints>(std::forward<TTuple>(tuple))..., std::forward<TElem>(new_last_elem)};
 }
 
 template <class TTuple, std::size_t... Ints>
-constexpr std::integer_sequence<std::size_t, Ints...> get_tuple_index_seq_without_voids_impl(std::integer_sequence<std::size_t, Ints...>, std::integer_sequence<std::size_t>) {
+constexpr std::integer_sequence<std::size_t, Ints...> get_tuple_index_seq_without_voids_impl(std::integer_sequence<std::size_t, Ints...> /*seq1*/, std::integer_sequence<std::size_t> /*seq2*/) {
   return {};
 }
 
 template <class TTuple, std::size_t I, std::size_t... Ints1, std::size_t... Ints2>
-constexpr auto get_tuple_index_seq_without_voids_impl(std::integer_sequence<std::size_t, Ints1...>, std::integer_sequence<std::size_t, I, Ints2...>) {
-  if constexpr (std::is_void_v<typename std::tuple_element<I, TTuple>::type>) {
+constexpr auto get_tuple_index_seq_without_voids_impl(std::integer_sequence<std::size_t, Ints1...> /*seq1*/, std::integer_sequence<std::size_t, I, Ints2...> /*seq2*/) {
+  if constexpr (std::is_void_v<std::tuple_element_t<I, TTuple>>) {
     return get_tuple_index_seq_without_voids_impl<TTuple>(std::integer_sequence<std::size_t, Ints1...>{}, std::integer_sequence<std::size_t, Ints2...>{});
   } else {
     return get_tuple_index_seq_without_voids_impl<TTuple>(std::integer_sequence<std::size_t, Ints1..., I>{}, std::integer_sequence<std::size_t, Ints2...>{});
@@ -54,13 +54,13 @@ constexpr auto get_tuple_index_seq_without_voids_impl(std::integer_sequence<std:
 }
 
 template <class TTuple, std::size_t... Ints>
-constexpr std::integer_sequence<std::size_t, Ints...> get_tuple_index_seq_of_voids_impl(std::integer_sequence<std::size_t, Ints...>, std::integer_sequence<std::size_t>) {
+constexpr std::integer_sequence<std::size_t, Ints...> get_tuple_index_seq_of_voids_impl(std::integer_sequence<std::size_t, Ints...> /*seq1*/, std::integer_sequence<std::size_t> /*seq2*/) {
   return {};
 }
 
 template <class TTuple, std::size_t I, std::size_t... Ints1, std::size_t... Ints2>
-constexpr auto get_tuple_index_seq_of_voids_impl(std::integer_sequence<std::size_t, Ints1...>, std::integer_sequence<std::size_t, I, Ints2...>) {
-  if constexpr (!std::is_void_v<typename std::tuple_element<I, TTuple>::type>) {
+constexpr auto get_tuple_index_seq_of_voids_impl(std::integer_sequence<std::size_t, Ints1...> /*seq1*/, std::integer_sequence<std::size_t, I, Ints2...> /*seq2*/) {
+  if constexpr (!std::is_void_v<std::tuple_element_t<I, TTuple>>) {
     return get_tuple_index_seq_of_voids_impl<TTuple>(std::integer_sequence<std::size_t, Ints1...>{}, std::integer_sequence<std::size_t, Ints2...>{});
   } else {
     return get_tuple_index_seq_of_voids_impl<TTuple>(std::integer_sequence<std::size_t, Ints1..., I>{}, std::integer_sequence<std::size_t, Ints2...>{});
@@ -70,12 +70,12 @@ constexpr auto get_tuple_index_seq_of_voids_impl(std::integer_sequence<std::size
 // Implementations end
 
 template <class... TArgs>
-constexpr auto replace_void_type_in_holder(types_holder<TArgs...>) noexcept {
+constexpr auto replace_void_type_in_holder(types_holder<TArgs...> /*types*/) noexcept {
   return replace_void_type_in_holder_impl(types_holder<>{}, types_holder<TArgs...>{});
 }
 
 template <class... TArgs>
-constexpr auto get_variant_for_types(types_holder<TArgs...>) noexcept {
+constexpr auto get_variant_for_types(types_holder<TArgs...> /*types*/) noexcept {
   return std::variant<TArgs...>{};
 }
 
