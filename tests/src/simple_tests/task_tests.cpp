@@ -135,8 +135,8 @@ TEST(task, async_execution) {
   }(routine_1);
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"},
-                                           {"worker2"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"},
+                                                             {"worker2"}}})};
 
   ASSERT_FALSE(routine.done());
   auto handle = scheduler.start_task(std::move(routine));
@@ -151,6 +151,8 @@ TEST(task, async_execution) {
   }
 
   ASSERT_TRUE(async_done);
+
+  std::this_thread::sleep_for(std::chrono::milliseconds{10});
 
   scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
