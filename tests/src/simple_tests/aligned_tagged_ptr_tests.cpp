@@ -112,9 +112,9 @@ TYPED_TEST(aligned_ptr, ptr_stack) {
 
   tagged_ptr intptr;
 
-  value_type val = value_type{0};
+  auto val = value_type{0};
 
-  ASSERT_EQ(reinterpret_cast<intptr_t>(&val) & tagged_ptr::max_tag_num, 0);
+  ASSERT_EQ(reinterpret_cast<intptr_t>(&val) & tagged_ptr::max_tag_num, 0);  // NOLINT(*-signed-*)
 
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, nullptr);
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 0);
@@ -141,7 +141,7 @@ TYPED_TEST(aligned_ptr, ptr_heap) {
 
   auto val = std::unique_ptr<value_type, malloc_deleter>(new (std::malloc(sizeof(value_type))) value_type{0});
 
-  ASSERT_EQ(reinterpret_cast<intptr_t>(val.get()) & tagged_ptr::max_tag_num, 0);
+  ASSERT_EQ(reinterpret_cast<intptr_t>(val.get()) & tagged_ptr::max_tag_num, 0);  // NOLINT(*-signed-*)
 
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, nullptr);
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 0);

@@ -1145,7 +1145,7 @@ TEST(task, task_handle_move_to_thread) {
       std::this_thread::sleep_for(std::chrono::milliseconds{1});
     });
 
-    ASSERT_TRUE(handle.done());
+    ASSERT_TRUE(handle.done());  // NOLINT(*after-move)
 
     while (!ready) {
       std::this_thread::yield();

@@ -33,7 +33,7 @@ static auto test_small_f() {
 
   auto f2 = std::move(f);
 
-  EXPECT_FALSE(f);
+  EXPECT_FALSE(f);  // NOLINT(*after-move)
   ASSERT_TRUE(f2);
 
   if constexpr (is_noexcept) {

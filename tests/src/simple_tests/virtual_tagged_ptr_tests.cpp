@@ -85,8 +85,8 @@ TYPED_TEST(virtual_ptr, ptr_stack) {
 
   tagged_ptr intptr;
 
-  value_type val = value_type{0};
-  value_type val2 = value_type{5};
+  auto val = value_type{0};
+  auto val2 = value_type{5};
 
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, nullptr);
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 0);
