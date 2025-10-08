@@ -21,6 +21,8 @@ namespace async_coro {
  */
 template <typename T, std::uint32_t BlockSize = 64>  // NOLINT(*-magic-*)
 class atomic_queue {
+  static_assert(BlockSize > 1, "Block size should be more than 1");
+
   union union_store {
     T value;
     char tmp_byte;
@@ -66,17 +68,7 @@ class atomic_queue {
   /**
    * @brief Destroy the atomic queue object and all the values that are still in it.
    */
-  ~atomic_queue() noexcept {
-    unique_lock lock{_value_mutex};
-
-    auto head = _head.exchange(nullptr, std::memory_order::relaxed);
-    _last = nullptr;
-
-    while (head) {
-      std::destroy_at(std::addressof(head->val.value));
-      head = head->next;
-    }
-  }
+  ~atomic_queue() noexcept = default;
 
   atomic_queue& operator=(const atomic_queue&) = delete;
   atomic_queue& operator=(atomic_queue&&) = delete;
@@ -202,9 +194,9 @@ class atomic_queue {
 
  private:
   spin_lock_mutex _free_value_mutex;
-  value* _free_value CORO_THREAD_GUARDED_BY(_free_value_mutex) = nullptr;
 
   values_bank _head_bank;
+  value* _free_value CORO_THREAD_GUARDED_BY(_free_value_mutex) = std::addressof(_head_bank.values[0]);
 
   spin_lock_mutex _value_mutex;
   value* _last CORO_THREAD_GUARDED_BY(_value_mutex) = nullptr;
