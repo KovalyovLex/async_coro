@@ -1,6 +1,15 @@
 #include <async_coro/callback.h>
 #include <gtest/gtest.h>
 
+namespace callback_tests {
+struct destructor_checker {
+  explicit destructor_checker(bool& d) : _destructed(d) {}
+  ~destructor_checker() { _destructed = true; }
+
+  bool& _destructed;  // NOLINT
+};
+}  // namespace callback_tests
+
 TEST(callback, create_and_execute) {
   int result{0};
   auto* callback = async_coro::callback<int(int)>::allocate([&](int value) noexcept {
@@ -36,12 +45,9 @@ TEST(callback, allocate_callback_deduced_noexcept) {
 }
 
 TEST(callback, check_destructor) {
+  using namespace callback_tests;
+
   bool destructed = false;
-  struct destructor_checker {
-    bool& _destructed;
-    destructor_checker(bool& d) : _destructed(d) {}
-    ~destructor_checker() { _destructed = true; }
-  };
 
   {
     auto callback = async_coro::allocate_callback([c = destructor_checker{destructed}]() {});
@@ -51,12 +57,9 @@ TEST(callback, check_destructor) {
 }
 
 TEST(callback, check_destructor_noexcept) {
+  using namespace callback_tests;
+
   bool destructed = false;
-  struct destructor_checker {
-    bool& _destructed;
-    destructor_checker(bool& d) : _destructed(d) {}
-    ~destructor_checker() { _destructed = true; }
-  };
 
   {
     auto callback = async_coro::allocate_callback([c = destructor_checker{destructed}]() noexcept {});
@@ -66,12 +69,9 @@ TEST(callback, check_destructor_noexcept) {
 }
 
 TEST(callback, check_destructor_manual_destroy) {
+  using namespace callback_tests;
+
   bool destructed = false;
-  struct destructor_checker {
-    bool& _destructed;
-    destructor_checker(bool& d) : _destructed(d) {}
-    ~destructor_checker() { _destructed = true; }
-  };
 
   auto* callback = async_coro::callback<void()>::allocate([c = destructor_checker{destructed}]() noexcept {}).release();
   callback->destroy();

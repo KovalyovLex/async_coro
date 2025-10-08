@@ -16,14 +16,28 @@ class virtual_ptr : public ::testing::Test {
 class virtual_name_generator {
  public:
   template <typename T>
-  static std::string GetName(int) {
-    if constexpr (std::is_same_v<T, uint16_t>) return "uint16";
-    if constexpr (std::is_same_v<T, int32_t>) return "int32";
-    if constexpr (std::is_same_v<T, unsigned int>) return "unsignedInt";
-    if constexpr (std::is_same_v<T, uint64_t>) return "uint64";
-    if constexpr (std::is_same_v<T, float>) return "float";
-    if constexpr (std::is_same_v<T, double>) return "double";
-    if constexpr (std::is_same_v<T, long double>) return "longDouble";
+  static std::string GetName(int /*unused*/) {
+    if constexpr (std::is_same_v<T, uint16_t>) {
+      return "uint16";
+    }
+    if constexpr (std::is_same_v<T, int32_t>) {
+      return "int32";
+    }
+    if constexpr (std::is_same_v<T, unsigned int>) {
+      return "unsignedInt";
+    }
+    if constexpr (std::is_same_v<T, uint64_t>) {
+      return "uint64";
+    }
+    if constexpr (std::is_same_v<T, float>) {
+      return "float";
+    }
+    if constexpr (std::is_same_v<T, double>) {
+      return "double";
+    }
+    if constexpr (std::is_same_v<T, long double>) {
+      return "longDouble";
+    }
   }
 };
 
@@ -37,10 +51,10 @@ TEST(virtual_ptr, int_ptr_stack) {
 
   tagged_ptr intptr;
 
-  value_type val = value_type{0};
+  auto val = value_type{0};
 
   EXPECT_EQ(tagged_ptr::num_bits, 16);
-  EXPECT_GT(tagged_ptr::max_tag_num, 1 << 8);
+  EXPECT_GT(tagged_ptr::max_tag_num, 1U << 8U);
 
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, nullptr);
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 0);
@@ -51,13 +65,13 @@ TEST(virtual_ptr, int_ptr_stack) {
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, &val);
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 1);
 
-  pair = {&val, 1};
+  pair = {.ptr = &val, .tag = 1};
   ASSERT_TRUE(intptr.compare_exchange_strong(pair, {nullptr, 513}, std::memory_order::relaxed));
 
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, nullptr);
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).tag, 513);
 
-  pair = {nullptr, 513};
+  pair = {.ptr = nullptr, .tag = 513};
   ASSERT_TRUE(intptr.compare_exchange_strong(pair, {&val, tagged_ptr::max_tag_num}, std::memory_order::relaxed));
 
   EXPECT_EQ(intptr.load(std::memory_order::relaxed).ptr, &val);

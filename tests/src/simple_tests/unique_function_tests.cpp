@@ -123,19 +123,19 @@ static auto num_moves_large_f() {
   using namespace async_coro;
 
   static int num_moves = 0;
-  static int num_copyes = 0;
+  static int num_copies = 0;
 
   struct cleaner {
     ~cleaner() noexcept {
       num_moves = 0;
-      num_copyes = 0;
+      num_copies = 0;
     }
   };
 
   struct test_struct {
     test_struct() noexcept = default;
-    test_struct(const test_struct&) { num_copyes++; }
-    test_struct(test_struct&&) { num_moves++; }
+    test_struct(const test_struct& /*unused*/) { num_copies++; }
+    test_struct(test_struct&& /*unused*/) noexcept { num_moves++; }
     ~test_struct() noexcept = default;
 
     void test() const noexcept(is_noexcept) {
@@ -170,7 +170,7 @@ static auto num_moves_large_f() {
   f2 = nullptr;
 
   EXPECT_EQ(num_moves, 1);
-  EXPECT_EQ(num_copyes, 0);
+  EXPECT_EQ(num_copies, 0);
 }
 
 TEST(unique_function, num_moves_large_f_noexcept) {
@@ -186,24 +186,24 @@ static auto num_moves_small_f() {
   using namespace async_coro;
 
   static int num_moves = 0;
-  static int num_copyes = 0;
+  static int num_copies = 0;
 
   struct cleaner {
     ~cleaner() noexcept {
       num_moves = 0;
-      num_copyes = 0;
+      num_copies = 0;
     }
   };
 
   struct test_struct {
     test_struct() noexcept = default;
-    test_struct(const test_struct&) { num_copyes++; }
-    test_struct(test_struct&&) noexcept { num_moves++; }
+    test_struct(const test_struct& /*unused*/) { num_copies++; }
+    test_struct(test_struct&& /*unused*/) noexcept { num_moves++; }
     ~test_struct() noexcept = default;
 
     void test() const noexcept(is_noexcept) { EXPECT_GT(num_moves, 0); }
 
-    void* _fxs[add_size / sizeof(void*) + 1];
+    void* _fxs[(add_size / sizeof(void*)) + 1]{};  // NOLINT(*-array*)
   };
 
   cleaner clear{};
@@ -227,7 +227,7 @@ static auto num_moves_small_f() {
   f2 = nullptr;
 
   EXPECT_EQ(num_moves, 2);
-  EXPECT_EQ(num_copyes, 0);
+  EXPECT_EQ(num_copies, 0);
 }
 
 TEST(unique_function, num_moves_small_f_noexcept) {
@@ -250,34 +250,34 @@ TEST(unique_function, forward_value) {
   using namespace async_coro;
 
   static int num_moves = 0;
-  static int num_copyes = 0;
+  static int num_copies = 0;
 
   struct cleaner {
     ~cleaner() noexcept {
       num_moves = 0;
-      num_copyes = 0;
+      num_copies = 0;
     }
   };
 
   struct test_struct {
     test_struct() noexcept = default;
-    test_struct(const test_struct&) { num_copyes++; }
-    test_struct(test_struct&&) { num_moves++; }
+    test_struct(const test_struct& /*unused*/) { num_copies++; }
+    test_struct(test_struct&& /*unused*/) noexcept { num_moves++; }
     ~test_struct() noexcept = default;
   };
 
   cleaner clean{};
 
-  unique_function<void(test_struct)> f = [](auto s) {
+  unique_function<void(test_struct)> f = [](const auto& s) {
     EXPECT_NE(&s, nullptr);
   };
 
-  EXPECT_EQ(num_copyes, 0);
+  EXPECT_EQ(num_copies, 0);
   EXPECT_EQ(num_moves, 0);
 
   f({});
 
-  EXPECT_EQ(num_copyes, 0);
+  EXPECT_EQ(num_copies, 0);
   EXPECT_EQ(num_moves, 1);
 }
 
@@ -285,19 +285,19 @@ TEST(unique_function, return_value) {
   using namespace async_coro;
 
   static int num_moves = 0;
-  static int num_copyes = 0;
+  static int num_copies = 0;
 
   struct cleaner {
     ~cleaner() noexcept {
       num_moves = 0;
-      num_copyes = 0;
+      num_copies = 0;
     }
   };
 
   struct test_struct {
     test_struct() noexcept = default;
-    test_struct(const test_struct&) { num_copyes++; }
-    test_struct(test_struct&&) { num_moves++; }
+    test_struct(const test_struct& /*unused*/) { num_copies++; }
+    test_struct(test_struct&& /*unused*/) noexcept { num_moves++; }
     ~test_struct() noexcept = default;
   };
 
@@ -308,12 +308,12 @@ TEST(unique_function, return_value) {
     return test_struct{};
   };
 
-  EXPECT_EQ(num_copyes, 0);
+  EXPECT_EQ(num_copies, 0);
   EXPECT_EQ(num_moves, 0);
 
   f(3);
 
-  EXPECT_EQ(num_copyes, 0);
+  EXPECT_EQ(num_copies, 0);
   EXPECT_EQ(num_moves, 0);
 }
 
@@ -321,19 +321,19 @@ TEST(unique_function, rvalue_forward) {
   using namespace async_coro;
 
   static int num_moves = 0;
-  static int num_copyes = 0;
+  static int num_copies = 0;
 
   struct cleaner {
     ~cleaner() noexcept {
       num_moves = 0;
-      num_copyes = 0;
+      num_copies = 0;
     }
   };
 
   struct test_struct {
     test_struct() noexcept = default;
-    test_struct(const test_struct&) { num_copyes++; }
-    test_struct(test_struct&&) { num_moves++; }
+    test_struct(const test_struct& /*unused*/) { num_copies++; }
+    test_struct(test_struct&& /*unused*/) noexcept { num_moves++; }
     ~test_struct() noexcept = default;
   };
 
@@ -345,26 +345,26 @@ TEST(unique_function, rvalue_forward) {
       EXPECT_EQ(i, 7);
     };
 
-    EXPECT_EQ(num_copyes, 0);
+    EXPECT_EQ(num_copies, 0);
     EXPECT_EQ(num_moves, 0);
 
     f({}, 7);
 
-    EXPECT_EQ(num_copyes, 0);
+    EXPECT_EQ(num_copies, 0);
     EXPECT_EQ(num_moves, 0);
   }
 
   {
-    unique_function<void(test_struct&&)> f = [](auto s) {
+    unique_function<void(test_struct&&)> f = [](const auto& s) {
       EXPECT_NE(&s, nullptr);
     };
 
-    EXPECT_EQ(num_copyes, 0);
+    EXPECT_EQ(num_copies, 0);
     EXPECT_EQ(num_moves, 0);
 
     f({});
 
-    EXPECT_EQ(num_copyes, 0);
+    EXPECT_EQ(num_copies, 0);
     EXPECT_EQ(num_moves, 1);
   }
 }
@@ -499,7 +499,7 @@ template <class FxSig, class Fx>
 using invocable = async_coro::internal::is_invocable_by_signature<FxSig, Fx>;
 
 int testF() { return 0; }
-bool testFS(int) { return false; }
+bool testFS(int /*unused*/) { return false; }
 
 TEST(unique_function, compilation) {
   auto testF1 = []() -> bool {
@@ -532,7 +532,7 @@ TEST(unique_function, store_storage) {
       num_alive++;
     }
     move_struct(const move_struct&) = delete;
-    move_struct(move_struct&&) noexcept {
+    move_struct(move_struct&& /*unused*/) noexcept {
       num_alive++;
     }
     move_struct& operator=(const move_struct&) = delete;

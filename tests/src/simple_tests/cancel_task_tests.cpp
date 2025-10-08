@@ -77,7 +77,7 @@ TEST(cancel_task, when_any_cancel_others) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(parent());
   ASSERT_TRUE(handle.done());
@@ -125,7 +125,7 @@ TEST(cancel_task, when_all_parent_cancelled) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(parent());
   EXPECT_FALSE(handle.done());
@@ -167,7 +167,7 @@ TEST(cancel_task, cross_queue_cancel) {
   };
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
-      async_coro::execution_system_config{{{"worker1"}}})};
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
   auto handle = scheduler.start_task(parent());
 

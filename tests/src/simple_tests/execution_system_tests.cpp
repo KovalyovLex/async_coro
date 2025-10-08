@@ -14,23 +14,23 @@ TEST(execution_system, create_no_workers) {
 TEST(execution_system, create_one_workers) {
   using namespace async_coro;
 
-  execution_system system{{{{"worker", execution_queues::worker}}}};
+  execution_system system{{.worker_configs = {{"worker", execution_queues::worker}}}};
 }
 
 TEST(execution_system, create_five_workers) {
   using namespace async_coro;
 
-  execution_system system{{{{"worker1", execution_queues::worker},
-                            {"worker2", execution_queues::worker},
-                            {"worker3", execution_queues::worker},
-                            {"worker4", execution_queues::worker},
-                            {"worker5", execution_queues::worker}}}};
+  execution_system system{{.worker_configs = {{"worker1", execution_queues::worker},
+                                              {"worker2", execution_queues::worker},
+                                              {"worker3", execution_queues::worker},
+                                              {"worker4", execution_queues::worker},
+                                              {"worker5", execution_queues::worker}}}};
 }
 
 TEST(execution_system, execute_or_plan_main) {
   using namespace async_coro;
 
-  execution_system system{{{{"worker", execution_queues::worker}}, execution_queues::main}};
+  execution_system system{{.worker_configs = {{"worker", execution_queues::worker}}, .main_thread_allowed_tasks = execution_queues::main}};
 
   bool executed{false};
   const auto main_thread_id = std::this_thread::get_id();
@@ -48,7 +48,7 @@ TEST(execution_system, execute_or_plan_main) {
 TEST(execution_system, plan_main) {
   using namespace async_coro;
 
-  execution_system system{{{{"worker", execution_queues::worker}}, execution_queues::main}};
+  execution_system system{{.worker_configs = {{"worker", execution_queues::worker}}, .main_thread_allowed_tasks = execution_queues::main}};
 
   bool executed{false};
   const auto main_thread_id = std::this_thread::get_id();
@@ -70,7 +70,7 @@ TEST(execution_system, plan_main) {
 TEST(execution_system, execute_or_plan_worker) {
   using namespace async_coro;
 
-  execution_system system{{{{"worker", execution_queues::worker}}, execution_queues::main}};
+  execution_system system{{.worker_configs = {{"worker", execution_queues::worker}}, .main_thread_allowed_tasks = execution_queues::main}};
 
   std::atomic_bool executed{false};
   const auto main_thread_id = std::this_thread::get_id();
