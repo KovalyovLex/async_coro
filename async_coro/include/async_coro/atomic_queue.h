@@ -19,14 +19,19 @@ namespace async_coro {
  * @tparam T The type of the values to be stored in the queue.
  * @tparam BlockSize The number of values to be preallocated in a single bank.
  */
-template <typename T, std::uint32_t BlockSize = 64>
+template <typename T, std::uint32_t BlockSize = 64>  // NOLINT(*-magic-*)
 class atomic_queue {
   union union_store {
     T value;
     char tmp_byte;
 
-    union_store() noexcept {}
+    union_store() noexcept {}  // NOLINT(*member-init)
+    union_store(const union_store&) = delete;
+    union_store(union_store&&) = delete;
     ~union_store() noexcept {}
+
+    union_store& operator=(const union_store&) = delete;
+    union_store& operator=(union_store&&) = delete;
   };
 
   struct value {
@@ -53,7 +58,10 @@ class atomic_queue {
   /**
    * @brief Construct a new atomic queue object
    */
-  atomic_queue() noexcept {}
+  atomic_queue() noexcept = default;
+
+  atomic_queue(const atomic_queue&) = delete;
+  atomic_queue(atomic_queue&&) = delete;
 
   /**
    * @brief Destroy the atomic queue object and all the values that are still in it.
@@ -70,6 +78,9 @@ class atomic_queue {
     }
   }
 
+  atomic_queue& operator=(const atomic_queue&) = delete;
+  atomic_queue& operator=(atomic_queue&&) = delete;
+
   /**
    * @brief Pushes a new value to the queue.
    * In case when there is no preallocated values it will allocate a new bank of values.
@@ -78,8 +89,8 @@ class atomic_queue {
    * @param v The arguments to be forwarded to the constructor of T.
    */
   template <typename... U>
-  void push(U&&... v) {
-    value* head;
+  void push(U&&... val) {
+    value* head;  // NOLINT(*-init-*)
 
     {
       unique_lock lock{_free_value_mutex};
@@ -92,7 +103,7 @@ class atomic_queue {
       _free_value = head->next;
     }
 
-    new (std::addressof(head->val.value)) T{std::forward<U>(v)...};
+    new (std::addressof(head->val.value)) T{std::forward<U>(val)...};
     head->next = nullptr;
 
     unique_lock lock{_value_mutex};
@@ -113,8 +124,8 @@ class atomic_queue {
    * @return true if the value was pushed successfully, false otherwise.
    */
   template <typename... U>
-  bool try_push(U&&... v) noexcept(std::is_nothrow_constructible_v<T, U&&...>) {
-    value* head;
+  bool try_push(U&&... val) noexcept(std::is_nothrow_constructible_v<T, U&&...>) {
+    value* head;  // NOLINT(*-init-*)
 
     {
       unique_lock lock{_free_value_mutex};
@@ -127,7 +138,7 @@ class atomic_queue {
       _free_value = head->next;
     }
 
-    new (std::addressof(head->val.value)) T{std::forward<U>(v)...};
+    new (std::addressof(head->val.value)) T{std::forward<U>(val)...};
     head->next = nullptr;
 
     unique_lock lock{_value_mutex};
@@ -145,8 +156,8 @@ class atomic_queue {
    * @param v The reference to the value where the popped value will be moved to.
    * @return true if a value was popped successfully, false otherwise.
    */
-  bool try_pop(T& v) noexcept(std::is_nothrow_move_assignable_v<T>) {
-    value* head;
+  bool try_pop(T& val) noexcept(std::is_nothrow_move_assignable_v<T>) {
+    value* head;  // NOLINT(*-init-*)
 
     {
       // we use common lock here as head->next can change unexpectedly
@@ -163,7 +174,7 @@ class atomic_queue {
       }
     }
 
-    v = std::move(head->val.value);
+    val = std::move(head->val.value);
     std::destroy_at(std::addressof(head->val.value));
 
     {
@@ -179,12 +190,12 @@ class atomic_queue {
    * @brief Checks if the queue has any values.
    * @return true if the queue has any values, false otherwise.
    */
-  bool has_value() const noexcept {
+  [[nodiscard]] bool has_value() const noexcept {
     return _head.load(std::memory_order::relaxed) != nullptr;
   }
 
  private:
-  inline void allocate_new_bank() CORO_THREAD_REQUIRES(_free_value_mutex) {
+  void allocate_new_bank() CORO_THREAD_REQUIRES(_free_value_mutex) {
     _additional_banks.emplace_back(std::make_unique<values_bank>());
     _free_value = std::addressof(_additional_banks.back()->values[0]);
   }

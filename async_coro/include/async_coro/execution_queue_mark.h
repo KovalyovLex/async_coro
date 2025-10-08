@@ -44,7 +44,12 @@ class execution_queue_mark {
   explicit constexpr execution_queue_mark(std::uint8_t marker) noexcept : _marker(marker) {}
 
   execution_queue_mark(const execution_queue_mark &) noexcept = default;
+  execution_queue_mark(execution_queue_mark &&) noexcept = default;
+
+  ~execution_queue_mark() noexcept = default;
+
   execution_queue_mark &operator=(const execution_queue_mark &) noexcept = default;
+  execution_queue_mark &operator=(execution_queue_mark &&) noexcept = default;
 
   /**
    * @brief Returns the numeric value of this execution queue mark
@@ -54,7 +59,7 @@ class execution_queue_mark {
    * @note This method is constexpr for compile-time evaluation
    * @note This method is noexcept and will not throw exceptions
    */
-  constexpr std::uint8_t get_value() const noexcept {
+  [[nodiscard]] constexpr std::uint8_t get_value() const noexcept {
     return _marker;
   }
 
@@ -145,10 +150,15 @@ class execution_thread_mask {
    * @note This constructor is constexpr for compile-time evaluation
    * @note This constructor is noexcept and will not throw exceptions
    */
-  constexpr execution_thread_mask(execution_queue_mark marker) noexcept : _mask(1 << marker.get_value()) {}
+  constexpr execution_thread_mask(execution_queue_mark marker) noexcept : _mask(1U << marker.get_value()) {}  // NOLINT(*-explicit-*)
 
   execution_thread_mask(const execution_thread_mask &) noexcept = default;
+  execution_thread_mask(execution_thread_mask &&) noexcept = default;
+
+  ~execution_thread_mask() noexcept = default;
+
   execution_thread_mask &operator=(const execution_thread_mask &) noexcept = default;
+  execution_thread_mask &operator=(execution_thread_mask &&) noexcept = default;
 
   /**
    * @brief Checks if this thread mask allows the specified queue permissions
@@ -163,7 +173,7 @@ class execution_thread_mask {
    * @note This method is noexcept and will not throw exceptions
    * @note This method is commonly used to check if a thread can process a specific queue
    */
-  constexpr bool allowed(execution_thread_mask other) const noexcept {
+  [[nodiscard]] constexpr bool allowed(execution_thread_mask other) const noexcept {
     return (other._mask & _mask) != 0;
   }
 

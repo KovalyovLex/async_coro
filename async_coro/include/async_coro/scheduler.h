@@ -35,6 +35,9 @@ class scheduler {
    */
   scheduler();
 
+  scheduler(const scheduler&) = delete;
+  scheduler(scheduler&&) = delete;
+
   /**
    * @brief Constructs a scheduler with a provided execution system.
    * @param system The execution system to use for scheduling tasks.
@@ -45,6 +48,9 @@ class scheduler {
    * @brief Destroys the scheduler, destroying all managed coroutines.
    */
   ~scheduler();
+
+  scheduler& operator=(const scheduler&) = delete;
+  scheduler& operator=(scheduler&&) = delete;
 
   /**
    * @brief Schedules a task and starts its execution.
