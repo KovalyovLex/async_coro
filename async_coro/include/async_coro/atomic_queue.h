@@ -68,7 +68,17 @@ class atomic_queue {
   /**
    * @brief Destroy the atomic queue object and all the values that are still in it.
    */
-  ~atomic_queue() noexcept = default;
+  ~atomic_queue() noexcept {
+    unique_lock lock{_value_mutex};
+
+    auto head = _head.exchange(nullptr, std::memory_order::relaxed);
+    _last = nullptr;
+
+    while (head) {
+      std::destroy_at(std::addressof(head->val.value));
+      head = head->next;
+    }
+  }
 
   atomic_queue& operator=(const atomic_queue&) = delete;
   atomic_queue& operator=(atomic_queue&&) = delete;
