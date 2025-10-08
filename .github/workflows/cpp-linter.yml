@@ -19,7 +19,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          ignore: googletest
+          ignore: googletest|.github|.vscode
           ignore-tidy: tests
           version: 20
           style: 'file'  # Use .clang-format config file
