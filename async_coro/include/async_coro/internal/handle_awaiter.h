@@ -64,7 +64,7 @@ class handle_awaiter {
     _handle.request_cancel();
     _handle.reset_continue();
 
-    if (!_was_continued.exchange(true, std::memory_order::relaxed)) {
+    if (!_was_continued.exchange(true, std::memory_order::acquire)) {
       continue_callback::ptr continuation{std::exchange(_continue_f, nullptr)};
       bool cancel = true;
 
@@ -77,8 +77,8 @@ class handle_awaiter {
   void continue_after_complete(continue_callback& continue_f) {
     ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
-    _was_continued.store(false, std::memory_order::relaxed);
     _continue_f = &continue_f;
+    _was_continued.store(false, std::memory_order::release);
 
     _handle.continue_with(_continue_callback);
   }

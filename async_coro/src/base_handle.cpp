@@ -50,6 +50,8 @@ void base_handle::destroy_impl() {
     continuation->destroy();
   }
 
+  _is_inside_cancel.wait(true, std::memory_order::acquire);
+
   get_handle().destroy();
 }
 
@@ -77,6 +79,8 @@ void base_handle::inc_num_owners() noexcept {
 }
 
 bool base_handle::request_cancel() {
+  const auto was_in_cancel = _is_inside_cancel.exchange(true, std::memory_order::acquire);
+
   const auto [was_requested, state] = set_cancel_requested();
   if (!was_requested) {
     // this is first cancel - notify continuation
@@ -94,7 +98,14 @@ bool base_handle::request_cancel() {
         on_cancel->execute_and_destroy();
       }
     }
-    execute_continuation(true);
+
+    execute_continuation(true, !was_in_cancel);
+
+    return was_requested;
+  }
+
+  if (!was_in_cancel) {
+    this->release_cancel_lock();
   }
   return was_requested;
 }

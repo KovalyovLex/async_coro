@@ -153,7 +153,7 @@ class any_awaiter {
         },
         _awaiters);
 
-    if (!_was_continued.exchange(true, std::memory_order::relaxed)) {
+    if (!_was_continued.exchange(true, std::memory_order::acquire)) {
       continue_callback::ptr continuation{std::exchange(_continue_f, nullptr)};
       bool cancel = true;
 
@@ -166,8 +166,8 @@ class any_awaiter {
   void continue_after_complete(continue_callback& continue_f) {
     ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
-    _was_continued.store(false, std::memory_order::relaxed);
     _continue_f = &continue_f;
+    _was_continued.store(false, std::memory_order::release);
 
     const auto iter_awaiters = [&]<std::size_t... TI>(std::index_sequence<TI...>) {
       const auto set_continue = [&](auto& awaiter, continue_callback& callback) {
