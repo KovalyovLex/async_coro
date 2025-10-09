@@ -380,7 +380,8 @@ class base_handle {
   base_handle* _current_child = nullptr;
   std::thread::id _execution_thread;
   execution_queue_mark _execution_queue = execution_queues::main;
-  std::atomic<uint8_t> _atomic_state{num_owners_step};  // 1 owner by default
+  std::atomic_uint8_t _atomic_state{num_owners_step};  // 1 owner by default
+  std::atomic_bool _is_inside_cancel{false};
 
  protected:
   bool _is_initialized = false;  // NOLINT(*non-private-member*)
