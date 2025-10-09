@@ -145,7 +145,7 @@ void scheduler::cleanup_coroutine(base_handle& handle_impl, bool cancelled) {
 #if ASYNC_CORO_WITH_EXCEPTIONS && ASYNC_CORO_COMPILE_WITH_EXCEPTIONS
   try {
     // try to handle exception by external api
-    if (!handle_impl.execute_continuation(cancelled)) {
+    if (!handle_impl.execute_continuation(cancelled, false)) {
       handle_impl.check_exception_base();
     }
   } catch (...) {
@@ -159,7 +159,7 @@ void scheduler::cleanup_coroutine(base_handle& handle_impl, bool cancelled) {
     }
   }
 #else
-  handle_impl.execute_continuation(cancelled);
+  handle_impl.execute_continuation(cancelled, false);
 #endif
 
   if (was_managed) {

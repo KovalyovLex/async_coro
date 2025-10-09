@@ -283,7 +283,7 @@ class base_handle {
 
  protected:
   // returns true if continuation was executed
-  virtual bool execute_continuation(bool cancelled) = 0;
+  virtual bool execute_continuation(bool cancelled, bool release_cancel) = 0;
 
 #if ASYNC_CORO_WITH_EXCEPTIONS
   // retrows exception if it was caught
@@ -306,6 +306,13 @@ class base_handle {
   }
 
   void set_continuation_functor(callback_base* func) noexcept;
+
+  void release_cancel_lock() noexcept {
+    ASYNC_CORO_ASSERT_VARIABLE const auto was_inside = _is_inside_cancel.exchange(false, std::memory_order::release);
+    ASYNC_CORO_ASSERT(was_inside);
+
+    _is_inside_cancel.notify_one();
+  }
 
  private:
   void destroy_impl();
@@ -380,7 +387,8 @@ class base_handle {
   base_handle* _current_child = nullptr;
   std::thread::id _execution_thread;
   execution_queue_mark _execution_queue = execution_queues::main;
-  std::atomic<uint8_t> _atomic_state{num_owners_step};  // 1 owner by default
+  std::atomic_uint8_t _atomic_state{num_owners_step};  // 1 owner by default
+  std::atomic_bool _is_inside_cancel{false};
 
  protected:
   bool _is_initialized = false;  // NOLINT(*non-private-member*)
