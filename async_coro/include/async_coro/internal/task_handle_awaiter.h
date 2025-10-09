@@ -29,7 +29,7 @@ class task_handle_awaiter {
   task_handle_awaiter(task_handle_awaiter&&) = delete;
 
   ~task_handle_awaiter() noexcept {
-    _can_be_freed.wait(true, std::memory_order::acquire);
+    _can_be_freed.wait(false, std::memory_order::acquire);
   }
 
   task_handle_awaiter& operator=(const task_handle_awaiter&) = delete;
@@ -90,6 +90,8 @@ class task_handle_awaiter {
       if (!clb->_was_done.exchange(true, std::memory_order::relaxed)) {
         clb->set_can_be_freed();
         clb->_suspension.try_to_continue_from_any_thread(cancelled);
+      } else {
+        clb->set_can_be_freed();
       }
     }
 

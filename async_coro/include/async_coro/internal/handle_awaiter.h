@@ -44,7 +44,7 @@ class handle_awaiter {
   }
 
   ~handle_awaiter() noexcept {
-    _can_be_freed.wait(true, std::memory_order::acquire);
+    _can_be_freed.wait(false, std::memory_order::acquire);
   }
 
   handle_awaiter& operator=(const handle_awaiter&) = delete;
@@ -121,6 +121,8 @@ class handle_awaiter {
         while (continuation) {
           std::tie(continuation, cancelled) = continuation.release()->execute_and_destroy(cancelled);
         }
+      } else {
+        clb->set_can_be_freed();
       }
     }
 
