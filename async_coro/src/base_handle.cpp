@@ -98,12 +98,14 @@ bool base_handle::request_cancel() {
         on_cancel->execute_and_destroy();
       }
     }
-    execute_continuation(true);
+
+    execute_continuation(true, !was_in_cancel);
+
+    return was_requested;
   }
 
   if (!was_in_cancel) {
-    _is_inside_cancel.store(false, std::memory_order::release);
-    _is_inside_cancel.notify_one();
+    this->release_cancel_lock();
   }
   return was_requested;
 }

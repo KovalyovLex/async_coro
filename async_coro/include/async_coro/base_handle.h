@@ -283,7 +283,7 @@ class base_handle {
 
  protected:
   // returns true if continuation was executed
-  virtual bool execute_continuation(bool cancelled) = 0;
+  virtual bool execute_continuation(bool cancelled, bool release_cancel) = 0;
 
 #if ASYNC_CORO_WITH_EXCEPTIONS
   // retrows exception if it was caught
@@ -306,6 +306,13 @@ class base_handle {
   }
 
   void set_continuation_functor(callback_base* func) noexcept;
+
+  void release_cancel_lock() noexcept {
+    ASYNC_CORO_ASSERT_VARIABLE const auto was_inside = _is_inside_cancel.exchange(false, std::memory_order::release);
+    ASYNC_CORO_ASSERT(was_inside);
+
+    _is_inside_cancel.notify_one();
+  }
 
  private:
   void destroy_impl();
