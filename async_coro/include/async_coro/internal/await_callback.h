@@ -4,6 +4,9 @@
 #include <async_coro/callback.h>
 #include <async_coro/config.h>
 #include <async_coro/scheduler.h>
+#include <async_coro/thread_safety/analysis.h>
+#include <async_coro/thread_safety/spin_lock_mutex.h>
+#include <async_coro/thread_safety/unique_lock.h>
 #include <async_coro/warnings.h>
 
 #include <atomic>
@@ -32,29 +35,36 @@ class await_callback_base {
   }
 
   void reset_continue_callback() noexcept {
-    bool expected = false;
-    while (!_continue_lock.compare_exchange_strong(expected, true, std::memory_order::acq_rel)) {
-      expected = false;
-    }
+    unique_lock lock{_continue_mutex};
 
-    if (auto* clb = _continue.exchange(nullptr, std::memory_order::relaxed)) {
-      clb->change_continue(nullptr, true);
-    }
+    if (auto* clb = std::exchange(_continue, nullptr)) {
+      unique_lock lock_callback{clb->_callback_mutex};
 
-    _continue_lock.store(false, std::memory_order::release);
+      ASYNC_CORO_ASSERT(clb->_callback == this);
+
+      auto call_no_safe = [](continue_callback* ptr) CORO_THREAD_NO_THREAD_SAFETY_ANALYSIS {
+        ptr->change_continue_locked(nullptr);
+      };
+
+      call_no_safe(clb);
+    }
   }
 
   // This callback will be handled externally from any thread.
   // As we dont want to use any extra allocation we use double lock technic to sync access between await_callback and this external callback.
   class continue_callback {
+    friend class await_callback_base;
+
    public:
-    explicit continue_callback(await_callback_base& clb) noexcept : callback(&clb) {
-      clb._continue.store(this, std::memory_order::relaxed);
+    explicit continue_callback(await_callback_base& clb) noexcept CORO_THREAD_EXCLUDES(clb._continue_mutex)
+        : _callback(&clb) {
+      unique_lock callback_lock{clb._continue_mutex};
+      clb._continue = this;
     }
     continue_callback(const continue_callback&) = delete;
     continue_callback(continue_callback&& other) noexcept
-        : callback(other.callback.load(std::memory_order::relaxed)) {
-      other.change_continue(this);
+        : _callback(other._callback) {
+      other.change_continue_no_lock(this);
     }
 
     continue_callback& operator=(const continue_callback&) = delete;
@@ -63,91 +73,96 @@ class await_callback_base {
         return *this;
       }
 
-      change_continue(nullptr);
+      change_continue_no_lock(nullptr);
 
-      other.change_continue(this);
+      other.change_continue_no_lock(this);
 
       return *this;
     }
 
-    bool change_continue(continue_callback* new_ptr, bool callback_write_granted = false) noexcept {
-      // busy wait self
-      bool expected = false;
-      while (!callback_lock.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
-        expected = false;
-      }
-
-      auto* clb = callback.load(std::memory_order::relaxed);
-
-      if (clb == nullptr) {
-        if (new_ptr != nullptr) {
-          new_ptr->callback.store(nullptr, std::memory_order::relaxed);
-        }
-        callback_lock.store(false, std::memory_order_release);
-        return false;
-      }
-
-      // busy wait callback
-      do {  // NOLINT(*do-while)
-        if (clb != callback.load(std::memory_order::relaxed)) {
-          callback.store(nullptr, std::memory_order::relaxed);
-          callback_lock.store(false, std::memory_order_release);
-          return false;
-        }
-        expected = false;
-      } while (!callback_write_granted && !clb->_continue_lock.compare_exchange_strong(expected, true, std::memory_order_relaxed));
-
-      if (new_ptr != nullptr) {
-        new_ptr->callback.store(clb, std::memory_order::relaxed);
-      }
-      clb->_continue.store(new_ptr, std::memory_order::relaxed);
-      callback.store(nullptr, std::memory_order::relaxed);
-
-      clb->_continue_lock.store(false, std::memory_order_release);
-      callback_lock.store(false, std::memory_order_release);
-      return true;
-    }
-
     ~continue_callback() noexcept {
-      change_continue(nullptr);
+      change_continue_no_lock(nullptr);
     }
 
     void operator()() const {
-      auto* const clb = callback.load(std::memory_order::relaxed);
-      if (clb == nullptr) [[unlikely]] {
+      unique_lock callback_lock{_callback_mutex};
+
+      if (_callback == nullptr) [[unlikely]] {
         return;
       }
 
-      // busy wait self
-      bool expected = false;
-      while (!callback_lock.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
-        expected = false;
-      }
+      unique_lock continue_lock{_callback->_continue_mutex};
 
-      // busy wait callback
-      do {  // NOLINT(*do-while)
-        if (clb != callback.load(std::memory_order::relaxed)) {
-          return;
-        }
-        expected = false;
-      } while (!clb->_continue_lock.compare_exchange_strong(expected, true, std::memory_order_relaxed));
+      if (!_callback->_was_done.exchange(true, std::memory_order::relaxed)) {
+        auto* clb = _callback;
 
-      // release self lock
-      callback_lock.store(false, std::memory_order_release);
-
-      if (!clb->_was_done.exchange(true, std::memory_order::relaxed)) {
         // no cancel here should happen. clb can't be destroyed at this point so we can release the lock
-        clb->_continue_lock.store(false, std::memory_order_release);
+        continue_lock.unlock();
+        callback_lock.unlock();
 
         clb->_suspension.try_to_continue_from_any_thread(false);
         return;
       }
-
-      clb->_continue_lock.store(false, std::memory_order_release);
     }
 
-    std::atomic<await_callback_base*> callback;
-    mutable std::atomic_bool callback_lock = false;
+   private:
+    bool change_continue_no_lock(continue_callback* new_ptr) noexcept CORO_THREAD_EXCLUDES(_callback_mutex, new_ptr->_callback_mutex, _callback->_continue_mutex) {
+      unique_lock callback_lock{_callback_mutex};
+
+      if (new_ptr != nullptr) {
+        unique_lock new_ptr_lock{new_ptr->_callback_mutex};
+
+        if (_callback == nullptr) {
+          new_ptr->_callback = nullptr;
+          return false;
+        }
+
+        unique_lock clb_lock = unique_lock{_callback->_continue_mutex};
+
+        new_ptr->_callback = _callback;
+        _callback->_continue = new_ptr;
+        _callback = nullptr;
+      } else {
+        if (_callback == nullptr) {
+          return false;
+        }
+
+        unique_lock clb_lock = unique_lock{_callback->_continue_mutex};
+
+        _callback->_continue = new_ptr;
+        _callback = nullptr;
+      }
+
+      return true;
+    }
+
+    bool change_continue_locked(continue_callback* new_ptr) noexcept CORO_THREAD_EXCLUDES(new_ptr->_callback_mutex) CORO_THREAD_REQUIRES(_callback_mutex, _callback->_continue_mutex) {
+      if (new_ptr != nullptr) {
+        unique_lock new_ptr_lock{new_ptr->_callback_mutex};
+
+        if (_callback == nullptr) {
+          new_ptr->_callback = nullptr;
+          return false;
+        }
+
+        new_ptr->_callback = _callback;
+        _callback->_continue = new_ptr;
+        _callback = nullptr;
+      } else {
+        if (_callback == nullptr) {
+          return false;
+        }
+
+        _callback->_continue = new_ptr;
+        _callback = nullptr;
+      }
+
+      return true;
+    }
+
+   private:
+    await_callback_base* _callback CORO_THREAD_GUARDED_BY(_callback_mutex);
+    mutable spin_lock_mutex _callback_mutex;
   };
 
   class on_cancel_callback {
@@ -165,11 +180,11 @@ class await_callback_base {
   };
 
  protected:
+  std::atomic_bool _was_done = false;
   coroutine_suspender _suspension;
   callback_on_stack<on_cancel_callback, void()> _on_cancel;
-  std::atomic<continue_callback*> _continue = nullptr;
-  std::atomic_bool _was_done = false;
-  std::atomic_bool _continue_lock = false;
+  continue_callback* _continue CORO_THREAD_GUARDED_BY(_continue_mutex) = nullptr;
+  spin_lock_mutex _continue_mutex;
 };
 
 template <typename T>
