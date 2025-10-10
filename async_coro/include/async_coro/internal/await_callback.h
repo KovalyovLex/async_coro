@@ -71,19 +71,20 @@ class await_callback_base {
     }
 
     bool change_continue(continue_callback* new_ptr, bool callback_write_granted = false) noexcept {
+      // busy wait self
+      bool expected = false;
+      while (!callback_lock.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+        expected = false;
+      }
+
       auto* clb = callback.load(std::memory_order::relaxed);
 
       if (clb == nullptr) {
         if (new_ptr != nullptr) {
-          new_ptr->callback.store(clb, std::memory_order::relaxed);
+          new_ptr->callback.store(nullptr, std::memory_order::relaxed);
         }
+        callback_lock.store(false, std::memory_order_release);
         return false;
-      }
-
-      // busy wait self
-      bool expected = false;
-      while (!callback_lock.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
-        expected = false;
       }
 
       // busy wait callback
