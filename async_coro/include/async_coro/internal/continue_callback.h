@@ -23,29 +23,4 @@ class continue_callback : public callback<callback_sig> {
       : super(executor, deleter) {}
 };
 
-template <typename Fx>
-class continue_callback_on_stack : public continue_callback {
- public:
-  template <class... TArgs2>
-  explicit continue_callback_on_stack(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
-      : continue_callback(&executor, nullptr),
-        _fx(std::forward<TArgs2>(args)...) {}
-
-  continue_callback_on_stack(const continue_callback_on_stack&) = delete;
-  continue_callback_on_stack(continue_callback_on_stack&&) = delete;
-
-  continue_callback_on_stack& operator=(const continue_callback_on_stack&) = delete;
-  continue_callback_on_stack& operator=(continue_callback_on_stack&&) = delete;
-
-  ~continue_callback_on_stack() noexcept = default;
-
- private:
-  static continue_callback::return_type executor(callback_base* base, bool /*with_destroy*/, bool cancel) {
-    return static_cast<continue_callback_on_stack*>(base)->_fx(cancel);
-  }
-
- private:
-  Fx _fx;
-};
-
 }  // namespace async_coro::internal
