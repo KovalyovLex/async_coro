@@ -194,17 +194,16 @@ class task_handle final {
   void continue_with(callback_type& func) {
     ASYNC_CORO_ASSERT(!_handle.promise().is_coro_embedded());
 
-    typename callback_type::ptr uniq_ptr{&func};
-
     if (!_handle) {
+      func.destroy();
       return;
     }
 
     promise_type& promise = _handle.promise();
     if (done()) {
-      func.execute(promise, false);
+      func.execute_and_destroy(promise, false);
     } else {
-      const auto ptr = uniq_ptr.release();
+      const auto ptr = &func;
       promise.set_continuation_functor(ptr, internal::passkey{this});
       const auto [state, cancelled] = promise.get_coroutine_state_and_cancelled(std::memory_order::acquire);
       if (state == async_coro::coroutine_state::finished || cancelled) {
