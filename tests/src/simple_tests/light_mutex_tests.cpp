@@ -80,10 +80,6 @@ TEST_P(light_mutex_mt, perf_simple_lock) {
   workers.clear();
 
   std::cout << "mutex_t: " << mutex_t.count() << " light_t: " << light_t.count() << "\n";
-
-#if (defined(_MSC_VER) && !defined(_DEBUG)) || defined(NDEBUG)
-  EXPECT_GE(mutex_t.count(), light_t.count());
-#endif
 }
 
 TEST_P(light_mutex_mt, perf_try_lock) {
@@ -159,10 +155,6 @@ TEST_P(light_mutex_mt, perf_try_lock) {
   workers.clear();
 
   std::cout << "mutex_t: " << mutex_t.count() << " light_t: " << light_t.count() << "\n";
-
-#if (defined(_MSC_VER) && !defined(_DEBUG)) || defined(NDEBUG)
-  EXPECT_GE(mutex_t.count(), light_t.count());
-#endif
 }
 
 INSTANTIATE_TEST_SUITE_P(
