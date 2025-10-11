@@ -6,19 +6,19 @@
 
 namespace async_coro {
 
-// Spin lock mutex. Or unfair mutex without excessive sys calls
-class CORO_THREAD_CAPABILITY("mutex") spin_lock_mutex {
+// Fast mutex for case if there is no concurrency (no sys calls for lock, only in unlock)
+class CORO_THREAD_CAPABILITY("mutex") light_mutex {
  public:
-  using super = spin_lock_mutex;
+  using super = light_mutex;
 
-  spin_lock_mutex() noexcept = default;
-  spin_lock_mutex(const spin_lock_mutex&) = delete;
-  spin_lock_mutex(spin_lock_mutex&&) = delete;
+  light_mutex() noexcept = default;
+  light_mutex(const light_mutex&) = delete;
+  light_mutex(light_mutex&&) = delete;
 
-  ~spin_lock_mutex() noexcept = default;
+  ~light_mutex() noexcept = default;
 
-  spin_lock_mutex& operator=(const spin_lock_mutex&) = delete;
-  spin_lock_mutex& operator=(spin_lock_mutex&&) = delete;
+  light_mutex& operator=(const light_mutex&) = delete;
+  light_mutex& operator=(light_mutex&&) = delete;
 
   void lock() noexcept CORO_THREAD_ACQUIRE() {
     bool expected = false;

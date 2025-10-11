@@ -5,7 +5,7 @@
 #include <async_coro/config.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/thread_safety/analysis.h>
-#include <async_coro/thread_safety/spin_lock_mutex.h>
+#include <async_coro/thread_safety/light_mutex.h>
 #include <async_coro/thread_safety/unique_lock.h>
 #include <async_coro/warnings.h>
 
@@ -162,7 +162,7 @@ class await_callback_base {
 
    private:
     await_callback_base* _callback CORO_THREAD_GUARDED_BY(_callback_mutex);
-    mutable spin_lock_mutex _callback_mutex;
+    mutable light_mutex _callback_mutex;
   };
 
   class on_cancel_callback {
@@ -184,7 +184,7 @@ class await_callback_base {
   coroutine_suspender _suspension;
   callback_on_stack<on_cancel_callback, void()> _on_cancel;
   continue_callback* _continue CORO_THREAD_GUARDED_BY(_continue_mutex) = nullptr;
-  spin_lock_mutex _continue_mutex;
+  light_mutex _continue_mutex;
 };
 
 template <typename T>
