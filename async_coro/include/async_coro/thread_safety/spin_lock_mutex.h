@@ -11,7 +11,7 @@ class CORO_THREAD_CAPABILITY("mutex") spin_lock_mutex {
  public:
   using super = spin_lock_mutex;
 
-  spin_lock_mutex() = default;
+  spin_lock_mutex() noexcept = default;
   spin_lock_mutex(const spin_lock_mutex&) = delete;
   spin_lock_mutex(spin_lock_mutex&&) = delete;
 
@@ -21,24 +21,25 @@ class CORO_THREAD_CAPABILITY("mutex") spin_lock_mutex {
   spin_lock_mutex& operator=(spin_lock_mutex&&) = delete;
 
   void lock() noexcept CORO_THREAD_ACQUIRE() {
-    // Optimistically assume the lock is free on first the try
-    while (_lock.test_and_set(std::memory_order::acquire)) {
-      // Wait for lock to be released without generating cache misses
+    bool expected = false;
+    while (!_lock.compare_exchange_strong(expected, true, std::memory_order::acquire, std::memory_order::relaxed)) {
       _lock.wait(true, std::memory_order::relaxed);
+      expected = false;
     }
   }
 
   bool try_lock() noexcept CORO_THREAD_TRY_ACQUIRE(true) {
-    return !_lock.test_and_set(std::memory_order::acquire);
+    bool expected = false;
+    return _lock.compare_exchange_strong(expected, true, std::memory_order::acquire, std::memory_order::relaxed);
   }
 
   void unlock() noexcept CORO_THREAD_RELEASE() {
-    _lock.clear(std::memory_order::release);
+    _lock.store(false, std::memory_order::release);
     _lock.notify_one();
   }
 
  private:
-  std::atomic_flag _lock;
+  std::atomic_bool _lock{false};
 };
 
 }  // namespace async_coro
