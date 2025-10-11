@@ -6,7 +6,10 @@
 
 namespace async_coro {
 
-// Fast mutex for case if there is no concurrency (no sys calls for lock, only in unlock)
+// Fast mutex for cases if there is no concurrency. It contains only 1 sys call for unlock.
+// Can be faster than std::mutex (up to 2 times if there is no concurrency). With ~2-3 concurrent threads work time comparable to std::mutex.
+// In highly concurrent environment can be significantly slower than std::mutex, especially when number of threads more than cores.
+// Can be used only in low concurrent conditions or for saving memory (as it noticeable smaller than std::mutex)
 class CORO_THREAD_CAPABILITY("mutex") light_mutex {
  public:
   using super = light_mutex;
