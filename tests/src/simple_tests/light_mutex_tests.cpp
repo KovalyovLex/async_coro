@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <thread>
 
 class light_mutex_mt : public ::testing::TestWithParam<std::uint32_t> {
 };
