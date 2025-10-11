@@ -1,7 +1,7 @@
 #pragma once
 
 #include <async_coro/config.h>
-#include <async_coro/thread_safety/spin_lock_mutex.h>
+#include <async_coro/thread_safety/light_mutex.h>
 #include <async_coro/thread_safety/unique_lock.h>
 
 #include <array>
@@ -203,12 +203,12 @@ class atomic_queue {
   }
 
  private:
-  spin_lock_mutex _free_value_mutex;
+  light_mutex _free_value_mutex;
 
   values_bank _head_bank;
   value* _free_value CORO_THREAD_GUARDED_BY(_free_value_mutex) = std::addressof(_head_bank.values[0]);
 
-  spin_lock_mutex _value_mutex;
+  light_mutex _value_mutex;
   value* _last CORO_THREAD_GUARDED_BY(_value_mutex) = nullptr;
 
   std::vector<std::unique_ptr<values_bank>> _additional_banks CORO_THREAD_GUARDED_BY(_free_value_mutex);
