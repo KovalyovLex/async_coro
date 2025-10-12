@@ -46,7 +46,7 @@ class thread_notifier {
     } else if (expected == state_signalled) {
       reset_notification();
     } else {
-      ASYNC_CORO_ASSERT(false && "Unexpected state");
+      ASYNC_CORO_ASSERT(false && "Unexpected state");  // NOLINT(*-static-assert)
     }
   }
 
