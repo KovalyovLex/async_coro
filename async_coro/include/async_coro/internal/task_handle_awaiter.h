@@ -1,7 +1,7 @@
 #pragma once
 
 #include <async_coro/callback.h>
-#include <async_coro/coroutine_suspender.h>
+#include <async_coro/internal/coroutine_suspender.h>
 #include <async_coro/promise_result.h>
 
 #include <atomic>

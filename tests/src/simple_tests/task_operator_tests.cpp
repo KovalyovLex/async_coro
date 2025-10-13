@@ -1,3 +1,4 @@
+#include <async_coro/await/get_scheduler.h>
 #include <async_coro/execution_queue_mark.h>
 #include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>

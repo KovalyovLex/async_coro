@@ -2,7 +2,6 @@
 
 #include <async_coro/config.h>
 #include <async_coro/i_execution_system.h>
-#include <async_coro/internal/get_scheduler_awaiter.h>
 #include <async_coro/internal/passkey.h>
 #include <async_coro/task_handle.h>
 #include <async_coro/task_launcher.h>
@@ -18,7 +17,9 @@
 namespace async_coro {
 
 class base_handle;
+namespace internal {
 class coroutine_suspender;
+}
 
 /**
  * @class scheduler
@@ -115,7 +116,7 @@ class scheduler {
    * thread is suitable, or schedule it for later execution.
    * @param handle_impl The handle of the coroutine to continue.
    */
-  void continue_execution(base_handle& handle_impl, internal::passkey_any<coroutine_suspender, scheduler>);
+  void continue_execution(base_handle& handle_impl, internal::passkey_any<internal::coroutine_suspender, scheduler>);
 
   /**
    * @brief Embed coroutine. Returns true if coroutine was finished
@@ -142,10 +143,5 @@ class scheduler {
   std::shared_ptr<unique_function<void(std::exception_ptr)>> _exception_handler CORO_THREAD_GUARDED_BY(_mutex);
 #endif
 };
-
-// Returns awaiter to get scheduler. Should be used inside task
-inline auto get_scheduler() noexcept {
-  return internal::get_scheduler_awaiter{};
-}
 
 }  // namespace async_coro

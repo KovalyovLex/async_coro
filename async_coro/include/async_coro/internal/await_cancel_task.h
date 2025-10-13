@@ -2,7 +2,7 @@
 
 #include <async_coro/base_handle.h>
 #include <async_coro/config.h>
-#include <async_coro/coroutine_suspender.h>
+#include <async_coro/internal/coroutine_suspender.h>
 
 #include <concepts>
 

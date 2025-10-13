@@ -1,9 +1,9 @@
 #pragma once
 
 #include <async_coro/callback.h>
-#include <async_coro/coroutine_suspender.h>
 #include <async_coro/internal/advanced_awaiter.h>
 #include <async_coro/internal/continue_callback.h>
+#include <async_coro/internal/coroutine_suspender.h>
 
 #include <atomic>
 #include <concepts>

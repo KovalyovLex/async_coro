@@ -2,8 +2,8 @@
 
 #include <async_coro/callback.h>
 #include <async_coro/config.h>
-#include <async_coro/coroutine_suspender.h>
 #include <async_coro/execution_queue_mark.h>
+#include <async_coro/internal/coroutine_suspender.h>
 
 #include <atomic>
 #include <coroutine>
@@ -61,7 +61,7 @@ class scheduled_run_data;
  */
 class base_handle {
   friend scheduler;
-  friend coroutine_suspender;
+  friend internal::coroutine_suspender;
 
   static constexpr uint8_t coroutine_state_mask = (1U << 0U) | (1U << 1U) | (1U << 2U);
   static constexpr uint8_t is_embedded_mask = (1U << 3U);
@@ -252,7 +252,7 @@ class base_handle {
     ASYNC_CORO_ASSERT_VARIABLE auto* prev = this->_on_cancel.exchange(on_cancel, std::memory_order::relaxed);
     ASYNC_CORO_ASSERT(prev == nullptr);
 
-    return coroutine_suspender{*this, suspend_count};
+    return internal::coroutine_suspender{*this, suspend_count};
   }
 
   /**

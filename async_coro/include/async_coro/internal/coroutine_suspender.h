@@ -7,8 +7,10 @@
 #include <utility>
 
 namespace async_coro {
-
 class base_handle;
+}
+
+namespace async_coro::internal {
 
 /**
  * @brief Manages the suspension and resumption of a coroutine based on a suspend count.
@@ -68,4 +70,4 @@ class coroutine_suspender {
   bool _was_continued_immediately{false};
 };
 
-}  // namespace async_coro
+}  // namespace async_coro::internal
