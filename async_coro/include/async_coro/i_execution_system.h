@@ -3,6 +3,7 @@
 #include <async_coro/execution_queue_mark.h>
 #include <async_coro/unique_function.h>
 
+#include <chrono>
 #include <memory>
 
 namespace async_coro {
@@ -82,6 +83,18 @@ class i_execution_system {
    * @note The task function object will be moved into the execution system
    */
   virtual void plan_execution(task_function func, execution_queue_mark execution_queue) = 0;
+
+  /**
+   * @brief Schedules a task for execution on the specified queue at the given time
+   *
+   * The task will be executed no earlier than the provided steady_clock time point.
+   *
+   * @param func The task function to be executed
+   * @param execution_queue The execution queue where the task should be scheduled
+   * @param when The steady_clock time point when the task should be executed
+   */
+  virtual void plan_execution(task_function func, execution_queue_mark execution_queue,
+                              std::chrono::steady_clock::time_point when) = 0;
 
   /**
    * @brief Executes a task immediately if possible, otherwise schedules it

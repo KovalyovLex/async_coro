@@ -4,10 +4,14 @@
 #include <async_coro/i_execution_system.h>
 #include <async_coro/internal/hardware_interference_size.h>
 #include <async_coro/thread_notifier.h>
+#include <async_coro/thread_safety/analysis.h>
+#include <async_coro/thread_safety/condition_variable.h>
+#include <async_coro/thread_safety/mutex.h>
 #include <async_coro/unique_function.h>
 #include <async_coro/warnings.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -44,13 +48,13 @@ struct execution_thread_config {
    */
   execution_thread_config(std::string name, execution_queue_mark mark) : name(std::move(name)), allowed_tasks(mark) {}
 
-  /** @brief The name of the thread for debugging and identification purposes */
+  // The name of the thread for debugging and identification purposes
   std::string name;
 
-  /** @brief Bit mask defining which execution queues this thread is allowed to process */
+  // Bit mask defining which execution queues this thread is allowed to process
   execution_thread_mask allowed_tasks = execution_queues::worker | execution_queues::any;
 
-  /** @brief Num empty worker loops to do before going to sleep on notifier */
+  // Num empty worker loops to do before going to sleep on notifier
   std::size_t num_loops_before_sleep = 30;  // NOLINT(*-magic-*)
 };
 
@@ -61,10 +65,10 @@ struct execution_thread_config {
  * including worker thread configurations and main thread task permissions.
  */
 struct execution_system_config {
-  /** @brief Vector of worker thread configurations defining all worker threads */
+  // Vector of worker thread configurations defining all worker threads
   std::vector<execution_thread_config> worker_configs;
 
-  /** @brief Bit mask defining which execution queues the main thread can process */
+  // Bit mask defining which execution queues the main thread can process
   execution_thread_mask main_thread_allowed_tasks = execution_queues::main | execution_queues::any;
 };
 
@@ -147,6 +151,15 @@ class execution_system : public i_execution_system {
   void execute_or_plan_execution(task_function func, execution_queue_mark execution_queue) override;
 
   /**
+   * @brief Schedules a task to be executed at or after the given steady_clock time
+   *
+   * The task will be queued into the requested execution queue when the time
+   * point is reached. This method is thread-safe.
+   */
+  void plan_execution(task_function func, execution_queue_mark execution_queue,
+                      std::chrono::steady_clock::time_point when) override;
+
+  /**
    * @brief Checks if the current thread can execute tasks from the specified queue
    *
    * Determines whether the calling thread has permission to execute tasks
@@ -212,6 +225,11 @@ class execution_system : public i_execution_system {
   void worker_loop(worker_thread_data &data);
 
   /**
+   * @brief loop for delayed tasks
+   */
+  void timer_loop();
+
+  /**
    * @brief Sets the name of a thread for debugging purposes
    *
    * Attempts to set the thread name using platform-specific APIs.
@@ -225,7 +243,24 @@ class execution_system : public i_execution_system {
   static void set_thread_name(std::thread &thread, const std::string &name);
 
  private:
-  /** @brief Type alias for the task queue using atomic_queue */
+  // ...internal delayed task handling
+  class delayed_task {
+   public:
+    task_function func;
+    std::chrono::steady_clock::time_point when;
+    execution_queue_mark queue;
+
+    delayed_task(task_function &&task,
+                 std::chrono::steady_clock::time_point when_tp,
+                 execution_queue_mark queue_mark) noexcept
+        : func(std::move(task)),
+          when(when_tp),
+          queue(queue_mark) {}
+
+    auto operator<=>(const delayed_task &other) const noexcept { return when <=> other.when; }
+  };
+
+  // Type alias for the task queue using atomic_queue
   using tasks = atomic_queue<task_function>;
 
   ASYNC_CORO_WARNINGS_MSVC_PUSH
@@ -238,19 +273,19 @@ class execution_system : public i_execution_system {
    * including the thread object, assigned task queues, permissions, and notification mechanism.
    */
   struct alignas(std::hardware_constructive_interference_size) worker_thread_data {
-    /** @brief Notification mechanism for waking up the worker thread */
+    // Notification mechanism for waking up the worker thread
     thread_notifier notifier;
 
-    /** @brief The actual thread object */
+    // The actual thread object
     std::thread thread;
 
-    /** @brief Pointers to task queues this worker can process */
+    // Pointers to task queues this worker can process
     std::vector<tasks *> task_queues;
 
-    /** @brief Bit mask defining which execution queues this worker can process */
+    // Bit mask defining which execution queues this worker can process
     execution_thread_mask mask;
 
-    /** @brief Num empty worker loops to do before going to sleep on notifier */
+    // Num empty worker loops to do before going to sleep on notifier
     std::size_t num_loops_before_sleep = 0;
   };
 
@@ -263,38 +298,45 @@ class execution_system : public i_execution_system {
    * queue itself and references to all worker threads that can process it.
    */
   struct task_queue {
-    /** @brief The actual task queue containing pending tasks */
+    // The actual task queue containing pending tasks
     tasks queue;
 
-    /** @brief Pointers to worker threads that can execute tasks from this queue */
+    // Pointers to worker threads that can execute tasks from this queue
     std::vector<worker_thread_data *> workers_data;
   };
 
-  /** @brief Array of task queues, one for each execution queue mark */
+  // Array of task queues, one for each execution queue mark
   // NOLINTNEXTLINE(*-avoid-c-arrays)
   std::unique_ptr<task_queue[]> _tasks_queues;
 
-  /** @brief Pointers to task queues that the main thread can process */
+  // Pointers to task queues that the main thread can process
   std::vector<tasks *> _main_thread_queues;
 
-  /** @brief Array of worker thread data structures */
+  // Array of worker thread data structures
   // NOLINTNEXTLINE(*-avoid-c-arrays)
   std::unique_ptr<worker_thread_data[]> _thread_data;
 
-  /** @brief ID of the main thread for identification purposes */
+  // ID of the main thread for identification purposes
   std::thread::id _main_thread_id;
 
-  /** @brief Bit mask defining which execution queues the main thread can process */
+  // Bit mask defining which execution queues the main thread can process
   const execution_thread_mask _main_thread_mask;
 
-  /** @brief Number of worker threads in the system */
+  // Number of worker threads in the system
   const std::uint32_t _num_workers;
 
-  /** @brief Maximum execution queue mark that this system can handle */
+  // Maximum execution queue mark that this system can handle
   const execution_queue_mark _max_q;
 
-  /** @brief Atomic flag indicating whether the system is in the process of shutting down */
+  // Atomic flag indicating whether the system is in the process of shutting down
   std::atomic_bool _is_stopping{false};
+
+  // Delayed tasks
+  async_coro::mutex _delayed_mutex;
+  async_coro::condition_variable _delayed_cv;
+
+  std::vector<delayed_task> _delayed_tasks CORO_THREAD_GUARDED_BY(_delayed_mutex);
+  std::thread _timer_thread;
 };
 
 }  // namespace async_coro
