@@ -12,10 +12,12 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace async_coro {
@@ -154,10 +156,22 @@ class execution_system : public i_execution_system {
    * @brief Schedules a task to be executed at or after the given steady_clock time
    *
    * The task will be queued into the requested execution queue when the time
-   * point is reached. This method is thread-safe.
+   * point is reached.
+   *
+   * @note Thread safety: This method is thread-safe and can be called from any thread
    */
-  void plan_execution(task_function func, execution_queue_mark execution_queue,
-                      std::chrono::steady_clock::time_point when) override;
+  delayed_task_id plan_execution_after(task_function func, execution_queue_mark execution_queue,
+                                       std::chrono::steady_clock::time_point when) override;
+
+  /**
+   * @brief Cancels execution of previously scheduled function
+   *
+   * @param task_id delayed_task_id structure returned from 'plan_execution_after'
+   * @return true if task was cancelled false otherwise
+   *
+   * @note Thread safety: This method is thread-safe and can be called from any thread
+   */
+  bool cancel_execution(const delayed_task_id &task_id) override;
 
   /**
    * @brief Checks if the current thread can execute tasks from the specified queue
@@ -243,17 +257,23 @@ class execution_system : public i_execution_system {
   static void set_thread_name(std::thread &thread, const std::string &name);
 
  private:
+  using t_task_id = decltype(std::declval<delayed_task_id>().task_id);
+
   // ...internal delayed task handling
   class delayed_task {
    public:
     task_function func;
+    t_task_id id;
     std::chrono::steady_clock::time_point when;
     execution_queue_mark queue;
+    bool cancel_execution = false;
 
     delayed_task(task_function &&task,
                  std::chrono::steady_clock::time_point when_tp,
-                 execution_queue_mark queue_mark) noexcept
+                 execution_queue_mark queue_mark,
+                 t_task_id t_id) noexcept
         : func(std::move(task)),
+          id(t_id),
           when(when_tp),
           queue(queue_mark) {}
 
@@ -337,6 +357,7 @@ class execution_system : public i_execution_system {
 
   std::vector<delayed_task> _delayed_tasks CORO_THREAD_GUARDED_BY(_delayed_mutex);
   std::thread _timer_thread;
+  t_task_id _delayed_task_id = 1;
 };
 
 }  // namespace async_coro

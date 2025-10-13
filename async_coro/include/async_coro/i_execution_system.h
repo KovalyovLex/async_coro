@@ -8,6 +8,10 @@
 
 namespace async_coro {
 
+struct delayed_task_id {
+  size_t task_id{};
+};
+
 /**
  * @brief Abstract interface for execution systems
  *
@@ -93,8 +97,18 @@ class i_execution_system {
    * @param execution_queue The execution queue where the task should be scheduled
    * @param when The steady_clock time point when the task should be executed
    */
-  virtual void plan_execution(task_function func, execution_queue_mark execution_queue,
-                              std::chrono::steady_clock::time_point when) = 0;
+  virtual delayed_task_id plan_execution_after(task_function func, execution_queue_mark execution_queue,
+                                               std::chrono::steady_clock::time_point when) = 0;
+
+  /**
+   * @brief Cancels execution of previously scheduled function
+   *
+   * @param task_id delayed_task_id structure returned from 'plan_execution_after'
+   * @return true if task was cancelled false otherwise
+   *
+   * @note If this method returns false execution may still happen if task was already scheduled for asap execution on the queue
+   */
+  virtual bool cancel_execution(const delayed_task_id &task_id) = 0;
 
   /**
    * @brief Executes a task immediately if possible, otherwise schedules it

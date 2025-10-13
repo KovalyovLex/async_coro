@@ -128,33 +128,59 @@ execution_system::~execution_system() noexcept {
   }
 }
 
-void execution_system::plan_execution(task_function func, execution_queue_mark execution_queue,
-                                      std::chrono::steady_clock::time_point when) {
+delayed_task_id execution_system::plan_execution_after(task_function func, execution_queue_mark execution_queue,
+                                                       std::chrono::steady_clock::time_point when) {
   ASYNC_CORO_ASSERT(execution_queue.get_value() <= _max_q.get_value());
   if (!func) [[unlikely]] {
-    return;
+    return {};
   }
 
   // if time is now or in the past, push directly
   if (when <= std::chrono::steady_clock::now()) {
     plan_execution(std::move(func), execution_queue);
-    return;
+    return {};
   }
 
   bool need_notify = false;
+  t_task_id task_id = 0;
   {
     unique_lock lock(_delayed_mutex);
 
-    // notify only if our time goes on top
-    need_notify = _delayed_tasks.empty() || _delayed_tasks.front().when > when;
+    task_id = _delayed_task_id++;
+    if (_delayed_task_id == 0) [[unlikely]] {
+      _delayed_task_id = 1;
+    }
 
-    _delayed_tasks.emplace_back(std::move(func), when, execution_queue);
+    _delayed_tasks.emplace_back(std::move(func), when, execution_queue, task_id);
     std::ranges::push_heap(_delayed_tasks, std::greater<delayed_task>{});
+
+    // notify only if our value goes on top of the heap
+    need_notify = _delayed_tasks.front().id == task_id;
   }
 
   if (need_notify) {
     _delayed_cv.notify_one();
   }
+
+  return {.task_id = task_id};
+}
+
+bool execution_system::cancel_execution(const delayed_task_id& task_id) {
+  if (task_id.task_id == 0) {
+    return false;
+  }
+
+  unique_lock lock(_delayed_mutex);
+
+  const auto task_it = std::ranges::find_if(_delayed_tasks, [t_id = task_id.task_id](const delayed_task& task) {
+    return task.id == t_id;
+  });
+
+  if (task_it != _delayed_tasks.end()) {
+    task_it->cancel_execution = true;
+    return true;
+  }
+  return false;
 }
 
 void execution_system::plan_execution(task_function func, execution_queue_mark execution_queue) {
@@ -274,7 +300,7 @@ void execution_system::timer_loop() {
     {
       auto now = std::chrono::steady_clock::now();
       auto& top = _delayed_tasks.front();
-      if (top.when > now) {
+      if (!top.cancel_execution && top.when > now) {
         _delayed_cv.wait_until(lock, top.when);
         continue;
       }
@@ -282,8 +308,14 @@ void execution_system::timer_loop() {
 
     std::ranges::pop_heap(_delayed_tasks, std::greater<delayed_task>{});
 
+    if (_delayed_tasks.back().cancel_execution) {
+      _delayed_tasks.pop_back();
+      continue;
+    }
+
     auto& target_task_q = _tasks_queues[_delayed_tasks.back().queue.get_value()];
     task_function func{std::move(_delayed_tasks.back().func)};
+
     _delayed_tasks.pop_back();
 
     lock.unlock();

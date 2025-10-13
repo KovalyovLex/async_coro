@@ -97,7 +97,7 @@ TEST(execution_system, plan_execution_delayed_main) {
   bool executed{false};
   const auto main_thread_id = std::this_thread::get_id();
 
-  system.plan_execution(
+  system.plan_execution_after(
       [&] {
         EXPECT_EQ(std::this_thread::get_id(), main_thread_id);
         executed = true;
@@ -122,7 +122,7 @@ TEST(execution_system, plan_execution_delayed_worker) {
   std::atomic_bool executed{false};
   const auto main_thread_id = std::this_thread::get_id();
 
-  system.plan_execution(
+  system.plan_execution_after(
       [&] {
         executed = true;
         EXPECT_NE(std::this_thread::get_id(), main_thread_id);
@@ -143,10 +143,11 @@ TEST(execution_system, delayed_multiple_diff_time_order_main) {
   const auto now = std::chrono::steady_clock::now();
 
   for (int i = 0; i < 5; ++i) {
-    system.plan_execution([i, &order] {
-      order.push_back(i);
-    },
-                          execution_queues::main, now + std::chrono::milliseconds{50 + (10 * i)});
+    system.plan_execution_after(
+        [i, &order] {
+          order.push_back(i);
+        },
+        execution_queues::main, now + std::chrono::milliseconds{50 + (10 * i)});
   }
 
   // wait past scheduled time
@@ -176,11 +177,12 @@ TEST(execution_system, delayed_multiple_diff_time_order_worker) {
 
   // schedule with increasing offsets
   for (int i = 0; i < 5; ++i) {
-    system.plan_execution([i, &order, &order_m] {
-      std::scoped_lock lock(order_m);
-      order.push_back(i);
-    },
-                          execution_queues::worker, now + std::chrono::milliseconds{100 - (10 * i)});
+    system.plan_execution_after(
+        [i, &order, &order_m] {
+          std::scoped_lock lock(order_m);
+          order.push_back(i);
+        },
+        execution_queues::worker, now + std::chrono::milliseconds{100 - (10 * i)});
   }
 
   // wait enough time for all tasks to execute
