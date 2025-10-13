@@ -223,7 +223,7 @@ void scheduler::set_unhandled_exception_handler(unique_function<void(std::except
 }
 #endif
 
-void scheduler::continue_execution(base_handle& handle_impl, internal::passkey_any<internal::coroutine_suspender, scheduler> /*key*/) {
+void scheduler::continue_execution(base_handle& handle_impl, internal::passkey_any<internal::coroutine_suspender, base_handle, scheduler> /*key*/) {
   ASYNC_CORO_ASSERT(handle_impl._execution_thread != std::thread::id{});
   ASYNC_CORO_ASSERT(handle_impl.get_coroutine_state() == coroutine_state::suspended);
 

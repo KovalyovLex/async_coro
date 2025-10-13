@@ -97,10 +97,18 @@ class scheduler {
    */
   template <class T>
     requires(std::derived_from<T, i_execution_system>)
-  T& get_execution_system() const noexcept {
+  [[nodiscard]] T& get_execution_system() const noexcept {
     ASYNC_CORO_ASSERT(dynamic_cast<T*>(_execution_system.get()));
 
     return *static_cast<T*>(_execution_system.get());
+  }
+
+  /**
+   * @brief Gets a reference to the execution system.
+   * @return A reference to the execution system.
+   */
+  [[nodiscard]] i_execution_system& get_execution_system() const noexcept {
+    return *_execution_system.get();
   }
 
 #if ASYNC_CORO_WITH_EXCEPTIONS && ASYNC_CORO_COMPILE_WITH_EXCEPTIONS
@@ -116,7 +124,7 @@ class scheduler {
    * thread is suitable, or schedule it for later execution.
    * @param handle_impl The handle of the coroutine to continue.
    */
-  void continue_execution(base_handle& handle_impl, internal::passkey_any<internal::coroutine_suspender, scheduler>);
+  void continue_execution(base_handle& handle_impl, internal::passkey_any<internal::coroutine_suspender, base_handle, scheduler>);
 
   /**
    * @brief Embed coroutine. Returns true if coroutine was finished

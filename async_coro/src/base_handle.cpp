@@ -5,6 +5,7 @@
 #include <async_coro/scheduler.h>
 
 #include <atomic>
+#include <memory>
 
 namespace async_coro {
 
@@ -108,6 +109,18 @@ bool base_handle::request_cancel() {
     this->release_cancel_lock();
   }
   return was_requested;
+}
+
+void base_handle::continue_after_sleep() {
+  // reset our cancel
+  if (auto* on_cancel = _on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
+    on_cancel->destroy();
+  }
+
+  ASYNC_CORO_ASSERT(get_scheduler().get_execution_system().is_current_thread_fits(_execution_queue));
+
+  _execution_thread = std::this_thread::get_id();
+  get_scheduler().continue_execution(*this, internal::passkey{this});
 }
 
 }  // namespace async_coro

@@ -35,7 +35,7 @@ class await_callback_base {
   }
 
   void reset_continue_callback() noexcept {
-    unique_lock lock{_continue_mutex};
+    unique_lock lock{_continue_mutex};  // TODO: deadlock - _callback_mutex & _continue_mutex lock order miss match
 
     if (auto* clb = std::exchange(_continue, nullptr)) {
       unique_lock lock_callback{clb->_callback_mutex};
