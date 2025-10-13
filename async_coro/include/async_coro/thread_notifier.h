@@ -11,8 +11,13 @@ namespace async_coro {
 class thread_notifier {
  public:
   thread_notifier() noexcept = default;
+
   thread_notifier(const thread_notifier&) = delete;
   thread_notifier(thread_notifier&&) = delete;
+  ~thread_notifier() noexcept = default;
+
+  thread_notifier& operator=(const thread_notifier&) = delete;
+  thread_notifier& operator=(thread_notifier&&) = delete;
 
   // Notifies sleeping thread or will force to skip next sleep of the thread
   void notify() noexcept {
@@ -35,15 +40,13 @@ class thread_notifier {
   void sleep() noexcept {
     auto expected = state_idle;
     if (_state.compare_exchange_strong(expected, state_sleeping, std::memory_order::release, std::memory_order::relaxed)) {
-      do {
-        _state.wait(state_sleeping, std::memory_order::relaxed);
-      } while (_state.load(std::memory_order::relaxed) == state_sleeping);
+      _state.wait(state_sleeping, std::memory_order::relaxed);
 
       reset_notification();
     } else if (expected == state_signalled) {
       reset_notification();
     } else {
-      ASYNC_CORO_ASSERT(false && "Unexpected state");
+      ASYNC_CORO_ASSERT(false && "Unexpected state");  // NOLINT(*-static-assert)
     }
   }
 
@@ -56,9 +59,9 @@ class thread_notifier {
   }
 
  private:
-  static inline constexpr uint8_t state_idle = 0;
-  static inline constexpr uint8_t state_sleeping = 1;
-  static inline constexpr uint8_t state_signalled = 2;
+  static constexpr uint8_t state_idle = 0;
+  static constexpr uint8_t state_sleeping = 1;
+  static constexpr uint8_t state_signalled = 2;
 
   std::atomic<uint8_t> _state = state_idle;
 
