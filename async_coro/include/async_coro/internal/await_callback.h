@@ -68,17 +68,7 @@ class await_callback_base {
     }
 
     continue_callback& operator=(const continue_callback&) = delete;
-    continue_callback& operator=(continue_callback&& other) noexcept {
-      if (this == &other) {
-        return *this;
-      }
-
-      change_continue_no_lock(nullptr);
-
-      other.change_continue_no_lock(this);
-
-      return *this;
-    }
+    continue_callback& operator=(continue_callback&& other) = delete;
 
     ~continue_callback() noexcept {
       change_continue_no_lock(nullptr);
