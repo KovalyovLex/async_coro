@@ -15,7 +15,37 @@
 #include <utility>
 
 namespace async_coro::internal {
-
+/**
+ * @brief Awaitable that suspends a coroutine for a duration or until a steady_clock timepoint
+ *
+ * This awaitable is intended to be used via the public helpers in
+ * `async_coro::sleep(...)` and is designed to be awaited inside
+ * coroutines (i.e. `co_await async_coro::sleep(...)`).
+ *
+ * Behavior summary:
+ * - When awaited, the coroutine is suspended and a delayed timer is scheduled
+ *   in the execution system associated with the coroutine's scheduler.
+ * - When the timer expires (or the task is cancelled), the coroutine is
+ *   resumed via the scheduler's continuation mechanism.
+ * - The awaitable supports specifying an explicit `execution_queue_mark` to
+ *   control which execution queue will resume the coroutine. If not provided,
+ *   the awaitable will use the parent's execution queue (see `coro_await_transform`).
+ * - Cancellation is supported: if the awaitable is destroyed before the timer
+ *   fires, any scheduled timer is cancelled and the coroutine is resumed
+ *   immediately via the promise's `continue_after_sleep()` path.
+ *
+ * Thread-safety and locking:
+ * - Internal synchronization is provided by a lightweight mutex (`light_mutex`)
+ *   to protect callback state. The awaitable carefully acquires and releases
+ *   locks when interacting with the execution system and the callback that
+ *   performs the resume.
+ *
+ * Example usage:
+ * @code
+ * co_await async_coro::sleep(std::chrono::milliseconds{100});
+ * co_await async_coro::sleep(std::chrono::seconds{1}, execution_queues::worker);
+ * @endcode
+ */
 struct await_sleep {
   explicit await_sleep(std::chrono::steady_clock::duration sleep_duration) noexcept
       : _on_cancel(this),
@@ -23,8 +53,8 @@ struct await_sleep {
         _use_parent_q(true) {}
   await_sleep(std::chrono::steady_clock::duration sleep_duration, execution_queue_mark execution_q) noexcept
       : _on_cancel(this),
-        _execution_queue(execution_q),
         _time(std::chrono::steady_clock::now() + sleep_duration),
+        _execution_queue(execution_q),
         _use_parent_q(false) {}
 
   await_sleep(const await_sleep&) = delete;
@@ -44,14 +74,25 @@ struct await_sleep {
   void await_suspend(std::coroutine_handle<U> handle) {
     _promise = std::addressof(handle.promise());
 
+    // Register cancellation callback with the promise so that if the parent
+    // cancels the operation the timer can be cancelled as well.
     _promise->plan_sleep_on_queue(_execution_queue, _on_cancel);
 
     auto& execution_system = _promise->get_scheduler().get_execution_system();
 
+    // Schedule delayed execution in the execution system and keep the
+    // returned delayed task id so we can cancel it if needed.
     async_coro::unique_lock lock{_callback_mutex};
-    _t_id = execution_system.plan_execution_after(
-        execution_callback{this},
+    auto clb = execution_callback{this};
+    _t_id = {};
+    lock.unlock();  // any move constructors of execution_callback should be called without lock
+
+    const auto t_id = execution_system.plan_execution_after(
+        std::move(clb),
         _execution_queue, _time);
+
+    lock.lock();
+    _t_id = t_id;
   }
 
   void await_resume() const noexcept {}
@@ -138,36 +179,7 @@ struct await_sleep {
       }
     }
     execution_callback& operator=(const execution_callback&) = delete;
-    execution_callback& operator=(execution_callback&& other) noexcept CORO_THREAD_EXCLUDES(await_mutex, other.await_mutex, awaiter->_callback_mutex) {
-      if (this == &other) {
-        return *this;
-      }
-
-      async_coro::unique_lock lock{await_mutex};
-
-      if (awaiter != nullptr) {
-        callback_lock lock_callback{*awaiter};
-        if (lock_callback.try_lock_mutex(*awaiter)) {
-          awaiter->_callback = nullptr;
-        }
-      }
-
-      {
-        async_coro::unique_lock lock2{other.await_mutex};
-        awaiter = std::exchange(other.awaiter, nullptr);
-      }
-
-      if (awaiter != nullptr) {
-        callback_lock lock_callback{*awaiter};
-        if (lock_callback.try_lock_mutex(*awaiter)) {
-          awaiter->_callback = this;
-        } else {
-          awaiter = nullptr;
-        }
-      }
-
-      return *this;
-    }
+    execution_callback& operator=(execution_callback&& other) = delete;
 
     void operator()() const CORO_THREAD_EXCLUDES(await_mutex, awaiter->_callback_mutex) {
       async_coro::unique_lock lock{await_mutex};
@@ -227,9 +239,9 @@ struct await_sleep {
   execution_callback* _callback CORO_THREAD_GUARDED_BY(_callback_mutex) = {nullptr};
   base_handle* _promise = nullptr;
   callback_on_stack<on_cancel_callback, void()> _on_cancel;
-  execution_queue_mark _execution_queue = async_coro::execution_queues::any;
   std::chrono::steady_clock::time_point _time;
   delayed_task_id _t_id CORO_THREAD_GUARDED_BY(_callback_mutex) = {};
+  execution_queue_mark _execution_queue = async_coro::execution_queues::any;
   bool _use_parent_q;
   std::atomic_bool _was_done{false};
   std::atomic_bool _is_dying{false};

@@ -15,7 +15,7 @@ namespace async_coro {
  * // code after will newer be executed
  * \endcode
  */
-inline auto cancel() {
+inline auto cancel() noexcept {
   return internal::await_cancel_task{};
 }
 

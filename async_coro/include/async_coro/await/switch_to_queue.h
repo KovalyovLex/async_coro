@@ -18,7 +18,7 @@ namespace async_coro {
  * // code after will be executed in the main thread
  * \endcode
  */
-inline auto switch_to_queue(execution_queue_mark execution_queue) {
+inline auto switch_to_queue(execution_queue_mark execution_queue) noexcept {
   return internal::await_switch{execution_queue};
 }
 

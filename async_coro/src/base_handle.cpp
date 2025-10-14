@@ -117,7 +117,7 @@ void base_handle::continue_after_sleep() {
     on_cancel->destroy();
   }
 
-  ASYNC_CORO_ASSERT(get_scheduler().get_execution_system().is_current_thread_fits(_execution_queue));
+  ASYNC_CORO_ASSERT(is_cancelled() || get_scheduler().get_execution_system().is_current_thread_fits(_execution_queue));
 
   _execution_thread = std::this_thread::get_id();
   get_scheduler().continue_execution(*this, internal::passkey{this});

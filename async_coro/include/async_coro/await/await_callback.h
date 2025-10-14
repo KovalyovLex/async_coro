@@ -28,7 +28,7 @@ namespace async_coro {
  * \endcode
  */
 template <typename T>
-auto await_callback(T continuation) {
+auto await_callback(T continuation) noexcept(std::is_nothrow_constructible_v<T, T&&>) {
   return internal::await_callback<T>{std::move(continuation)};
 }
 
