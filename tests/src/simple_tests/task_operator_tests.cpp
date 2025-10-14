@@ -18,15 +18,15 @@ template <template <class...> class Template, class... Args>
 struct is_specialization<Template<Args...>, Template> : std::true_type {};
 
 template <class T>
-constexpr auto int_visitor_impl(T num) noexcept;
+constexpr auto int_visitor_impl(T num);
 
 template <class... TArgs>
-constexpr auto int_applier_impl(TArgs... num) noexcept {
+constexpr auto int_applier_impl(TArgs... num) {
   return (int_visitor_impl(num) + ...);
 }
 
 template <class T>
-constexpr auto int_visitor_impl(T num) noexcept {
+constexpr auto int_visitor_impl(T num) {
   if constexpr (!std::is_same_v<T, std::monostate>) {
     if constexpr (is_specialization<T, std::tuple>::value) {
       return std::apply([](auto... nums) noexcept { return int_applier_impl(nums...); }, num);
@@ -40,7 +40,7 @@ constexpr auto int_visitor_impl(T num) noexcept {
   }
 }
 
-constexpr auto int_visitor = [](auto num) noexcept {
+constexpr auto int_visitor = [](auto num) {
   return int_visitor_impl(num);
 };
 
