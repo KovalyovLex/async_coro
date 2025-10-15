@@ -201,8 +201,11 @@ TEST(execution_system, delayed_multiple_diff_time_order_worker) {
   std::this_thread::sleep_for(std::chrono::milliseconds{130});
 
   // wait a little bit more if need
+  std::unique_lock lock(order_m);
   for (int tries = 0; tries < 30 && order.size() < 5; ++tries) {
+    lock.unlock();
     std::this_thread::sleep_for(std::chrono::milliseconds{10});
+    lock.lock();
   }
 
   ASSERT_EQ(order.size(), 5u);
