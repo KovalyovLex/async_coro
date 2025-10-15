@@ -301,7 +301,8 @@ void execution_system::timer_loop() {
       auto now = std::chrono::steady_clock::now();
       auto& top = _delayed_tasks.front();
       if (!top.cancel_execution && top.when > now) {
-        _delayed_cv.wait_until(lock, top.when);
+        const auto time = top.when;  // top may be freed and wait_until may do checks with this variable on spurious wakeup
+        _delayed_cv.wait_until(lock, time);
         continue;
       }
     }
