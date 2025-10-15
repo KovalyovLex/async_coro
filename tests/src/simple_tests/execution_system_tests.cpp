@@ -112,8 +112,7 @@ TEST(execution_system, plan_execution_delayed_main) {
   std::this_thread::sleep_for(std::chrono::milliseconds{80});
 
   // wait a little bit more because we cant force system scheduler to schedule pur thread
-  int n = 0;
-  while (!executed && ++n < 100) {
+  for (int tries = 0; tries < 100 && !executed; ++tries) {
     std::this_thread::sleep_for(std::chrono::milliseconds{1});
     system.update_from_main();
   }
@@ -139,8 +138,7 @@ TEST(execution_system, plan_execution_delayed_worker) {
   std::this_thread::sleep_for(std::chrono::milliseconds{80});
 
   // wait a little bit more because we cant force system scheduler to schedule pur thread
-  int n = 0;
-  while (!executed.load(std::memory_order::relaxed) && ++n < 100) {
+  for (int tries = 0; tries < 100 && !executed.load(std::memory_order::relaxed); ++tries) {
     std::this_thread::sleep_for(std::chrono::milliseconds{1});
   }
 
@@ -168,7 +166,7 @@ TEST(execution_system, delayed_multiple_diff_time_order_main) {
   std::this_thread::sleep_for(std::chrono::milliseconds{80});
 
   // drain main queue until all executed
-  for (int tries = 0; tries < 10 && static_cast<int>(order.size()) < 5; ++tries) {
+  for (int tries = 0; tries < 10 && order.size() < 5; ++tries) {
     system.update_from_main();
     std::this_thread::sleep_for(std::chrono::milliseconds{10});
   }
@@ -200,7 +198,12 @@ TEST(execution_system, delayed_multiple_diff_time_order_worker) {
   }
 
   // wait enough time for all tasks to execute
-  std::this_thread::sleep_for(std::chrono::milliseconds{200});
+  std::this_thread::sleep_for(std::chrono::milliseconds{130});
+
+  // wait a little bit more if need
+  for (int tries = 0; tries < 30 && order.size() < 5; ++tries) {
+    std::this_thread::sleep_for(std::chrono::milliseconds{10});
+  }
 
   ASSERT_EQ(order.size(), 5u);
   for (int i = 0; i < 5; ++i) {
