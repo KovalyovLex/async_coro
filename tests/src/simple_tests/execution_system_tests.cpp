@@ -2,6 +2,7 @@
 #include <async_coro/execution_system.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <chrono>
 #include <mutex>
 #include <thread>
@@ -108,8 +109,14 @@ TEST(execution_system, plan_execution_delayed_main) {
   EXPECT_FALSE(executed);
 
   // wait until after the scheduled time and then process main queue
-  std::this_thread::sleep_for(std::chrono::milliseconds{70});
-  system.update_from_main();
+  std::this_thread::sleep_for(std::chrono::milliseconds{80});
+
+  // wait a little bit more because we cant force system scheduler to schedule pur thread
+  int n = 0;
+  while (!executed && ++n < 100) {
+    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    system.update_from_main();
+  }
 
   EXPECT_TRUE(executed);
 }
@@ -130,6 +137,13 @@ TEST(execution_system, plan_execution_delayed_worker) {
       execution_queues::worker, std::chrono::steady_clock::now() + std::chrono::milliseconds{30});
 
   std::this_thread::sleep_for(std::chrono::milliseconds{80});
+
+  // wait a little bit more because we cant force system scheduler to schedule pur thread
+  int n = 0;
+  while (!executed.load(std::memory_order::relaxed) && ++n < 100) {
+    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+  }
+
   EXPECT_TRUE(executed);
 }
 
