@@ -118,6 +118,10 @@ execution_system::~execution_system() noexcept {
   }
 
   // stop timer thread
+  {
+    unique_lock lock(_delayed_mutex);
+    _delayed_tasks.clear();
+  }
   _delayed_cv.notify_one();
   if (_timer_thread.joinable()) {
     _timer_thread.join();
@@ -295,9 +299,7 @@ void execution_system::timer_loop() {
   unique_lock lock(_delayed_mutex);
   while (!_is_stopping.load(std::memory_order::relaxed)) {
     if (_delayed_tasks.empty()) {
-      _delayed_cv.wait(lock, [this]() CORO_THREAD_REQUIRES(this->_delayed_mutex) {
-        return !_delayed_tasks.empty() || _is_stopping.load(std::memory_order::relaxed);
-      });
+      _delayed_cv.wait(lock);
       continue;
     }
 
@@ -306,9 +308,7 @@ void execution_system::timer_loop() {
       auto& top = _delayed_tasks.front();
       if (!top.cancel_execution && top.when > now) {
         const auto time = top.when;  // top may be freed and wait_until may do checks with this variable on spurious wakeup
-        _delayed_cv.wait_until(lock, time, [this]() CORO_THREAD_REQUIRES(this->_delayed_mutex) {
-          return _is_stopping.load(std::memory_order::relaxed);
-        });
+        _delayed_cv.wait_until(lock, time);
         continue;
       }
     }
