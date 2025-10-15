@@ -357,7 +357,7 @@ class execution_system : public i_execution_system {
 
   std::vector<delayed_task> _delayed_tasks CORO_THREAD_GUARDED_BY(_delayed_mutex);
   std::thread _timer_thread;
-  t_task_id _delayed_task_id = 1;
+  t_task_id _delayed_task_id CORO_THREAD_GUARDED_BY(_delayed_mutex) = 1;
 };
 
 }  // namespace async_coro
