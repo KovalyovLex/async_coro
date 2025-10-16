@@ -1,14 +1,16 @@
-#include <async_coro/await_callback.h>
-#include <async_coro/cancel.h>
+#include <async_coro/await/await_callback.h>
+#include <async_coro/await/cancel.h>
+#include <async_coro/await/sleep.h>
+#include <async_coro/await/start_task.h>
+#include <async_coro/await/switch_to_queue.h>
 #include <async_coro/execution_queue_mark.h>
 #include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>
-#include <async_coro/start_task.h>
-#include <async_coro/switch_to_queue.h>
 #include <async_coro/task.h>
 #include <async_coro/task_launcher.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <memory>
 #include <semaphore>
 #include <thread>
@@ -273,4 +275,78 @@ TEST(cancel_task, root_request_cancel_with_started_children) {
 
   // children should be requested to cancel (or parent cancelled)
   ASSERT_TRUE(handle.is_cancelled());
+}
+
+TEST(cancel_task, cancel_while_sleep_active) {
+  // ensure cancellation cancels scheduled sleep and resumes coroutine via continue_after_sleep
+  std::atomic_bool coro_resumed{false};
+
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
+
+  auto parent = [&]() -> async_coro::task<void> {
+    co_await async_coro::sleep(std::chrono::milliseconds(200), async_coro::execution_queues::worker);
+    coro_resumed.store(true, std::memory_order::relaxed);
+  };
+
+  {
+    auto handle = scheduler.start_task(parent());
+
+    // give child a moment to schedule its sleep on the worker
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+    // cancel root while child is sleeping
+    handle.request_cancel();
+    EXPECT_TRUE(handle.is_cancelled());
+    EXPECT_FALSE(coro_resumed.load(std::memory_order::relaxed));
+
+    // let worker/main process cancellation (if any)
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
+
+    EXPECT_TRUE(handle.is_cancelled());
+  }
+
+  // check coro wasn't resumed after destruction of handle
+  EXPECT_FALSE(coro_resumed.load(std::memory_order::relaxed));
+}
+
+TEST(cancel_task, cancel_parent_while_sleep_active) {
+  // ensure cancellation cancels scheduled sleep and resumes coroutine via continue_after_sleep
+  std::atomic_bool child_resumed{false};
+
+  auto child = [&child_resumed]() -> async_coro::task<void> {
+    // sleep on worker queue to ensure work scheduled in execution system
+    co_await async_coro::sleep(std::chrono::milliseconds(200), async_coro::execution_queues::worker);
+    child_resumed.store(true, std::memory_order::relaxed);
+  };
+
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
+
+  auto parent = [&]() -> async_coro::task<void> {
+    // start child
+    co_await child();
+
+    // suspend parent indefinitely (will be cancelled from outside)
+    co_await async_coro::await_callback([](auto /*f*/) {});
+
+    co_return;
+  };
+
+  auto handle = scheduler.start_task(parent());
+
+  // give child a moment to schedule its sleep on the worker
+  std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+  // cancel root while child is sleeping
+  handle.request_cancel();
+  EXPECT_FALSE(child_resumed.load(std::memory_order::relaxed));
+
+  // let worker/main process cancellation
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
+
+  EXPECT_TRUE(handle.is_cancelled());
+  EXPECT_FALSE(child_resumed.load(std::memory_order::relaxed));
 }

@@ -2,8 +2,8 @@
 
 #include <async_coro/callback.h>
 #include <async_coro/config.h>
-#include <async_coro/coroutine_suspender.h>
 #include <async_coro/execution_queue_mark.h>
+#include <async_coro/internal/coroutine_suspender.h>
 
 #include <atomic>
 #include <coroutine>
@@ -61,7 +61,7 @@ class scheduled_run_data;
  */
 class base_handle {
   friend scheduler;
-  friend coroutine_suspender;
+  friend internal::coroutine_suspender;
 
   static constexpr uint8_t coroutine_state_mask = (1U << 0U) | (1U << 1U) | (1U << 2U);
   static constexpr uint8_t is_embedded_mask = (1U << 3U);
@@ -224,6 +224,32 @@ class base_handle {
   }
 
   /**
+   * @brief Suspends coroutine and switches execution queue of coroutine
+   *
+   * This method sets the coroutine state to suspended state and updates the target execution queue.
+   *
+   * @param execution_queue The target execution queue for the coroutine
+   * @param on_cancel Cancel callback
+   *
+   * @note This method is noexcept and will not throw exceptions
+   * @note After this method continue_after_sleep should be called
+   */
+  void plan_sleep_on_queue(execution_queue_mark execution_queue, callback<void()>& on_cancel) noexcept {
+    ASYNC_CORO_ASSERT_VARIABLE auto* prev = this->_on_cancel.exchange(std::addressof(on_cancel), std::memory_order::relaxed);
+    ASYNC_CORO_ASSERT(prev == nullptr);
+
+    set_coroutine_state(coroutine_state::suspended);
+    _execution_queue = execution_queue;
+  }
+
+  /**
+   * Continues execution of coroutine that previously was set on pause with plan_sleep_on_queue
+   *
+   * @note Should be called from thread that fits execution_queue
+   */
+  void continue_after_sleep();
+
+  /**
    * @brief Returns the current execution queue for this coroutine
    *
    * Provides access to the execution queue that this coroutine is currently
@@ -252,7 +278,7 @@ class base_handle {
     ASYNC_CORO_ASSERT_VARIABLE auto* prev = this->_on_cancel.exchange(on_cancel, std::memory_order::relaxed);
     ASYNC_CORO_ASSERT(prev == nullptr);
 
-    return coroutine_suspender{*this, suspend_count};
+    return internal::coroutine_suspender{*this, suspend_count};
   }
 
   /**

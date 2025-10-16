@@ -34,7 +34,9 @@ class await_callback_base {
     reset_continue_callback();
   }
 
-  void reset_continue_callback() noexcept {
+  void reset_continue_callback() noexcept CORO_THREAD_EXCLUDES(_continue_mutex) {
+    _is_dying.store(true, std::memory_order::release);
+
     unique_lock lock{_continue_mutex};
 
     if (auto* clb = std::exchange(_continue, nullptr)) {
@@ -49,6 +51,25 @@ class await_callback_base {
       call_no_safe(clb);
     }
   }
+
+  struct CORO_THREAD_SCOPED_CAPABILITY callback_lock : async_coro::unique_lock<light_mutex> {
+    using super = async_coro::unique_lock<light_mutex>;
+
+    explicit callback_lock(await_callback_base& await) noexcept CORO_THREAD_EXCLUDES(await._continue_mutex)
+        : super(await._continue_mutex, std::defer_lock) {}
+
+    bool try_lock_mutex(await_callback_base& await) CORO_THREAD_TRY_ACQUIRE(true) {
+      ASYNC_CORO_ASSERT(!this->owns_lock());
+
+      while (!await._is_dying.load(std::memory_order::relaxed)) {
+        if (this->try_lock()) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+  };
 
   // This callback will be handled externally from any thread.
   // As we dont want to use any extra allocation we use double lock technic to sync access between await_callback and this external callback.
@@ -68,37 +89,31 @@ class await_callback_base {
     }
 
     continue_callback& operator=(const continue_callback&) = delete;
-    continue_callback& operator=(continue_callback&& other) noexcept {
-      if (this == &other) {
-        return *this;
-      }
-
-      change_continue_no_lock(nullptr);
-
-      other.change_continue_no_lock(this);
-
-      return *this;
-    }
+    continue_callback& operator=(continue_callback&& other) = delete;
 
     ~continue_callback() noexcept {
       change_continue_no_lock(nullptr);
     }
 
     void operator()() const {
-      unique_lock callback_lock{_callback_mutex};
+      unique_lock lock{_callback_mutex};
 
       if (_callback == nullptr) [[unlikely]] {
         return;
       }
 
-      unique_lock continue_lock{_callback->_continue_mutex};
+      callback_lock continue_lock{*_callback};
+
+      if (!continue_lock.try_lock_mutex(*_callback)) {
+        return;
+      }
 
       if (!_callback->_was_done.exchange(true, std::memory_order::relaxed)) {
         auto* clb = _callback;
 
         // no cancel here should happen. clb can't be destroyed at this point so we can release the lock
         continue_lock.unlock();
-        callback_lock.unlock();
+        lock.unlock();
 
         clb->_suspension.try_to_continue_from_any_thread(false);
         return;
@@ -107,7 +122,7 @@ class await_callback_base {
 
    private:
     bool change_continue_no_lock(continue_callback* new_ptr) noexcept CORO_THREAD_EXCLUDES(_callback_mutex, new_ptr->_callback_mutex, _callback->_continue_mutex) {
-      unique_lock callback_lock{_callback_mutex};
+      unique_lock lock{_callback_mutex};
 
       if (new_ptr != nullptr) {
         unique_lock new_ptr_lock{new_ptr->_callback_mutex};
@@ -117,7 +132,13 @@ class await_callback_base {
           return false;
         }
 
-        unique_lock clb_lock = unique_lock{_callback->_continue_mutex};
+        callback_lock continue_lock{*_callback};
+
+        if (!continue_lock.try_lock_mutex(*_callback)) {
+          new_ptr->_callback = nullptr;
+          _callback = nullptr;
+          return false;
+        }
 
         new_ptr->_callback = _callback;
         _callback->_continue = new_ptr;
@@ -127,7 +148,11 @@ class await_callback_base {
           return false;
         }
 
-        unique_lock clb_lock = unique_lock{_callback->_continue_mutex};
+        callback_lock continue_lock{*_callback};
+        if (!continue_lock.try_lock_mutex(*_callback)) {
+          _callback = nullptr;
+          return false;
+        }
 
         _callback->_continue = new_ptr;
         _callback = nullptr;
@@ -180,6 +205,7 @@ class await_callback_base {
   };
 
  protected:
+  std::atomic_bool _is_dying{false};
   std::atomic_bool _was_done = false;
   coroutine_suspender _suspension;
   callback_on_stack<on_cancel_callback, void()> _on_cancel;

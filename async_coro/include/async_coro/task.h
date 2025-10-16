@@ -36,7 +36,7 @@ class task final : private task_base {
   using handle_type = std::coroutine_handle<promise_type>;
   using return_type = R;
 
-  task(handle_type h) noexcept : _handle(std::move(h)) {
+  task(handle_type hnd) noexcept : _handle(std::move(hnd)) {  // NOLINT(*-explicit-*)
   }
 
   task(const task&) = delete;
@@ -63,11 +63,14 @@ class task final : private task_base {
     awaiter(awaiter&&) = delete;
     ~awaiter() noexcept = default;
 
-    bool await_ready() const noexcept { return _was_done; }
+    awaiter& operator=(const awaiter&) = delete;
+    awaiter& operator=(awaiter&&) = delete;
+
+    [[nodiscard]] bool await_ready() const noexcept { return _was_done; }
 
     template <typename T>
       requires(std::derived_from<T, base_handle>)
-    void await_suspend(std::coroutine_handle<T>) const noexcept {
+    void await_suspend(std::coroutine_handle<T> /*unused*/) const noexcept {
     }
 
     R await_resume() {
@@ -79,7 +82,7 @@ class task final : private task_base {
     bool _was_done;
   };
 
-  bool done() const noexcept { return _handle.done(); }
+  [[nodiscard]] bool done() const noexcept { return _handle.done(); }
 
   void cancel() {
     if (_handle) {
@@ -94,7 +97,7 @@ class task final : private task_base {
     return {*this, on_child_coro_added(parent, _handle.promise()) && !parent.is_cancelled()};
   }
 
-  handle_type release_handle(internal::passkey_successors<scheduler>) noexcept {
+  handle_type release_handle(internal::passkey_successors<scheduler> /*unused*/) noexcept {
     return std::exchange(_handle, {});
   }
 

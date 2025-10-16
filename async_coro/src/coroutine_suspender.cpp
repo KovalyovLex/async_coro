@@ -1,13 +1,13 @@
 #include <async_coro/base_handle.h>
 #include <async_coro/config.h>
-#include <async_coro/coroutine_suspender.h>
+#include <async_coro/internal/coroutine_suspender.h>
 #include <async_coro/internal/passkey.h>
 #include <async_coro/internal/scheduled_run_data.h>
 #include <async_coro/scheduler.h>
 
 #include <atomic>
 
-namespace async_coro {
+namespace async_coro::internal {
 
 coroutine_suspender::~coroutine_suspender() noexcept {
   if (_suspend_count.load(std::memory_order::relaxed) != 0) {
@@ -90,4 +90,4 @@ void coroutine_suspender::try_to_continue_immediately() {
   }
 }
 
-}  // namespace async_coro
+}  // namespace async_coro::internal

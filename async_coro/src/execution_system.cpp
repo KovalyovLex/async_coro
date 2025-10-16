@@ -1,10 +1,15 @@
 #include <async_coro/config.h>
 #include <async_coro/execution_system.h>
+#include <async_coro/thread_safety/analysis.h>
+#include <async_coro/thread_safety/unique_lock.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <thread>
+#include <utility>
 
 #ifdef _WIN32
 
@@ -86,6 +91,18 @@ execution_system::execution_system(const execution_system_config& config, const 
     }
   }
 
+  // start timer thread for delayed tasks
+  num_threads_to_wait_start.fetch_add(1, std::memory_order::relaxed);
+
+  _timer_thread = std::thread([this, &num_threads_to_wait_start]() {
+    if (num_threads_to_wait_start.fetch_sub(1, std::memory_order::release) == 1) {
+      num_threads_to_wait_start.notify_one();
+    }
+
+    timer_loop();
+  });
+  set_thread_name(_timer_thread, "delayed_tasks_loop");
+
   auto num_started = num_threads_to_wait_start.load(std::memory_order::acquire);
   while (num_started != 0) {
     num_threads_to_wait_start.wait(num_started, std::memory_order::relaxed);
@@ -100,11 +117,76 @@ execution_system::~execution_system() noexcept {
     _thread_data[i].notifier.notify();
   }
 
+  // stop timer thread
+  {
+    unique_lock lock(_delayed_mutex);
+    _delayed_tasks.clear();
+  }
+  _delayed_cv.notify_one();
+  if (_timer_thread.joinable()) {
+    _timer_thread.join();
+  }
+
   for (std::uint32_t i = 0; i < _num_workers; i++) {
     if (_thread_data[i].thread.joinable()) {
       _thread_data[i].thread.join();
     }
   }
+}
+
+delayed_task_id execution_system::plan_execution_after(task_function func, execution_queue_mark execution_queue,
+                                                       std::chrono::steady_clock::time_point when) {
+  ASYNC_CORO_ASSERT(execution_queue.get_value() <= _max_q.get_value());
+  if (!func) [[unlikely]] {
+    return {};
+  }
+
+  // if time is now or in the past, push directly
+  if (when <= std::chrono::steady_clock::now()) {
+    plan_execution(std::move(func), execution_queue);
+    return {};
+  }
+
+  bool need_notify = false;
+  t_task_id task_id = 0;
+  {
+    unique_lock lock(_delayed_mutex);
+
+    task_id = _delayed_task_id++;
+    if (_delayed_task_id == 0) [[unlikely]] {
+      _delayed_task_id = 1;
+    }
+
+    _delayed_tasks.emplace_back(std::move(func), when, execution_queue, task_id);
+    std::ranges::push_heap(_delayed_tasks, std::greater<delayed_task>{});
+
+    // notify only if our value goes on top of the heap
+    need_notify = _delayed_tasks.front().id == task_id;
+  }
+
+  if (need_notify) {
+    _delayed_cv.notify_one();
+  }
+
+  return {.task_id = task_id};
+}
+
+bool execution_system::cancel_execution(const delayed_task_id& task_id) {
+  if (task_id.task_id == 0) {
+    return false;
+  }
+
+  unique_lock lock(_delayed_mutex);
+
+  const auto task_it = std::ranges::find_if(_delayed_tasks, [t_id = task_id.task_id](const delayed_task& task) {
+    return task.id == t_id;
+  });
+
+  if (task_it != _delayed_tasks.end()) {
+    task_it->cancel_execution = true;
+    return true;
+  }
+  return false;
 }
 
 void execution_system::plan_execution(task_function func, execution_queue_mark execution_queue) {
@@ -210,6 +292,50 @@ void execution_system::worker_loop(worker_thread_data& data) {
         num_empty_loops = 0;
       }
     }
+  }
+}
+
+void execution_system::timer_loop() {
+  unique_lock lock(_delayed_mutex);
+  while (!_is_stopping.load(std::memory_order::relaxed)) {
+    if (_delayed_tasks.empty()) {
+      _delayed_cv.wait(lock);
+      continue;
+    }
+
+    {
+      auto now = std::chrono::steady_clock::now();
+      auto& top = _delayed_tasks.front();
+      if (!top.cancel_execution && top.when > now) {
+        const auto time = top.when;  // top may be freed and wait_until may do checks with this variable on spurious wakeup
+        _delayed_cv.wait_until(lock, time);
+        continue;
+      }
+    }
+
+    std::ranges::pop_heap(_delayed_tasks, std::greater<delayed_task>{});
+
+    if (_delayed_tasks.back().cancel_execution) {
+      _delayed_tasks.pop_back();
+      continue;
+    }
+
+    auto& target_task_q = _tasks_queues[_delayed_tasks.back().queue.get_value()];
+    task_function func{std::move(_delayed_tasks.back().func)};
+
+    _delayed_tasks.pop_back();
+
+    lock.unlock();
+
+    ASYNC_CORO_ASSERT(func);
+
+    target_task_q.queue.push(std::move(func));
+
+    for (auto* worker : target_task_q.workers_data) {
+      worker->notifier.notify();
+    }
+
+    lock.lock();
   }
 }
 

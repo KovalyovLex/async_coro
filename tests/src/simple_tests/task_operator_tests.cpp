@@ -1,3 +1,4 @@
+#include <async_coro/await/get_scheduler.h>
 #include <async_coro/execution_queue_mark.h>
 #include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>
@@ -17,20 +18,20 @@ template <template <class...> class Template, class... Args>
 struct is_specialization<Template<Args...>, Template> : std::true_type {};
 
 template <class T>
-constexpr auto int_visitor_impl(T num) noexcept;
+constexpr auto int_visitor_impl(T num);
 
 template <class... TArgs>
-constexpr auto int_applier_impl(TArgs... num) noexcept {
+constexpr auto int_applier_impl(TArgs... num) {
   return (int_visitor_impl(num) + ...);
 }
 
 template <class T>
-constexpr auto int_visitor_impl(T num) noexcept {
+constexpr auto int_visitor_impl(T num) {
   if constexpr (!std::is_same_v<T, std::monostate>) {
     if constexpr (is_specialization<T, std::tuple>::value) {
-      return std::apply([](auto... nums) noexcept { return int_applier_impl(nums...); }, num);
+      return std::apply([](auto... nums) { return int_applier_impl(nums...); }, num);
     } else if constexpr (is_specialization<T, std::variant>::value) {
-      return std::visit([](auto n) noexcept { return int_visitor_impl(n); }, num);
+      return std::visit([](auto n) { return int_visitor_impl(n); }, num);
     } else {
       return int(num);
     }
@@ -39,7 +40,7 @@ constexpr auto int_visitor_impl(T num) noexcept {
   }
 }
 
-constexpr auto int_visitor = [](auto num) noexcept {
+constexpr auto int_visitor = [](auto num) {
   return int_visitor_impl(num);
 };
 

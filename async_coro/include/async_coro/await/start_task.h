@@ -23,13 +23,13 @@ namespace async_coro {
  * \endcode
  */
 template <typename R>
-auto start_task(task_launcher<R> launcher) {
+auto start_task(task_launcher<R> launcher) noexcept {
   return internal::await_start_task(std::move(launcher));
 }
 
 template <typename... RArgs>
   requires(is_task_launchable<RArgs...>)
-auto start_task(RArgs&&... launcher_args) {
+auto start_task(RArgs&&... launcher_args) noexcept {
   return internal::await_start_task(task_launcher{std::forward<RArgs>(launcher_args)...});
 }
 
