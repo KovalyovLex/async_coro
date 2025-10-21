@@ -2,6 +2,8 @@
 
 #include <async_coro/promise_result.h>
 
+#include <type_traits>
+
 namespace async_coro::internal {
 
 template <typename T>
@@ -9,7 +11,8 @@ class promise_result_holder : public async_coro::promise_result<T> {
  public:
   // C++ coroutine api
   template <typename... TArgs>
-  void return_value(TArgs&&... args) noexcept {
+    requires(std::is_constructible_v<T, TArgs...>)
+  void return_value(TArgs&&... args) noexcept(std::is_nothrow_constructible_v<T, TArgs...>) {
     ASYNC_CORO_ASSERT(!this->_is_initialized);
     this->result.inplace_init(std::forward<TArgs>(args)...);
     this->_is_initialized = true;

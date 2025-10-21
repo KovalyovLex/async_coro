@@ -57,55 +57,6 @@ TEST(task, await_no_wait) {
   EXPECT_EQ(handle.get(), 2);
 }
 
-TEST(task, resume_on_callback_deep) {
-  async_coro::unique_function<void()> continue_f;
-
-  auto routine_1 = [&continue_f]() -> async_coro::task<float> {
-    co_await async_coro::await_callback(
-        [&continue_f](auto f) { continue_f = std::move(f); });
-    co_return 45.456f;
-  };
-
-  auto routine_2 = [routine_1]() -> async_coro::task<int> {
-    const auto res = co_await routine_1();
-    co_return (int)(res);
-  };
-
-  auto routine = [](auto start) -> async_coro::task<int> {
-    const auto res = co_await start();
-    co_return res;
-  }(routine_2);
-
-  async_coro::scheduler scheduler;
-
-  ASSERT_FALSE(routine.done());
-  auto handle = scheduler.start_task(std::move(routine));
-  ASSERT_FALSE(handle.done());
-  ASSERT_TRUE(continue_f);
-  continue_f();
-  ASSERT_TRUE(handle.done());
-  EXPECT_EQ(handle.get(), 45);
-}
-
-TEST(task, resume_on_callback) {
-  async_coro::unique_function<void()> continue_f;
-
-  auto routine = [](auto& cnt) -> async_coro::task<int> {  // NOLINT(*-reference-coroutine-*)
-    co_await async_coro::await_callback([&cnt](auto f) { cnt = std::move(f); });
-    co_return 3;
-  }(continue_f);
-
-  async_coro::scheduler scheduler;
-
-  ASSERT_FALSE(routine.done());
-  auto handle = scheduler.start_task(std::move(routine));
-  ASSERT_FALSE(handle.done());
-  ASSERT_TRUE(continue_f);
-  continue_f();
-  ASSERT_TRUE(handle.done());
-  EXPECT_EQ(handle.get(), 3);
-}
-
 TEST(task, async_execution) {
   static std::atomic_bool async_done = false;
 

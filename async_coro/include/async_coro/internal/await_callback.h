@@ -17,7 +17,24 @@
 
 namespace async_coro::internal {
 
+template <typename T>
+union non_initialised_result {
+  non_initialised_result() noexcept {}
+  non_initialised_result(const non_initialised_result&) = delete;
+  non_initialised_result(non_initialised_result&&) = delete;
+  non_initialised_result& operator=(const non_initialised_result&) = delete;
+  non_initialised_result& operator=(non_initialised_result&&) = delete;
+  ~non_initialised_result() noexcept {};
+
+  T res;
+};
+
+struct empty_result {};
+
+template <typename R = void>
 class await_callback_base {
+  static_assert(!std::is_reference_v<R>, "await_callback can't hold references. Use pointer or std::reference_wrapper");
+
  public:
   await_callback_base(const await_callback_base&) = delete;
   await_callback_base(await_callback_base&&) = delete;
@@ -32,6 +49,12 @@ class await_callback_base {
 
   ~await_callback_base() noexcept {
     reset_continue_callback();
+
+    if constexpr (!std::is_void_v<R>) {
+      if (_has_result) {
+        std::destroy_at(std::addressof(_result.res));
+      }
+    }
   }
 
   void reset_continue_callback() noexcept CORO_THREAD_EXCLUDES(_continue_mutex) {
@@ -95,7 +118,10 @@ class await_callback_base {
       change_continue_no_lock(nullptr);
     }
 
-    void operator()() const {
+    // void variant
+    void operator()() const
+      requires std::is_void_v<R>
+    {
       unique_lock lock{_callback_mutex};
 
       if (_callback == nullptr) [[unlikely]] {
@@ -110,6 +136,38 @@ class await_callback_base {
 
       if (!_callback->_was_done.exchange(true, std::memory_order::relaxed)) {
         auto* clb = _callback;
+
+        // no cancel here should happen. clb can't be destroyed at this point so we can release the lock
+        continue_lock.unlock();
+        lock.unlock();
+
+        clb->_suspension.try_to_continue_from_any_thread(false);
+        return;
+      }
+    }
+
+    // non-void variant: accept a value to deliver to awaiting coroutine
+    template <typename V>
+      requires(!std::is_void_v<V> && std::is_constructible_v<R, V &&>)
+    void operator()(V&& value) const {
+      unique_lock lock{_callback_mutex};
+
+      if (_callback == nullptr) [[unlikely]] {
+        return;
+      }
+
+      callback_lock continue_lock{*_callback};
+
+      if (!continue_lock.try_lock_mutex(*_callback)) {
+        return;
+      }
+
+      if (!_callback->_was_done.exchange(true, std::memory_order::relaxed)) {
+        auto* clb = _callback;
+
+        // store result under the continue lock (we hold _continue_mutex via callback_lock)
+        std::construct_at(std::addressof(clb->_result.res), std::forward<V>(value));
+        clb->_has_result = true;
 
         // no cancel here should happen. clb can't be destroyed at this point so we can release the lock
         continue_lock.unlock();
@@ -205,16 +263,20 @@ class await_callback_base {
   };
 
  protected:
-  std::atomic_bool _is_dying{false};
-  std::atomic_bool _was_done = false;
+  using stored_result_t = std::conditional_t<std::is_void_v<R>, empty_result, non_initialised_result<R>>;
+
   coroutine_suspender _suspension;
   callback_on_stack<on_cancel_callback, void()> _on_cancel;
   continue_callback* _continue CORO_THREAD_GUARDED_BY(_continue_mutex) = nullptr;
   light_mutex _continue_mutex;
+  stored_result_t _result;
+  bool _has_result = false;
+  std::atomic_bool _is_dying{false};
+  std::atomic_bool _was_done{false};
 };
 
-template <typename T>
-class await_callback : private await_callback_base {
+template <typename T, typename R = void>
+class await_callback : private await_callback_base<R> {
  public:
   explicit await_callback(T&& callback) noexcept(std::is_nothrow_constructible_v<T, T&&>)  // NOLINT(*-not-moved)
       : _on_await(std::forward<T>(callback)) {}
@@ -235,24 +297,37 @@ class await_callback : private await_callback_base {
   template <typename U>
     requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> handle) {
-    _was_done.store(false, std::memory_order::relaxed);
+    this->_was_done.store(false, std::memory_order::relaxed);
 
-    _suspension = handle.promise().suspend(2, &_on_cancel);
+    this->_suspension = handle.promise().suspend(2, &this->_on_cancel);
 
-    _on_await(continue_callback{*this});
+    this->_on_await(typename await_callback_base<R>::continue_callback{*this});
 
-    _suspension.try_to_continue_immediately();
+    this->_suspension.try_to_continue_immediately();
   }
 
   ASYNC_CORO_WARNINGS_MSVC_POP
 
-  void await_resume() const noexcept {}
+  void await_resume() const noexcept
+    requires std::is_void_v<R>
+  {}
+
+  auto await_resume() noexcept
+    requires(!std::is_void_v<R>)
+  {
+    if constexpr (!std::is_reference_v<R>) {
+      // return stored result (move)
+      return std::move(this->_result.res);
+    } else {
+      // reference types: return reference to stored value
+      return this->_result.res;
+    }
+  }
 
  private:
   T _on_await;
 };
 
-template <typename T>
-await_callback(T&&) -> await_callback<T>;
+// deduction guide intentionally omitted: caller should specify R when needed
 
 }  // namespace async_coro::internal
