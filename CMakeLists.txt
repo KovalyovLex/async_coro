@@ -1,9 +1,11 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.16)
  
 project(async_coro_tests)
 
 option(ASAN_ENABLED "Enable address sanitizer for all targets" OFF)
 option(TSAN_ENABLED "Enable thread sanitizer for all targets" OFF)
+
+option(EXAMPLES_ENABLED "Enable examples" ON)
 
 
 if (ASAN_ENABLED)
@@ -32,6 +34,10 @@ include(CTest)
 include(GoogleTest)
 
 add_subdirectory(async_coro)
+
+if(EXAMPLES_ENABLED)
+  add_subdirectory(examples)
+endif()
 
 file(GLOB_RECURSE tests_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "tests/src/**.h" "tests/src/**.cpp")
 

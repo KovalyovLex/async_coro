@@ -33,11 +33,11 @@ class result_coro_type {
 
   template <typename... TArgs>
   void inplace_init(TArgs&&... args) noexcept {
-    new (&this->result) T(std::forward<TArgs>(args)...);
+    new (std::addressof(this->result)) T(std::forward<TArgs>(args)...);
   }
 
   void destroy() noexcept(noexcept(std::is_nothrow_destructible_v<T>)) {
-    std::destroy_at(&result);
+    std::destroy_at(std::addressof(result));
   }
 };
 
@@ -94,7 +94,7 @@ class store_type {
   store_type& operator=(store_type&&) = delete;
 
   void destroy_exception() noexcept(std::is_nothrow_destructible_v<std::exception_ptr>) {
-    std::destroy_at(&exception);
+    std::destroy_at(std::addressof(exception));
   }
 
   void destroy_result() noexcept(noexcept(std::is_reference_v<T> || std::is_nothrow_destructible_v<T>)) {
@@ -122,7 +122,7 @@ class store_type<void> {
   store_type& operator=(store_type&&) = delete;
 
   void destroy_exception() noexcept(std::is_nothrow_destructible_v<std::exception_ptr>) {
-    std::destroy_at(&exception);
+    std::destroy_at(std::addressof(exception));
   }
 
   void destroy_result() noexcept {}
