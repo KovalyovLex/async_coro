@@ -35,12 +35,17 @@ template <typename R = void>
 class await_callback_base {
   static_assert(!std::is_reference_v<R>, "await_callback can't hold references. Use pointer or std::reference_wrapper");
 
+ protected:
+  class continue_callback;
+
  public:
   await_callback_base(const await_callback_base&) = delete;
   await_callback_base(await_callback_base&&) = delete;
 
   await_callback_base& operator=(await_callback_base&&) = delete;
   await_callback_base& operator=(const await_callback_base&) = delete;
+
+  using continue_callback_t = continue_callback;
 
  protected:
   await_callback_base() noexcept
