@@ -157,7 +157,7 @@ class unique_function : private internal::function_impl_call<SFOSize, unique_fun
   }
 
   template <typename Fx>
-    requires is_invocable<Fx>::value
+    requires(is_invocable<Fx>::value && !std::is_same_v<std::remove_cvref_t<Fx>, unique_function>)
   unique_function(Fx&& func) noexcept(is_noexcept_init<Fx>)  // NOLINT(*-explicit*)
       : unique_function(no_init{}) {
     init(std::forward<Fx>(func));
