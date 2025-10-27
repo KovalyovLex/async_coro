@@ -1,11 +1,10 @@
 #include <async_coro/base_handle.h>
 #include <async_coro/callback.h>
 #include <async_coro/config.h>
-#include <async_coro/internal/passkey.h>
 #include <async_coro/scheduler.h>
+#include <async_coro/utils/passkey.h>
 
 #include <atomic>
-#include <memory>
 
 namespace async_coro {
 
@@ -120,7 +119,7 @@ void base_handle::continue_after_sleep() {
   ASYNC_CORO_ASSERT(is_cancelled() || get_scheduler().get_execution_system().is_current_thread_fits(_execution_queue));
 
   _execution_thread = std::this_thread::get_id();
-  get_scheduler().continue_execution(*this, internal::passkey{this});
+  get_scheduler().continue_execution(*this, passkey{this});
 }
 
 }  // namespace async_coro

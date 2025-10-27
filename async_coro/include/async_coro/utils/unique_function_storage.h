@@ -1,7 +1,7 @@
 #pragma once
 
 #include <async_coro/config.h>
-#include <async_coro/internal/passkey.h>
+#include <async_coro/utils/passkey.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -128,7 +128,7 @@ class unique_function_storage {
 
  public:
   template <typename TFunc, typename T>
-  t_small_buffer& get_buffer(internal::passkey<internal::function_impl_call<SFOSize, TFunc, T>> /*key*/) {
+  t_small_buffer& get_buffer(passkey<internal::function_impl_call<SFOSize, TFunc, T>> /*key*/) {
     return _buffer;
   }
 

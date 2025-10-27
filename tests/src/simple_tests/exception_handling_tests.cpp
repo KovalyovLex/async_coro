@@ -9,7 +9,7 @@
 #include <async_coro/scheduler.h>
 #include <async_coro/task.h>
 #include <async_coro/task_launcher.h>
-#include <async_coro/unique_function.h>
+#include <async_coro/utils/unique_function.h>
 #include <gtest/gtest.h>
 
 #include <atomic>

@@ -4,8 +4,8 @@
 #include <async_coro/internal/always_false.h>
 #include <async_coro/internal/deduce_function_signature.h>
 #include <async_coro/internal/is_invocable_by_signature.h>
-#include <async_coro/internal/passkey.h>
-#include <async_coro/internal/unique_function_storage.h>
+#include <async_coro/utils/passkey.h>
+#include <async_coro/utils/unique_function_storage.h>
 
 #include <cstdlib>
 #include <memory>
@@ -53,7 +53,7 @@ class function_impl_call<SFOSize, TFunc, R(TArgs...)> {
 
     store = std::move(*static_cast<TFunc*>(this));
 
-    return invoke(store.get_buffer(internal::passkey{this}), std::forward<TArgs>(args)...);
+    return invoke(store.get_buffer(passkey{this}), std::forward<TArgs>(args)...);
   }
 
  protected:
@@ -93,7 +93,7 @@ class function_impl_call<SFOSize, TFunc, R(TArgs...) noexcept> {
 
     store = std::move(*funcPtr);
 
-    return invoke(store.get_buffer(internal::passkey{this}), std::forward<TArgs>(args)...);
+    return invoke(store.get_buffer(passkey{this}), std::forward<TArgs>(args)...);
   }
 
  protected:

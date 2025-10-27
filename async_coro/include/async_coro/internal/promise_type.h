@@ -2,8 +2,8 @@
 
 #include <async_coro/base_handle.h>
 #include <async_coro/callback.h>
-#include <async_coro/internal/passkey.h>
 #include <async_coro/internal/promise_result_holder.h>
+#include <async_coro/utils/passkey.h>
 
 #include <utility>
 
@@ -55,19 +55,19 @@ class promise_type final : public internal::promise_result_holder<R> {
     return std::forward<T>(awaiter).coro_await_transform(*this);
   }
 
-  void set_owning_by_task_handle(bool owning, internal::passkey_any<task_handle<R>> /*key*/) {
+  void set_owning_by_task_handle(bool owning, passkey_any<task_handle<R>> /*key*/) {
     base_handle::set_owning_by_task_handle(owning);
   }
 
-  void try_free_task(internal::passkey_any<task<R>> /*key*/) {
+  void try_free_task(passkey_any<task<R>> /*key*/) {
     this->on_task_freed_by_scheduler();
   }
 
-  void set_continuation_functor(callback_base* func, internal::passkey_any<task_handle<R>> /*key*/) noexcept {
+  void set_continuation_functor(callback_base* func, passkey_any<task_handle<R>> /*key*/) noexcept {
     base_handle::set_continuation_functor(func);
   }
 
-  callback_base* get_continuation_functor(internal::passkey_any<task_handle<R>> /*key*/) noexcept {
+  callback_base* get_continuation_functor(passkey_any<task_handle<R>> /*key*/) noexcept {
     return base_handle::release_continuation_functor();
   }
 };

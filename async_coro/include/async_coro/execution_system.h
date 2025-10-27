@@ -7,7 +7,7 @@
 #include <async_coro/thread_safety/analysis.h>
 #include <async_coro/thread_safety/condition_variable.h>
 #include <async_coro/thread_safety/mutex.h>
-#include <async_coro/unique_function.h>
+#include <async_coro/utils/unique_function.h>
 #include <async_coro/warnings.h>
 
 #include <atomic>

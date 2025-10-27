@@ -2,11 +2,11 @@
 
 #include <async_coro/config.h>
 #include <async_coro/i_execution_system.h>
-#include <async_coro/internal/passkey.h>
 #include <async_coro/task_handle.h>
 #include <async_coro/task_launcher.h>
 #include <async_coro/thread_safety/analysis.h>
 #include <async_coro/thread_safety/mutex.h>
+#include <async_coro/utils/passkey.h>
 
 #if ASYNC_CORO_WITH_EXCEPTIONS
 #include <exception>
@@ -66,7 +66,7 @@ class scheduler {
   template <typename R>
   task_handle<R> start_task(task_launcher<R> launcher) {
     auto coro = launcher.launch();
-    auto handle = coro.release_handle(internal::passkey{this});
+    auto handle = coro.release_handle(passkey{this});
     task_handle<R> result{handle};
     if (!handle.done()) [[likely]] {
       add_coroutine(handle.promise(), launcher.get_start_function(), launcher.get_execution_queue());
@@ -124,14 +124,14 @@ class scheduler {
    * thread is suitable, or schedule it for later execution.
    * @param handle_impl The handle of the coroutine to continue.
    */
-  void continue_execution(base_handle& handle_impl, internal::passkey_any<internal::coroutine_suspender, base_handle, scheduler>);
+  void continue_execution(base_handle& handle_impl, passkey_any<internal::coroutine_suspender, base_handle, scheduler>);
 
   /**
    * @brief Embed coroutine. Returns true if coroutine was finished
    * @param parent The handle of the owning coroutine.
    * @param parent The handle of the coroutine to embed into parent.
    */
-  bool on_child_coro_added(base_handle& parent, base_handle& child, internal::passkey<task_base>);
+  bool on_child_coro_added(base_handle& parent, base_handle& child, passkey<task_base>);
 
  private:
   bool is_current_thread_fits(execution_queue_mark execution_queue) noexcept;

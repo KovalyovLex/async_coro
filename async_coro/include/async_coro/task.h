@@ -2,9 +2,9 @@
 
 #include <async_coro/callback.h>
 #include <async_coro/config.h>
-#include <async_coro/internal/passkey.h>
 #include <async_coro/internal/promise_type.h>
-#include <async_coro/unique_function.h>
+#include <async_coro/utils/passkey.h>
+#include <async_coro/utils/unique_function.h>
 
 #include <concepts>
 #include <coroutine>
@@ -52,7 +52,7 @@ class task final : private task_base {
 
   ~task() noexcept {
     if (_handle) {
-      _handle.promise().try_free_task(internal::passkey{this});
+      _handle.promise().try_free_task(passkey{this});
     }
   }
 
@@ -97,7 +97,7 @@ class task final : private task_base {
     return {*this, on_child_coro_added(parent, _handle.promise()) && !parent.is_cancelled()};
   }
 
-  handle_type release_handle(internal::passkey_successors<scheduler> /*unused*/) noexcept {
+  handle_type release_handle(passkey_successors<scheduler> /*unused*/) noexcept {
     return std::exchange(_handle, {});
   }
 
