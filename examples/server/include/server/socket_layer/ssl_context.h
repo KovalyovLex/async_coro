@@ -11,8 +11,8 @@ class ssl_connection;
 
 class ssl_context {
  public:
-  ssl_context(const std::string& key_path, const std::string& cert_path,
-              const std::string& ciphers);
+  ssl_context() noexcept = default;
+  ssl_context(const std::string& key_path, const std::string& cert_path, const std::string& ciphers);
 
   ssl_context(const ssl_context&) = delete;
   ssl_context(ssl_context&& other) noexcept

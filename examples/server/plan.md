@@ -87,7 +87,6 @@ File layout (suggested)
 examples/server/
 ├─ CMakeLists.txt
 ├─ plan.md
-├─ README.md
 ├─ certs/ (sample dev cert/key and helper script to generate via openssl)
 ├─ include/server/
 │  ├─ listener.h

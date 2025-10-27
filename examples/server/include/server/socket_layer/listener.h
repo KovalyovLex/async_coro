@@ -10,22 +10,30 @@
 
 namespace server::socket_layer {
 
+class reactor;
+
 // Creates wrapper on TCP socket for listening connections
 class listener {
  public:
   using handler = async_coro::unique_function<void(connection_id, std::string_view)>;
 
   listener();
+  listener(const listener&) = delete;
+  listener(listener&&) = delete;
+  ~listener();
+
+  listener& operator=(const listener&) = delete;
+  listener& operator=(listener&&) = delete;
 
   // blocks until a fatal error happened or shutdown requested
-  bool serve(const std::string& ip_address, uint16_t port, handler new_connection_handler, std::string* error_message);
+  bool serve(const std::string& ip_address, uint16_t port, handler new_connection_handler, reactor& reactor, std::string* error_message);
 
-  // thread safe
-  void shut_down() noexcept;
+  void terminate();
 
  private:
-  std::atomic_bool _is_terminating{false};
   bool _fatal_error{false};
+  std::atomic_bool _has_data{false};
+  std::atomic_bool _terminating{false};
 };
 
 }  // namespace server::socket_layer

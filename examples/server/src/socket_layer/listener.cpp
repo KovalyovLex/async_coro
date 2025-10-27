@@ -3,8 +3,13 @@
 #include <server/socket_layer/listener.h>
 #include <server/socket_layer/socket_config.h>
 
+#include <atomic>
+#include <cerrno>
 #include <charconv>
+#include <memory>
 #include <string>
+
+#include "server/socket_layer/reactor.h"
 
 #if WIN_SOCKET
 #include <WS2tcpip.h>
@@ -245,19 +250,33 @@ listener::listener() {
 #endif
 }
 
-bool listener::serve(const std::string& ip_address, uint16_t port, handler new_connection_handler, std::string* error_message) {
-  auto socket = open_socket_impl(ip_address, port, false, error_message);
+bool listener::serve(const std::string& ip_address, uint16_t port, handler new_connection_handler, reactor& reactor, std::string* error_message) {
+  auto socket = open_socket_impl(ip_address, port, true, error_message);
 
   if (socket == invalid_socket_id) {
     return false;
   }
 
-  while (!_is_terminating.load(std::memory_order::relaxed)) {
+  bool subscribed = false;
+
+  while (!_terminating.load(std::memory_order::relaxed)) {
     sockaddr_storage in_addr_storage;  // NOLINT(*member-init*)
     socklen_t in_len = sizeof(in_addr_storage);
 
     const auto accept_sock = ::accept(socket, reinterpret_cast<sockaddr*>(&in_addr_storage), &in_len);  // NOLINT(*-reinterpret-cast)
     if (accept_sock == invalid_socket_id) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (!subscribed) {
+          subscribed = true;
+          reactor.add_connection(connection_id{socket});
+        }
+        reactor.continue_after_receive_data(connection_id{socket}, [this](auto) {
+          _has_data.store(true, std::memory_order::relaxed);
+          _has_data.notify_one();
+        });
+
+        _has_data.wait(false, std::memory_order::relaxed);
+      }
       continue;
     }
 
@@ -281,13 +300,17 @@ bool listener::serve(const std::string& ip_address, uint16_t port, handler new_c
     new_connection_handler(connection_id{accept_sock}, host_name);
   }
 
-  close_socket(socket);
-
   return true;
 }
 
-void listener::shut_down() noexcept {
-  _is_terminating.store(true, std::memory_order::release);
+void listener::terminate() {
+  _terminating.store(true, std::memory_order::release);
+  _has_data.store(true, std::memory_order::release);
+  _has_data.notify_one();
+}
+
+listener::~listener() {
+  terminate();
 }
 
 }  // namespace server::socket_layer

@@ -24,7 +24,9 @@ enum class ssl_error : uint8_t {
 
 class ssl_connection {
  public:
-  explicit ssl_connection(ssl_context& context, socket_layer::connection_id conn);
+  ssl_connection() noexcept = default;
+
+  ssl_connection(ssl_context& context, socket_layer::connection_id conn);
 
   ssl_connection(const ssl_connection&) = delete;
   ssl_connection(ssl_connection&& other) noexcept
