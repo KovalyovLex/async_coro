@@ -1,54 +1,174 @@
 
+#include <async_coro/await/await_callback.h>
 #include <server/socket_layer/connection.h>
 #include <server/socket_layer/reactor.h>
-#include <unistd.h>
-
-#include "async_coro/await/await_callback.h"
+#include <server/socket_layer/ssl_connection.h>
+#include <server/socket_layer/ssl_context.h>
+#include <server/utils/expected.h>
 
 #if !WIN_SOCKET
 #include <sys/socket.h>
+#endif
 
 #include <cerrno>
-#endif
 
 namespace server::socket_layer {
 
 connection::~connection() noexcept {
   if (_reactor != nullptr) {
-    _reactor->close_connection(_sock);
+    close_connection();
   }
 }
 
-async_coro::task<expected<void, std::string>> connection::write_buffer(std::span<const std::byte> bytes) {
-  if (_reactor == nullptr) {
-    co_return expected<void, std::string>{};
+void connection::close_connection() {
+  _reactor->close_connection(_sock);
+  _reactor = nullptr;
+}
+
+async_coro::task<expected<void, std::string>> connection::write_buffer(std::span<const std::byte> bytes) {  // NOLINT(*-complexity*)
+  using res_t = expected<void, std::string>;
+
+  if (_reactor == nullptr) [[unlikely]] {
+    co_return res_t{unexpect, "Connection was already closed"};
+  }
+
+  if (_ssl) {
+    while (true) {
+      const auto sent_local = _ssl.write(bytes);
+
+      if (sent_local > 0) {
+        if (sent_local == bytes.size()) {
+          co_return res_t{};
+        } else {
+          bytes = bytes.subspan(sent_local);
+        }
+
+        check_subscribed();
+
+        auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
+          _reactor->continue_after_sent_data(_sock, std::move(cont));
+        });
+        if (res == reactor::connection_state::closed) {
+          close_connection();
+          co_return res_t{unexpect, "Connection was closed"};
+        }
+        continue;
+      }
+
+      const auto error = _ssl.get_error(sent_local);
+
+      if (error == ssl_error::connection_was_closed) {
+        close_connection();
+        co_return res_t{};
+      }
+
+      if (error == ssl_error::wants_read && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        check_subscribed();
+
+        auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
+          _reactor->continue_after_receive_data(_sock, std::move(cont));
+        });
+        if (res == reactor::connection_state::closed) {
+          close_connection();
+          co_return res_t{};
+        }
+      } else if (error == ssl_error::wants_write && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        check_subscribed();
+
+        auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
+          _reactor->continue_after_sent_data(_sock, std::move(cont));
+        });
+        if (res == reactor::connection_state::closed) {
+          close_connection();
+          co_return res_t{};
+        }
+      } else {
+        co_return res_t{unexpect, ssl_context::get_ssl_error()};
+      }
+    }
+
+    co_return res_t{};
   }
 
   const auto fd_id = _sock.get_platform_id();
 
-  size_t sent = 0;
   while (true) {
     const auto sent_local = ::send(fd_id, bytes.data(), bytes.size(), 0);
+    bool is_error = true;
+
     if (sent_local > 0) {
-      sent += sent_local;
-      if (sent == bytes.size()) {
-        co_return expected<void, std::string>{};
+      is_error = false;
+
+      if (sent_local == bytes.size()) {
+        co_return res_t{};
+      } else {
+        bytes = bytes.subspan(sent_local);
       }
     } else if (sent_local == 0 || errno == EAGAIN || errno == EWOULDBLOCK) {
-      co_await async_coro::await_callback([this](auto cont) {
-        _reactor->continue_after_sent_data(_sock, std::move(cont));
-      });
-    } else {
-      // error
-      break;
+      is_error = false;
+    }
+
+    if (is_error) {
+      co_return res_t{unexpect, strerror(errno)};
+    }
+
+    check_subscribed();
+
+    auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
+      _reactor->continue_after_sent_data(_sock, std::move(cont));
+    });
+    if (res == reactor::connection_state::closed) {
+      close_connection();
+      co_return res_t{unexpect, "Connection was closed"};
     }
   }
 
-  co_return expected<void, std::string>{};
+  co_return res_t{};
 }
 
-async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::span<std::byte> bytes) {
-  if (_reactor == nullptr) {
+async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::span<std::byte> bytes) {  // NOLINT(*-complexity*)
+  if (_reactor == nullptr) [[unlikely]] {
+    co_return expected<size_t, std::string>{unexpect, "Connection was already closed"};
+  }
+
+  if (_ssl) {
+    while (true) {
+      const auto received = _ssl.read(bytes);
+      if (received > 0) {
+        co_return size_t(received);
+      }
+      const auto error = _ssl.get_error(received);
+
+      if (error == ssl_error::connection_was_closed) {
+        close_connection();
+        co_return 0;
+      }
+
+      if (error == ssl_error::wants_read && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        check_subscribed();
+
+        auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
+          _reactor->continue_after_receive_data(_sock, std::move(cont));
+        });
+        if (res == reactor::connection_state::closed) {
+          close_connection();
+          co_return 0;
+        }
+      } else if (error == ssl_error::wants_write && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        check_subscribed();
+
+        auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
+          _reactor->continue_after_sent_data(_sock, std::move(cont));
+        });
+        if (res == reactor::connection_state::closed) {
+          close_connection();
+          co_return 0;
+        }
+      } else {
+        co_return expected<size_t, std::string>{unexpect, ssl_context::get_ssl_error()};
+      }
+    }
+
     co_return 0;
   }
 
@@ -57,22 +177,39 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
   while (true) {
     const auto received = ::recv(fd_id, bytes.data(), bytes.size(), 0);
     if (received > 0) {
-      co_return received;
-    } else if (received == 0) {
+      co_return size_t(received);
+    }
+
+    if (received == 0) {
+      // connection was closed by peer
       _reactor->close_connection(_sock);
       _reactor = nullptr;
       co_return 0;
-    } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
-      co_await async_coro::await_callback([this](auto cont) {
+    }
+
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      check_subscribed();
+
+      auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
         _reactor->continue_after_receive_data(_sock, std::move(cont));
       });
+      if (res == reactor::connection_state::closed) {
+        close_connection();
+        co_return 0;
+      }
     } else {
-      // error
-      break;
+      co_return expected<size_t, std::string>{unexpect, strerror(errno)};
     }
   }
 
   co_return 0;
+}
+
+void connection::check_subscribed() {
+  if (!_is_listening) {
+    _is_listening = true;
+    _reactor->add_connection(_sock);
+  }
 }
 
 }  // namespace server::socket_layer

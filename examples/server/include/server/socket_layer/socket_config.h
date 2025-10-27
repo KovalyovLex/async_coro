@@ -41,10 +41,14 @@ namespace server::socket_layer {
 
 #if WIN_SOCKET
 using socket_type = SOCKET;
+using epoll_handle_t = HANDLE;
 static constexpr socket_type invalid_socket_id = INVALID_SOCKET;
 #else
 using socket_type = int;
+using epoll_handle_t = int;
 static constexpr socket_type invalid_socket_id = -1;
 #endif
+
+void close_socket(socket_type socket_id) noexcept;
 
 }  // namespace server::socket_layer

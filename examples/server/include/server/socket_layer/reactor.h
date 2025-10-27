@@ -1,23 +1,38 @@
 #pragma once
 
-#include <async_coro/internal/continue_callback.h>
+#include <async_coro/internal/await_callback.h>
 #include <async_coro/thread_safety/analysis.h>
 #include <async_coro/thread_safety/mutex.h>
-#include <async_coro/unique_function.h>
+#include <async_coro/utils/unique_function.h>
+#include <server/utils/expected.h>
 
 #include <chrono>
 #include <cstdint>
 #include <vector>
 
 #include "connection_id.h"
+#include "socket_config.h"
 
 namespace server::socket_layer {
 
 class reactor {
  public:
-  using continue_callback = async_coro::unique_function<void(), sizeof(async_coro::internal::continue_callback)>;
+  enum class connection_state : uint8_t {
+    available_read,
+    available_write,
+    closed,
+  };
+
+  using continue_callback_t = async_coro::unique_function<void(connection_state), sizeof(async_coro::internal::await_callback_base<connection_state>::continue_callback_t)>;
 
   reactor() noexcept;
+  reactor(const reactor&) = delete;
+  reactor(reactor&&) = delete;
+
+  ~reactor() noexcept;
+
+  reactor& operator=(const reactor&) = delete;
+  reactor& operator=(reactor&&) = delete;
 
   // should be called only from owning thread
   void process_loop(std::chrono::nanoseconds max_wait);
@@ -26,15 +41,16 @@ class reactor {
   void add_connection(connection_id conn);
   void close_connection(connection_id conn);
 
-  void continue_after_receive_data(connection_id conn, continue_callback clb);
-  void continue_after_sent_data(connection_id conn, continue_callback clb);
+  void continue_after_receive_data(connection_id conn, continue_callback_t&& clb);
+  void continue_after_sent_data(connection_id conn, continue_callback_t&& clb);
 
  private:
-  async_coro::mutex _mutex;
-  std::vector<std::pair<connection_id, continue_callback>> _continuations CORO_THREAD_GUARDED_BY(_mutex);
-  std::vector<connection_id> _connections_to_close CORO_THREAD_GUARDED_BY(_mutex);
+  struct await_callback;
 
-  int64_t _epoll_fid = -1;
+  async_coro::mutex _mutex;
+  std::vector<await_callback> _continuations CORO_THREAD_GUARDED_BY(_mutex);
+
+  epoll_handle_t _epoll_fd{};
   bool _error = false;
 };
 
