@@ -7,7 +7,7 @@ Create a minimal but extensible example "Server" subproject that demonstrates an
 
 - Use low-level sockets (TCP/UDP) and a small portable async I/O layer.
 - Support TLS via OpenSSL (server-side) with ALPN for version negotiation.
-- Provide support for HTTP/1.1, HTTP/2, and HTTP/3 (QUIC) progressively.
+- Provide support for HTTP/1.1, HTTP/2.
 - Be buildable from scratch via CMake with optional FetchContent for third-party libraries.
 
 Assumptions
@@ -15,7 +15,7 @@ Assumptions
 
 - The host machine has standard development tools (gcc/clang, CMake, make/ninja).
 - OpenSSL development headers/libraries can be built or installed (or fetched and built by CMake).
-- HTTP/2 and HTTP/3 stacks (nghttp2, msquic) can be optionally fetched / built; HTTP/3 may be deferred if the environment is constrained.
+- HTTP/2 (nghttp2) can be optionally fetched / built.
 - We will reuse your `async_coro` primitives (coroutines, scheduling) as the core async primitives.
 
 Contract (tiny)
@@ -23,7 +23,7 @@ Contract (tiny)
 
 - Inputs: TCP connections on a configurable port (IPv4/IPv6), TLS certificates (PEM), configuration flags to enable http1/http2/http3 and concurrency limits.
 - Outputs: Serve HTTP responses (static or programmatically generated), logs, and diagnostics. Error modes include invalid requests, failed TLS handshake, and backend failures.
-- Success criteria: A local client can connect and receive valid HTTP responses for HTTP/1.1 and HTTP/2; TLS handshake succeeds with ALPN; QUIC/HTTP3 support is optional and flagged as a milestone.
+- Success criteria: A local client can connect and receive valid HTTP responses for HTTP/1.1 and HTTP/2; TLS handshake succeeds with ALPN.
 
 Architecture overview
 ---------------------
@@ -49,7 +49,6 @@ Layered design — small, testable components:
 5. HTTP layer
    - HTTP/1.1 handler: lightweight parser (tiny in-repo) with support for persistent connections, chunked transfer, and pipelining.
    - HTTP/2 handler: integrate `nghttp2` to manage frames and streams, map streams to coroutine tasks.
-   - HTTP/3 handler (QUIC): `msquic` (UDP + QUIC stack). This is the most complex piece and will be a separate milestone.
 
 6. Application handler
    - A simple request dispatcher that calls coroutine-based handlers for each request and returns responses.
@@ -57,7 +56,7 @@ Layered design — small, testable components:
 
 7. Testing & examples
    - Unit tests for socket/TLS/HTTP layers.
-   - Small client examples (a tiny C++ client using sockets or msquic test client bindings).
+   - Small client examples (a tiny C++ client using sockets test client bindings).
 
 Dependencies and Build Strategy
 -------------------------------
@@ -65,7 +64,6 @@ Dependencies and Build Strategy
 - Core: C++20 (or newer), CMake 3.16+.
 - TLS: OpenSSL (recommended OpenSSL 1.1.1+ or 3.x)
 - HTTP/2: nghttp2 (via FetchContent)
-- HTTP/3/QUIC: msquic or similar (via FetchContent)
 - Parser: small in-project parser for HTTP/1.1
 
 Build integration (CMake)
@@ -73,10 +71,9 @@ Build integration (CMake)
 
 - Add `examples/server/CMakeLists.txt` that defines a subproject `server` with options:
   - SERVER_ENABLE_HTTP2 (ON/OFF)
-  - SERVER_ENABLE_HTTP3 (OFF by default)
   - SERVER_ENABLE_TLS (ON/OFF)
   - SERVER_BUILD_EXAMPLES/TESTS
-- Prefer FetchContent for nghttp2, and msquic to keep the repo self-contained when needed.
+- Prefer FetchContent for nghttp2 to keep the repo self-contained when needed.
 - Create targets:
   - server (executable)
   - server_test (unit tests linking googletest)
@@ -131,11 +128,6 @@ Phase 3 — HTTP/2 support (3–5 days)
 Phase 4 — Tests, hardening and performance (ongoing)
 - Add unit tests, integration tests, fuzzing entrypoints for parsers, bench/throughput tests.
 
-Phase 5 — HTTP/3 / QUIC proof-of-concept (optional / later, 1+ weeks)
-- Add QUIC stack (msquic) and implement UDP server entrypoint for QUIC connections.
-- Implement minimal HTTP/3 framing to respond to GET.
-- Acceptance: HTTP/3 GET returns a correct response from a compatible client.
-
 Security considerations
 -----------------------
 
@@ -176,4 +168,4 @@ Acceptance criteria for this plan
 
 ---
 
-Last updated: 2025-10-16
+Last updated: 2025-10-27

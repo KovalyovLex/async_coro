@@ -38,17 +38,18 @@ class reactor {
   void process_loop(std::chrono::nanoseconds max_wait);
 
   // thread safe methods
-  void add_connection(connection_id conn);
-  void close_connection(connection_id conn);
+  size_t add_connection(connection_id conn);
+  void close_connection(connection_id conn, size_t index);
 
-  void continue_after_receive_data(connection_id conn, continue_callback_t&& clb);
-  void continue_after_sent_data(connection_id conn, continue_callback_t&& clb);
+  void continue_after_receive_data(connection_id conn, size_t index, continue_callback_t&& clb);
+  void continue_after_sent_data(connection_id conn, size_t index, continue_callback_t&& clb);
 
  private:
-  struct await_callback;
+  struct handled_connection;
 
   async_coro::mutex _mutex;
-  std::vector<await_callback> _continuations CORO_THREAD_GUARDED_BY(_mutex);
+  std::vector<handled_connection> _handled_connections CORO_THREAD_GUARDED_BY(_mutex);
+  std::vector<size_t> _empty_connections CORO_THREAD_GUARDED_BY(_mutex);
 
   epoll_handle_t _epoll_fd{};
   bool _error = false;

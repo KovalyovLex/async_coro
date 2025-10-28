@@ -3,13 +3,13 @@
 #include <server/socket_layer/listener.h>
 #include <server/socket_layer/socket_config.h>
 
-#include <atomic>
 #include <cerrno>
 #include <charconv>
-#include <memory>
+#include <cstring>
+#include <ios>
+#include <span>
 #include <string>
-
-#include "server/socket_layer/reactor.h"
+#include <string_view>
 
 #if WIN_SOCKET
 #include <WS2tcpip.h>
@@ -250,32 +250,31 @@ listener::listener() {
 #endif
 }
 
-bool listener::serve(const std::string& ip_address, uint16_t port, handler new_connection_handler, reactor& reactor, std::string* error_message) {
+bool listener::open(const std::string& ip_address, uint16_t port, std::string* error_message) {
+  ASYNC_CORO_ASSERT(_opened_connection == invalid_connection);
+
   auto socket = open_socket_impl(ip_address, port, true, error_message);
 
   if (socket == invalid_socket_id) {
     return false;
   }
 
-  bool subscribed = false;
+  _opened_connection = connection_id{socket};
 
-  while (!_terminating.load(std::memory_order::relaxed)) {
-    sockaddr_storage in_addr_storage;  // NOLINT(*member-init*)
-    socklen_t in_len = sizeof(in_addr_storage);
+  return true;
+}
 
-    const auto accept_sock = ::accept(socket, reinterpret_cast<sockaddr*>(&in_addr_storage), &in_len);  // NOLINT(*-reinterpret-cast)
+listener::connection_result listener::process_loop(std::span<char>* host_name_buffer, std::span<char>* service_name_buffer) {
+  ASYNC_CORO_ASSERT(_opened_connection != invalid_connection);
+
+  sockaddr_storage in_addr_storage;  // NOLINT(*member-init*)
+  socklen_t in_len = sizeof(in_addr_storage);
+
+  while (true) {
+    const auto accept_sock = ::accept(_opened_connection.get_platform_id(), reinterpret_cast<sockaddr*>(&in_addr_storage), &in_len);  // NOLINT(*-reinterpret-cast)
     if (accept_sock == invalid_socket_id) {
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        if (!subscribed) {
-          subscribed = true;
-          reactor.add_connection(connection_id{socket});
-        }
-        reactor.continue_after_receive_data(connection_id{socket}, [this](auto) {
-          _has_data.store(true, std::memory_order::relaxed);
-          _has_data.notify_one();
-        });
-
-        _has_data.wait(false, std::memory_order::relaxed);
+        return {.connection = invalid_connection, .type = listen_result_type::wait_for_connections};
       }
       continue;
     }
@@ -286,31 +285,37 @@ bool listener::serve(const std::string& ip_address, uint16_t port, handler new_c
       continue;
     }
 
-    std::array<char, NI_MAXHOST> host_name_buf;  // NOLINT(*member-init*)
+    connection_result result{.connection = connection_id{accept_sock}, .type = listen_result_type::connected};
 
-    const auto name_info_res = ::getnameinfo(reinterpret_cast<sockaddr*>(&in_addr_storage), sizeof(in_addr_storage), host_name_buf.data(), host_name_buf.size(), nullptr, 0, 0);  // NOLINT(*-reinterpret-cast)
+    if (host_name_buffer != nullptr && service_name_buffer != nullptr) {
+      const auto name_info_res = ::getnameinfo(reinterpret_cast<sockaddr*>(&in_addr_storage), sizeof(in_addr_storage), host_name_buffer->data(), host_name_buffer->size(), service_name_buffer->data(), service_name_buffer->size(), 0);  // NOLINT(*-reinterpret-cast)
 
-    std::string_view host_name;
-    if (name_info_res != 0) {
-      host_name_buf[0] = '\0';
-    } else {
-      host_name = {host_name_buf.data()};
+      if (name_info_res == 0) {
+        result.host_name = {host_name_buffer->data()};
+        result.service_name = {service_name_buffer->data()};
+      }
+    } else if (host_name_buffer != nullptr) {
+      const auto name_info_res = ::getnameinfo(reinterpret_cast<sockaddr*>(&in_addr_storage), sizeof(in_addr_storage), host_name_buffer->data(), host_name_buffer->size(), nullptr, 0, 0);  // NOLINT(*-reinterpret-cast)
+
+      if (name_info_res == 0) {
+        result.host_name = {host_name_buffer->data()};
+      }
+    } else if (service_name_buffer != nullptr) {
+      const auto name_info_res = ::getnameinfo(reinterpret_cast<sockaddr*>(&in_addr_storage), sizeof(in_addr_storage), nullptr, 0, service_name_buffer->data(), service_name_buffer->size(), 0);  // NOLINT(*-reinterpret-cast)
+
+      if (name_info_res == 0) {
+        result.service_name = {service_name_buffer->data()};
+      }
     }
 
-    new_connection_handler(connection_id{accept_sock}, host_name);
+    return result;
   }
-
-  return true;
-}
-
-void listener::terminate() {
-  _terminating.store(true, std::memory_order::release);
-  _has_data.store(true, std::memory_order::release);
-  _has_data.notify_one();
 }
 
 listener::~listener() {
-  terminate();
+  if (_opened_connection != invalid_connection) {
+    close_socket(_opened_connection.get_platform_id());
+  }
 }
 
 }  // namespace server::socket_layer

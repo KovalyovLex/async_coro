@@ -5,6 +5,7 @@
 #include <server/utils/expected.h>
 
 #include <chrono>
+#include <cstdint>
 #include <iostream>
 #include <span>
 
@@ -13,20 +14,20 @@
 #endif
 namespace server::socket_layer {
 
-static void epoll_ctl_impl(epoll_handle_t epoll_fd, socket_type socked_descriptor, int action, uint32_t flags) {  // NOLINT(*swappable*)
+static void epoll_ctl_impl(epoll_handle_t epoll_fd, socket_type socked_descriptor, int action, uint32_t flags, void* user_data) {  // NOLINT(*swappable*)
 #if EPOLL_SOCKET
 
   epoll_event event{};
-  event.data.fd = socked_descriptor;
+  event.data.ptr = user_data;
   event.events = flags;
-  if (-1 == ::epoll_ctl(epoll_fd, action, socked_descriptor, &event) && errno != EEXIST) {
+  if (-1 == ::epoll_ctl(epoll_fd, action, socked_descriptor, &event)) {
     std::cerr << "epoll_ctl error: " << strerror(errno) << '\n';
   }
 
 #elif KQUEUE_SOCKET
 
   struct kevent ev_set;
-  EV_SET(&ev_set, socked_descriptor, flags, action, 0, 0, nullptr);
+  EV_SET(&ev_set, socked_descriptor, flags, action, 0, 0, user_data);
   if (-1 == ::kevent(epoll_fd, &ev_set, 1, nullptr, 0, nullptr)) {
     std::cerr << "kevent set error: " << strerror(errno) << '\n';
   }
@@ -36,10 +37,11 @@ static void epoll_ctl_impl(epoll_handle_t epoll_fd, socket_type socked_descripto
 
 enum class reactor_data_await_type : uint8_t {
   send_data,
-  receive_data
+  receive_data,
+  no_await,
 };
 
-struct reactor::await_callback {
+struct reactor::handled_connection {
   continue_callback_t callback;
   connection_id id;
   reactor_data_await_type await;
@@ -91,12 +93,14 @@ void reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOLINT(*-com
 
   std::span events_to_process{events.data(), static_cast<size_t>(n_events)};
   for (const auto& event : events_to_process) {
+    void* user_data = nullptr;
+
 #if EPOLL_SOCKET
     const auto event_flags = event.events;
-    const auto event_fd = event.data.fd;
+    user_data = event.data.ptr;
 #elif KQUEUE_SOCKET
     const auto event_flags = event.flags;
-    const auto event_fd = event.ident;
+    user_data = event.udata;
 #endif
 
 #if EPOLL_SOCKET
@@ -109,38 +113,31 @@ void reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOLINT(*-com
     const bool is_write_available = !is_error;
 #endif
 
+    auto index = reinterpret_cast<uintptr_t>(user_data);  // NOLINT(*reinterpret-cast*)
+
     continue_callback_t continuation;
     reactor_data_await_type awaited_for = reactor_data_await_type::receive_data;
     {
       async_coro::unique_lock lock{_mutex};
-      auto cont_it = std::ranges::find_if(_continuations, [event_fd](const auto& pair) { return pair.id.get_platform_id() == event_fd; });
-      if (cont_it != _continuations.end()) {
-        awaited_for = cont_it->await;
-        if (!is_error) {
-          // skip unwanted events
-          if (awaited_for == reactor_data_await_type::send_data && !is_write_available) {
-            continue;
-          }
-          if (awaited_for == reactor_data_await_type::receive_data && !is_read_available) {
-            continue;
-          }
-        }
 
-        continuation = std::move(cont_it->callback);
-        if (_continuations.size() > 1) {
-          // move last element to current
-          *cont_it = std::move(_continuations.back());
+      auto& connection = _handled_connections[index];
+
+      awaited_for = connection.await;
+      if (!is_error) {
+        // skip unwanted events
+        if (awaited_for == reactor_data_await_type::send_data && !is_write_available) {
+          continue;
         }
-        _continuations.pop_back();
-      } else {
-        ASYNC_CORO_ASSERT(cont_it != _continuations.end());
+        if (awaited_for == reactor_data_await_type::receive_data && !is_read_available) {
+          continue;
+        }
       }
+
+      continuation = std::move(connection.callback);
+      connection.await = reactor_data_await_type::no_await;
     }
 
     if (!continuation) {
-      if (is_error) {
-        close_connection(connection_id{event_fd});
-      }
       continue;
     }
 
@@ -158,38 +155,78 @@ void reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOLINT(*-com
   }
 }
 
-void reactor::add_connection(connection_id conn) {  // NOLINT(*-const)
+size_t reactor::add_connection(connection_id conn) {
+  uintptr_t index = 0;
+  {
+    async_coro::unique_lock lock{_mutex};
+
+    if (!_empty_connections.empty()) {
+      index = _empty_connections.back();
+      _empty_connections.pop_back();
+    } else {
+      index = _handled_connections.size();
+      _handled_connections.emplace_back(continue_callback_t{}, conn, reactor_data_await_type::no_await);
+    }
+  }
+
+  auto* user_data = reinterpret_cast<void*>(index);  // NOLINT(*reinterpret-cast*, *int-to-ptr*)
+
 #if WIN_SOCKET
-  epoll_ctl_impl(_epoll_fd, conn.get_platform_id(), EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLRDHUP);
+  epoll_ctl_impl(_epoll_fd, conn.get_platform_id(), EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLRDHUP, user_data);
 #elif EPOLL_SOCKET
-  epoll_ctl_impl(_epoll_fd, conn.get_platform_id(), EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET);
+  epoll_ctl_impl(_epoll_fd, conn.get_platform_id(), EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET, user_data);
 #elif KQUEUE_SOCKET
-  epoll_ctl_impl(_epoll_fd, conn.get_platform_id(), EV_ADD, EVFILT_READ | EVFILT_WRITE);
+  epoll_ctl_impl(_epoll_fd, conn.get_platform_id(), EV_ADD, EVFILT_READ | EVFILT_WRITE, user_data);
 #endif
+
+  return index;
 }
 
-void reactor::close_connection(connection_id conn) {  // NOLINT(*-const)
+void reactor::close_connection(connection_id conn, size_t index) {
+  {
+    async_coro::unique_lock lock{_mutex};
+
+    ASYNC_CORO_ASSERT(index < _handled_connections.size());
+
+    auto& connection = _handled_connections[index];
+    connection.callback = {};
+    connection.id = invalid_connection;
+    connection.await = reactor_data_await_type::no_await;
+
+    _empty_connections.push_back(index);
+  }
+
 #if EPOLL_SOCKET
-  epoll_ctl_impl(_epoll_fd, conn.get_platform_id(), EPOLL_CTL_DEL, 0);
+  epoll_ctl_impl(_epoll_fd, conn.get_platform_id(), EPOLL_CTL_DEL, 0, nullptr);
 #elif KQUEUE_SOCKET
-  epoll_ctl_impl(_epoll_fd, conn.get_platform_id(), EV_DELETE, 0);
+  epoll_ctl_impl(_epoll_fd, conn.get_platform_id(), EV_DELETE, 0, nullptr);
 #endif
 
   close_socket(conn.get_platform_id());
 }
 
-void reactor::continue_after_receive_data(connection_id conn, continue_callback_t&& clb) {
-  ASYNC_CORO_ASSERT(std::ranges::find_if(_continuations, [conn](const auto& pair) { return pair.id == conn; }) == _continuations.end());
-
+void reactor::continue_after_receive_data(ASYNC_CORO_ASSERT_VARIABLE connection_id conn, size_t index, continue_callback_t&& clb) {
   async_coro::unique_lock lock{_mutex};
-  _continuations.emplace_back(std::move(clb), conn, reactor_data_await_type::receive_data);
+
+  ASYNC_CORO_ASSERT(index < _handled_connections.size());
+
+  auto& connection = _handled_connections[index];
+  ASYNC_CORO_ASSERT(connection.id == conn);
+
+  connection.callback = std::move(clb);
+  connection.await = reactor_data_await_type::receive_data;
 }
 
-void reactor::continue_after_sent_data(connection_id conn, continue_callback_t&& clb) {
-  ASYNC_CORO_ASSERT(std::ranges::find_if(_continuations, [conn](const auto& pair) { return pair.id == conn; }) == _continuations.end());
-
+void reactor::continue_after_sent_data(connection_id conn, size_t index, continue_callback_t&& clb) {
   async_coro::unique_lock lock{_mutex};
-  _continuations.emplace_back(std::move(clb), conn, reactor_data_await_type::send_data);
+
+  ASYNC_CORO_ASSERT(index < _handled_connections.size());
+
+  auto& connection = _handled_connections[index];
+  ASYNC_CORO_ASSERT(connection.id == conn);
+
+  connection.callback = std::move(clb);
+  connection.await = reactor_data_await_type::send_data;
 }
 
 }  // namespace server::socket_layer

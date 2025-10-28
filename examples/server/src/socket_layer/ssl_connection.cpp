@@ -77,7 +77,7 @@ async_coro::task<expected<bool, std::string>> ssl_connection::handshake(connecti
       connection.check_subscribed();
 
       auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([&connection](auto cont) {
-        connection.get_reactor()->continue_after_sent_data(connection.get_connection_id(), std::move(cont));
+        connection.get_reactor()->continue_after_sent_data(connection.get_connection_id(), connection.get_subscription_index(), std::move(cont));
       });
 
       if (res == reactor::connection_state::closed) {
@@ -88,7 +88,7 @@ async_coro::task<expected<bool, std::string>> ssl_connection::handshake(connecti
       connection.check_subscribed();
 
       auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([&connection](auto cont) {
-        connection.get_reactor()->continue_after_receive_data(connection.get_connection_id(), std::move(cont));
+        connection.get_reactor()->continue_after_receive_data(connection.get_connection_id(), connection.get_subscription_index(), std::move(cont));
       });
       if (res == reactor::connection_state::closed) {
         connection.close_connection();

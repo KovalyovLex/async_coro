@@ -1,55 +1,50 @@
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <unistd.h>
 
-#include <cstdlib>
-#include <cstring>
-#include <iostream>
-#include <string>
+
+#include <async_coro/execution_system.h>
+#include <async_coro/scheduler.h>
+#include <server/tcp_server.h>
+#include <server/tcp_server_config.h>
+
+#include <atomic>
+#include <csignal>
+#include <memory>
+#include <string_view>
+
+std::atomic<server::tcp_server*> global_server;  // NOLINT(*-non-const-*)
+
+void signal_handler(int signal) {
+  if (auto* serv = global_server.load(std::memory_order::acquire)) {
+    serv->terminate();
+  }
+}
 
 int main(int argc, char** argv) {
-  int port = 8080;
-  if (argc > 1) port = std::atoi(argv[1]);
+  int port = 8080;                          // NOLINT
+  if (argc > 1) port = std::atoi(argv[1]);  // NOLINT
 
-  int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (server_fd < 0) {
-    perror("socket");
-    return 1;
-  }
+  server::tcp_server serv;
 
-  int opt = 1;
-  setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+  global_server.store(std::addressof(serv), std::memory_order::relaxed);
 
-  sockaddr_in addr{};
-  addr.sin_family = AF_INET;
-  addr.sin_addr.s_addr = INADDR_ANY;
-  addr.sin_port = htons(port);
+  server::tcp_server_config conf{
+      .port = static_cast<uint16_t>(port),
+  };
 
-  if (bind(server_fd, (sockaddr*)&addr, sizeof(addr)) < 0) {
-    perror("bind");
-    return 1;
-  }
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{.worker_configs = {{"worker1"},
+                                                             {"worker2"}}})};
 
-  if (listen(server_fd, 16) < 0) {
-    perror("listen");
-    return 1;
-  }
+  std::signal(SIGINT, signal_handler);
 
-  std::cout << "simple_server listening on port " << port << "\n";
+  serv.serve(conf, {}, [&scheduler](auto conn) mutable {
+    scheduler.start_task([conn = std::move(conn)]() mutable {
+      constexpr std::string_view resp = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nHello";
 
-  while (true) {
-    int client = accept(server_fd, nullptr, nullptr);
-    if (client < 0) {
-      perror("accept");
-      continue;
-    }
+      return conn.write_buffer(as_bytes(std::span{resp.data(), resp.length()}));
+    });
+  });
 
-    const char* resp = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nHello";
-    send(client, resp, strlen(resp), 0);
-    close(client);
-  }
+  global_server.store(nullptr, std::memory_order::relaxed);
 
-  close(server_fd);
   return 0;
 }

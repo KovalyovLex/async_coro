@@ -1,6 +1,7 @@
 
 #include <async_coro/await/await_callback.h>
 #include <server/socket_layer/connection.h>
+#include <server/socket_layer/connection_id.h>
 #include <server/socket_layer/reactor.h>
 #include <server/socket_layer/ssl_connection.h>
 #include <server/socket_layer/ssl_context.h>
@@ -21,7 +22,13 @@ connection::~connection() noexcept {
 }
 
 void connection::close_connection() {
-  _reactor->close_connection(_sock);
+  if (_subscription_index != k_invalid_index) {
+    _reactor->close_connection(_sock, _subscription_index);
+    _subscription_index = k_invalid_index;
+  } else if (_sock != invalid_connection) {
+    close_socket(_sock.get_platform_id());
+  }
+
   _reactor = nullptr;
 }
 
@@ -46,7 +53,7 @@ async_coro::task<expected<void, std::string>> connection::write_buffer(std::span
         check_subscribed();
 
         auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
-          _reactor->continue_after_sent_data(_sock, std::move(cont));
+          _reactor->continue_after_sent_data(_sock, _subscription_index, std::move(cont));
         });
         if (res == reactor::connection_state::closed) {
           close_connection();
@@ -66,7 +73,7 @@ async_coro::task<expected<void, std::string>> connection::write_buffer(std::span
         check_subscribed();
 
         auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
-          _reactor->continue_after_receive_data(_sock, std::move(cont));
+          _reactor->continue_after_receive_data(_sock, _subscription_index, std::move(cont));
         });
         if (res == reactor::connection_state::closed) {
           close_connection();
@@ -76,7 +83,7 @@ async_coro::task<expected<void, std::string>> connection::write_buffer(std::span
         check_subscribed();
 
         auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
-          _reactor->continue_after_sent_data(_sock, std::move(cont));
+          _reactor->continue_after_sent_data(_sock, _subscription_index, std::move(cont));
         });
         if (res == reactor::connection_state::closed) {
           close_connection();
@@ -115,7 +122,7 @@ async_coro::task<expected<void, std::string>> connection::write_buffer(std::span
     check_subscribed();
 
     auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
-      _reactor->continue_after_sent_data(_sock, std::move(cont));
+      _reactor->continue_after_sent_data(_sock, _subscription_index, std::move(cont));
     });
     if (res == reactor::connection_state::closed) {
       close_connection();
@@ -148,7 +155,7 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
         check_subscribed();
 
         auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
-          _reactor->continue_after_receive_data(_sock, std::move(cont));
+          _reactor->continue_after_receive_data(_sock, _subscription_index, std::move(cont));
         });
         if (res == reactor::connection_state::closed) {
           close_connection();
@@ -158,7 +165,7 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
         check_subscribed();
 
         auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
-          _reactor->continue_after_sent_data(_sock, std::move(cont));
+          _reactor->continue_after_sent_data(_sock, _subscription_index, std::move(cont));
         });
         if (res == reactor::connection_state::closed) {
           close_connection();
@@ -182,8 +189,7 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
 
     if (received == 0) {
       // connection was closed by peer
-      _reactor->close_connection(_sock);
-      _reactor = nullptr;
+      close_connection();
       co_return 0;
     }
 
@@ -191,7 +197,7 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
       check_subscribed();
 
       auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
-        _reactor->continue_after_receive_data(_sock, std::move(cont));
+        _reactor->continue_after_receive_data(_sock, _subscription_index, std::move(cont));
       });
       if (res == reactor::connection_state::closed) {
         close_connection();
@@ -206,9 +212,8 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
 }
 
 void connection::check_subscribed() {
-  if (!_is_listening) {
-    _is_listening = true;
-    _reactor->add_connection(_sock);
+  if (_subscription_index == k_invalid_index) {
+    _subscription_index = _reactor->add_connection(_sock);
   }
 }
 
