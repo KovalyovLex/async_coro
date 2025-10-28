@@ -79,13 +79,14 @@ void tcp_server::serve(const tcp_server_config& conf, std::optional<ssl_config> 
         }
 
         on_connected(std::move(conn));
-      } else if (result.type == socket_layer::listener::listen_result_type::wait_for_connections) {
+      } else if (result.type == socket_layer::listener::listen_result_type::wait_for_connections && !_has_connections.load(std::memory_order::relaxed)) {
         listener_reactor.continue_after_receive_data(listener_connection.get_connection_id(), listener_connection.get_subscription_index(), [this](auto) {
           _has_connections.store(true, std::memory_order::relaxed);
           _has_connections.notify_one();
         });
 
         _has_connections.wait(false, std::memory_order::relaxed);
+        _has_connections.store(false, std::memory_order::relaxed);
       }
     }
 
@@ -100,6 +101,7 @@ void tcp_server::serve(const tcp_server_config& conf, std::optional<ssl_config> 
 void tcp_server::terminate() {
   _is_terminating.store(true, std::memory_order::release);
   _has_connections.store(true, std::memory_order::release);
+  _has_connections.notify_one();
 
   for (size_t i = 0; i < _num_reactors; i++) {
     auto& react = _reactors[i];
@@ -108,10 +110,6 @@ void tcp_server::terminate() {
       react.thread.join();
     }
   }
-
-  _reactors = nullptr;
-
-  _is_serving.wait(false, std::memory_order::acquire);
 }
 
 tcp_server::~tcp_server() {

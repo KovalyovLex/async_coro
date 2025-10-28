@@ -35,6 +35,7 @@ int main(int argc, char** argv) {
                                                              {"worker2"}}})};
 
   std::signal(SIGINT, signal_handler);
+  std::signal(SIGTERM, signal_handler);
 
   serv.serve(conf, {}, [&scheduler](auto conn) mutable {
     scheduler.start_task([conn = std::move(conn)]() mutable {
