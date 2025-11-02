@@ -233,7 +233,7 @@ class unique_function : private internal::function_impl_call<SFOSize, unique_fun
         this->_move_or_destroy = nullptr;
       }
 
-      new (&this->_buffer.mem[0]) Fx(std::forward<Fx>(func));
+      new (&this->_buffer.mem[0]) TFunc(std::forward<Fx>(func));
     } else {
       // large function
       this->_move_or_destroy = static_cast<t_move_or_destroy_f>(
