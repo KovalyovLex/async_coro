@@ -163,6 +163,9 @@ size_t reactor::add_connection(connection_id conn) {
     if (!_empty_connections.empty()) {
       index = _empty_connections.back();
       _empty_connections.pop_back();
+      auto& connection = _handled_connections[index];
+      connection.id = conn;
+      connection.await = reactor_data_await_type::no_await;
     } else {
       index = _handled_connections.size();
       _handled_connections.emplace_back(continue_callback_t{}, conn, reactor_data_await_type::no_await);

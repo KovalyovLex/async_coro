@@ -5,6 +5,7 @@
 #include <server/socket_layer/ssl_connection.h>
 #include <server/utils/expected.h>
 
+#include <cstddef>
 #include <memory>
 #include <span>
 #include <utility>
@@ -38,6 +39,8 @@ class connection {
     _subscription_index = other._subscription_index;
     return *this;
   }
+
+  [[nodiscard]] bool is_closed() const noexcept { return _reactor == nullptr; }
 
   [[nodiscard]] auto get_connection_id() const noexcept { return _sock; }
 

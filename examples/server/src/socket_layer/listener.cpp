@@ -88,7 +88,7 @@ static socket_type open_socket_impl(const std::string& ip_address, uint16_t port
   if (ip_address.empty()) {
     // starts listening on port
 
-    std::array<char, 6> port_str{};  // NOLINT(*-magic-*)
+    std::array<char, 6> port_str;  // NOLINT(*)
     const auto res = std::to_chars(port_str.begin(), port_str.end(), port);
     if (res.ec != std::errc()) {
       if (error_message != nullptr) {

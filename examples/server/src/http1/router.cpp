@@ -1,0 +1,26 @@
+#include <server/http1/router.h>
+
+#include <string_view>
+
+namespace server::http1 {
+
+void router::add_route(http_method method, std::string path_prefix, handler_t handler) {
+  _entries.emplace_back(std::move(path_prefix), method, std::move(handler));
+}
+
+router::handler_t* router::find_handler(const request& req) const {
+  std::size_t best_match = 0;
+  handler_t* result = nullptr;
+
+  for (const auto& entry : _entries) {
+    if (entry.method == req.method) {
+      if (req.target.starts_with(entry.prefix) && entry.prefix.size() > best_match) {  // prefix matches
+        best_match = entry.prefix.size();
+        result = std::addressof(entry.handler);
+      }
+    }
+  }
+  return result;
+}
+
+}  // namespace server::http1
