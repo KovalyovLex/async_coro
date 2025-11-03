@@ -9,7 +9,7 @@ namespace server {
 
 class dynamic_string_storage : public i_string_storage {
  public:
-  explicit dynamic_string_storage(std::string_view str) : string(str) {};
+  explicit dynamic_string_storage(std::string str) : string(std::move(str)) {};
 
  protected:
   std::optional<std::string_view> try_put_string(std::string_view str) override {
@@ -32,8 +32,8 @@ string_storage::string_storage() noexcept = default;  // NOLINT(*member-init*)
 
 std::optional<std::string_view> string_storage::try_put_string(std::string_view str) {
   if (_empty_pos + str.size() <= kBufferSize) {
-    auto *start_pos = &_buffer[_empty_pos];  // NOLINT(*bounds*)
-    std::memcpy(start_pos, str.data(), str.size());
+    auto *start_pos = &_buffer[_empty_pos];          // NOLINT(*bounds*)
+    std::memcpy(start_pos, str.data(), str.size());  // NOLINT(*not-null-terminated*)
     std::string_view res{start_pos, str.size()};
 
     _empty_pos += str.size();
@@ -43,10 +43,10 @@ std::optional<std::string_view> string_storage::try_put_string(std::string_view 
   return std::nullopt;
 }
 
-std::string_view string_storage::put_string(std::string_view str) {
+std::string_view string_storage::put_string(std::string_view str, std::string *str_to_move) {
   if (_empty_pos + str.size() <= kBufferSize) {
-    auto *start_pos = &_buffer[_empty_pos];  // NOLINT(*bounds*)
-    std::memcpy(start_pos, str.data(), str.size());
+    auto *start_pos = &_buffer[_empty_pos];          // NOLINT(*bounds*)
+    std::memcpy(start_pos, str.data(), str.size());  // NOLINT(*not-null-terminated*)
     std::string_view res{start_pos, str.size()};
 
     _empty_pos += str.size();
@@ -56,12 +56,13 @@ std::string_view string_storage::put_string(std::string_view str) {
   if (!next_storage) {
     if (str.size() <= kBufferSize) {
       auto next = std::make_unique<string_storage>();
-      auto res = next->put_string(str);
+      auto res = next->put_string(str, str_to_move);
       next_storage.reset(next.release());
       return res;
     }
 
-    auto next = std::make_unique<dynamic_string_storage>(str);
+    std::string dyn_str = str_to_move != nullptr ? (std::move(*str_to_move)) : std::string{str};
+    auto next = std::make_unique<dynamic_string_storage>(std::move(dyn_str));
     std::string_view res = next->string;
     next_storage = std::move(next);
     return res;
@@ -76,12 +77,13 @@ std::string_view string_storage::put_string(std::string_view str) {
     if (!next->next_storage) {
       if (str.size() <= kBufferSize) {
         auto next_store = std::make_unique<string_storage>();
-        auto res = next_store->put_string(str);
+        auto res = next_store->put_string(str, str_to_move);
         next->next_storage.reset(next_store.release());
         return res;
       }
 
-      auto next_store = std::make_unique<dynamic_string_storage>(str);
+      std::string dyn_str = str_to_move != nullptr ? (std::move(*str_to_move)) : std::string{str};
+      auto next_store = std::make_unique<dynamic_string_storage>(std::move(dyn_str));
       std::string_view res = next_store->string;
       next->next_storage = std::move(next_store);
       return res;

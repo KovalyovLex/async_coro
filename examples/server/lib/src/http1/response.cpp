@@ -1,12 +1,17 @@
 #include <async_coro/config.h>
+#include <server/http1/http_error.h>
 #include <server/http1/response.h>
 #include <server/utils/expected.h>
 
 #include <array>
 #include <charconv>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <system_error>
+#include <type_traits>
+#include <utility>
+#include <variant>
 
 namespace server::http1 {
 
@@ -16,16 +21,45 @@ response::response(http_version ver, http_status_code status, std::string_view r
       _reason(add_string(reason)) {
 }
 
-response::response(http_version ver, http_status_code status, std::string_view reason, static_string_t /*tag*/) noexcept
+response::response(http_version ver, http_status_code status, static_string reason) noexcept
     : _ver(ver),
       _status_code(status),
-      _reason(reason) {
+      _reason(reason.str) {
 }
 
 response::response(http_version ver, status_code status) noexcept
     : _ver(ver),
       _status_code(status),
       _reason(as_string(status)) {
+}
+
+response::response(http_version ver, http_error &&error) noexcept
+    : _ver(ver),
+      _status_code(error.status_code) {
+  std::visit(
+      [&](auto &&val) {
+        using T = std::decay_t<decltype(val)>;
+
+        if constexpr (std::is_same_v<T, static_string>) {
+          _reason = val.str;
+        } else {
+          _reason = add_string(std::forward<decltype(val)>(val));
+        }
+      },
+      std::move(error).reason);
+  set_body(static_string{_reason}, content_types::plain_text);
+}
+
+std::string_view response::add_string(std::string &&str) {  // NOLINT(*not-moved)
+  if (str.empty()) {
+    return {};
+  }
+
+  if (!_string_storage) {
+    _string_storage = std::make_unique<string_storage>();
+  }
+
+  return _string_storage->put_string(str, &str);
 }
 
 std::string_view response::add_string(std::string_view str) {
@@ -37,26 +71,26 @@ std::string_view response::add_string(std::string_view str) {
     _string_storage = std::make_unique<string_storage>();
   }
 
-  return _string_storage->put_string(str);
+  return _string_storage->put_string(str, nullptr);
 }
 
-void response::add_header(std::string_view name, std::string_view value, static_string_t /*tag*/) {
-  _headers.emplace_back(name, value);
+void response::add_header(static_string name, static_string value) {
+  _headers.emplace_back(name.str, value.str);
 }
 
-void response::set_body(std::string_view body, std::string_view content_type, static_string_t /*tag*/) {  // NOLINT(*swap*)
+void response::set_body(static_string body, static_string content_type) {  // NOLINT(*swap*)
   ASYNC_CORO_ASSERT(_body.empty());
 
-  _body = body;
+  _body = body.str;
 
   std::array<char, 16> buf;  // NOLINT(*)
-  auto res = std::to_chars(buf.begin(), buf.end(), body.size());
+  auto res = std::to_chars(buf.begin(), buf.end(), _body.size());
   if (res.ec == std::errc{}) {
     std::string_view str{buf.begin(), res.ptr};
     _headers.emplace_back("Content-Length", add_string(str));
   }
-  if (!content_type.empty()) {
-    _headers.emplace_back("Content-Type", content_type);
+  if (!content_type.str.empty()) {
+    _headers.emplace_back("Content-Type", content_type.str);
   }
 }
 

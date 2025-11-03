@@ -13,7 +13,7 @@ namespace server::http1 {
 // lightweight router: match on method + path prefix
 class router {
  public:
-  using handler_t = async_coro::unique_function<async_coro::task<response>(request)>;
+  using handler_t = async_coro::unique_function<async_coro::task<response>(const request&)>;
 
   router() noexcept = default;
   router(const router&) = delete;

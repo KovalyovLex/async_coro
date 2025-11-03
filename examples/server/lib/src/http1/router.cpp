@@ -13,8 +13,8 @@ router::handler_t* router::find_handler(const request& req) const {
   handler_t* result = nullptr;
 
   for (const auto& entry : _entries) {
-    if (entry.method == req.method) {
-      if (req.target.starts_with(entry.prefix) && entry.prefix.size() > best_match) {  // prefix matches
+    if (entry.method == req.get_method()) {
+      if (req.get_target().starts_with(entry.prefix) && entry.prefix.size() > best_match) {  // prefix matches
         best_match = entry.prefix.size();
         result = std::addressof(entry.handler);
       }

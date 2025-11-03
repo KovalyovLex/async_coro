@@ -29,7 +29,7 @@ class string_storage : i_string_storage {
 
   string_storage() noexcept;
 
-  std::string_view put_string(std::string_view str);
+  std::string_view put_string(std::string_view str, std::string* str_to_move);
 
  protected:
   std::optional<std::string_view> try_put_string(std::string_view str) override;

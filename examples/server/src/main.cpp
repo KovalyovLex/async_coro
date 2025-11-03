@@ -41,10 +41,10 @@ int main(int argc, char** argv) {
       .port = static_cast<uint16_t>(port),
   };
 
-  const auto send_html = [](auto request) -> async_coro::task<server::http1::response> {
+  const auto send_html = [](const auto& request) -> async_coro::task<server::http1::response> {  // NOLINT(*reference*)
     using namespace server::http1;
 
-    response res{request.version, status_code::Ok};
+    response res{request.get_version(), status_code::Ok};
 
     std::string_view html_body = R"(<!doctype html>
 <html>
@@ -57,16 +57,16 @@ int main(int argc, char** argv) {
 </html>
 )";
 
-    res.set_body(html_body, content_types::html, response::static_string);
+    res.set_body(server::static_string{html_body}, content_types::html);
 
     co_return res;
   };
 
-  const auto say_hello = [](auto request) -> async_coro::task<server::http1::response> {
+  const auto say_hello = [](const auto& request) -> async_coro::task<server::http1::response> {  // NOLINT(*reference*)
     using namespace server::http1;
 
-    response res{request.version, status_code::Ok};
-    res.set_body("Hello world", content_types::plain_text, response::static_string);
+    response res{request.get_version(), status_code::Ok};
+    res.set_body(server::static_string{"Hello world"}, content_types::plain_text);
 
     co_return res;
   };

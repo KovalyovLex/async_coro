@@ -14,19 +14,18 @@ session::session(server::socket_layer::connection conn, const router& router) no
 
 [[nodiscard]] async_coro::task<void> session::run() {
   bool keep_alive = true;
-
+  request req;
   while (!_conn.is_closed() && keep_alive) {
-    auto req = co_await request::read(_conn);
-    if (!req) {
+    auto read_success = co_await req.read(_conn);
+    if (!read_success) {
       if (!_conn.is_closed()) {
-        response res{http_version::http_1_1, status_code::BadRequest};
-        res.set_body(req.error(), content_types::plain_text, response::static_string);
+        response res{http_version::http_1_1, std::move(read_success).error()};
         co_await res.send(_conn);
       }
       continue;
     }
 
-    if (req->version < http_version::http_1_1) {
+    if (req.get_version() < http_version::http_1_1) {
       response res{http_version::http_1_1, status_code::HttpVersionNotSupported};
       res.add_header("Connection", "close");
       co_await res.send(_conn);
@@ -34,14 +33,14 @@ session::session(server::socket_layer::connection conn, const router& router) no
       co_return;
     }
 
-    if (auto* head = req->find_header("Connection")) {
+    if (auto* head = req.find_header("Connection")) {
       if (head->second == "close") {
         keep_alive = false;
       }
     }
 
-    if (auto* handler = _router->find_handler(req.value())) {
-      auto res = co_await (*handler)(std::move(req).value());
+    if (auto* handler = _router->find_handler(req)) {
+      auto res = co_await (*handler)(req);
       co_await res.send(_conn);
     } else {
       response res{http_version::http_1_1, status_code::NotFound};

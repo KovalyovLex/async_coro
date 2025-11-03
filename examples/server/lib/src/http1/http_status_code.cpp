@@ -36,6 +36,8 @@ std::string_view as_string(status_code met) noexcept {
       return "405 Method Not Allowed";
     case status_code::RequestTimeout:
       return "408 Request Timeout";
+    case status_code::LengthRequired:
+      return "411 Length Required";
     case status_code::InternalServerError:
       return "500 Internal Server Error";
     case status_code::NotImplemented:

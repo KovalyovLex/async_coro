@@ -23,6 +23,7 @@ enum class status_code : uint16_t {
   NotFound = 404,
   MethodNotAllowed = 405,
   RequestTimeout = 408,
+  LengthRequired = 411,
   InternalServerError = 500,
   NotImplemented = 501,
   BadGateway = 502,
@@ -37,6 +38,14 @@ struct http_status_code {
   explicit http_status_code(uint16_t val) noexcept : value(val) {}
 
   http_status_code(status_code val) noexcept : value(static_cast<uint16_t>(val)) {}  // NOLINT(*explicit*)
+
+  auto operator<=>(const http_status_code&) const noexcept = default;
+  auto operator<=>(uint16_t val) const noexcept {
+    return value <=> val;
+  }
+  auto operator<=>(status_code val) const noexcept {
+    return value <=> static_cast<uint16_t>(val);
+  }
 };
 
 std::string_view as_string(status_code met) noexcept;
