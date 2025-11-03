@@ -194,7 +194,7 @@ struct request::parser {
             }
             content_length = 0;
           }
-          continue;
+          break;
         }
 
         const auto colon = line.find(':');
@@ -244,19 +244,18 @@ struct request::parser {
           // read chunk
           if (content_length.has_value()) {
             if (req._bytes.size() - line_start >= *content_length) {
-              string_to_process.remove_suffix(*content_length);
+              string_to_process.remove_prefix(*content_length);
               line_start += *content_length;
 
               // remove trailing \r\n
               size_t bytes_to_remove = 0;
               if (!string_to_process.empty() && string_to_process.front() == '\r') {
-                string_to_process.remove_suffix(1);
                 bytes_to_remove += 1;
+                if (string_to_process.size() > 1 && string_to_process[1] == '\n') {
+                  bytes_to_remove += 1;
+                }
               }
-              if (!string_to_process.empty() && string_to_process.front() == '\n') {
-                string_to_process.remove_suffix(1);
-                bytes_to_remove += 1;
-              }
+
               if (bytes_to_remove > 0) {
                 // removing excessive data from bytes
                 req._bytes.erase(req._bytes.begin() + line_start, req._bytes.begin() + line_start + bytes_to_remove);  // NOLINT(*narrowing*)
@@ -265,6 +264,8 @@ struct request::parser {
               if (*content_length == 0) {
                 // termination chunk
                 state = parse_state::finished;
+                // remove all data at the end (supposed to be \r\n)
+                req._bytes.erase(req._bytes.begin() + line_start, req._bytes.end());  // NOLINT(*narrowing*)
                 break;
               }
 
