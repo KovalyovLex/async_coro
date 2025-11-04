@@ -15,6 +15,30 @@
 
 namespace server::socket_layer {
 
+static bool check_connection_error_need_try(std::string* error) {
+  bool try_again = false;
+
+#if WIN_SOCKET
+  const auto error_code = WSAGetLastError();
+
+  if (error_code == EAGAIN || error_code == EWOULDBLOCK || error_code == WSAEWOULDBLOCK || error_code == ERROR_REQ_NOT_ACCEP) {
+    try_again = true;
+  } else if (error != nullptr) {
+    *error = std::to_string(error_code);
+  }
+#else
+  const auto error_code = errno;
+
+  if (error_code == EAGAIN || error_code == EWOULDBLOCK) {
+    try_again = true;
+  } else if (error != nullptr) {
+    *error = strerror(error_code);
+  }
+#endif
+
+  return try_again;
+}
+
 connection::~connection() noexcept {
   if (_reactor != nullptr) {
     close_connection();
@@ -69,7 +93,7 @@ async_coro::task<expected<void, std::string>> connection::write_buffer(std::span
         co_return res_t{};
       }
 
-      if (error == ssl_error::wants_read && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      if (error == ssl_error::wants_read && check_connection_error_need_try(nullptr)) {
         check_subscribed();
 
         auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
@@ -79,7 +103,7 @@ async_coro::task<expected<void, std::string>> connection::write_buffer(std::span
           close_connection();
           co_return res_t{};
         }
-      } else if (error == ssl_error::wants_write && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      } else if (error == ssl_error::wants_write && check_connection_error_need_try(nullptr)) {
         check_subscribed();
 
         auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
@@ -98,11 +122,12 @@ async_coro::task<expected<void, std::string>> connection::write_buffer(std::span
   }
 
   const auto fd_id = _sock.get_platform_id();
-
+  std::string error;
+  
   while (true) {
     const auto sent_local = ::send(fd_id, reinterpret_cast<const char*>(bytes.data()), bytes.size(), 0);
     bool is_error = true;
-
+    
     if (sent_local > 0) {
       is_error = false;
 
@@ -111,12 +136,12 @@ async_coro::task<expected<void, std::string>> connection::write_buffer(std::span
       } else {
         bytes = bytes.subspan(sent_local);
       }
-    } else if (sent_local == 0 || errno == EAGAIN || errno == EWOULDBLOCK) {
+    } else if (sent_local == 0 || check_connection_error_need_try(&error)) {
       is_error = false;
     }
 
     if (is_error) {
-      co_return res_t{unexpect, strerror(errno)};
+      co_return res_t{unexpect, std::move(error)};
     }
 
     check_subscribed();
@@ -151,7 +176,7 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
         co_return 0;
       }
 
-      if (error == ssl_error::wants_read && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      if (error == ssl_error::wants_read && check_connection_error_need_try(nullptr)) {
         check_subscribed();
 
         auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
@@ -161,7 +186,7 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
           close_connection();
           co_return 0;
         }
-      } else if (error == ssl_error::wants_write && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      } else if (error == ssl_error::wants_write && check_connection_error_need_try(nullptr)) {
         check_subscribed();
 
         auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
@@ -180,6 +205,7 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
   }
 
   const auto fd_id = _sock.get_platform_id();
+  std::string error;
 
   while (true) {
     const auto received = ::recv(fd_id, reinterpret_cast<char*>(bytes.data()), bytes.size(), 0);
@@ -193,7 +219,7 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
       co_return 0;
     }
 
-    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+    if (check_connection_error_need_try(&error)) {
       check_subscribed();
 
       auto res = co_await async_coro::await_callback_with_result<reactor::connection_state>([this](auto cont) {
@@ -203,8 +229,9 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
         close_connection();
         co_return 0;
       }
-    } else {
-      co_return expected<size_t, std::string>{unexpect, strerror(errno)};
+    }
+    else {
+      co_return expected<size_t, std::string>{unexpect, std::move(error)};
     }
   }
 

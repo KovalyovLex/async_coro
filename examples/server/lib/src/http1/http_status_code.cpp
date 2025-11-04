@@ -51,6 +51,7 @@ std::string_view as_string(status_code met) noexcept {
     case status_code::HttpVersionNotSupported:
       return "505 Http Version Not Supported";
   }
+  return {};
 }
 
 };  // namespace server::http1

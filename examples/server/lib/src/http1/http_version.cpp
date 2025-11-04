@@ -16,6 +16,7 @@ std::string_view as_string(http_version ver) noexcept {
     case http_version::http_2_0:
       return "HTTP/2.0";
   }
+  return {};
 }
 
 std::optional<http_version> as_http_version(std::string_view str) noexcept {

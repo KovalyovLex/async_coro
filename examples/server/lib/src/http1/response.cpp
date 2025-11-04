@@ -102,29 +102,34 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
   std::array<std::byte, 4 * 1024> buffer;  // NOLINT(*)
   size_t buff_i = 0;
 
-#define PUSH_TO_BUF(STR)                                                                              \
-  {                                                                                                   \
-    const std::string_view str{STR};                                                                  \
-    if (buff_i + str.size() >= buffer.size()) {                                                       \
-      const auto *ptr = str.data();                                                                   \
-      const auto *ptr_end = str.data() + str.size();                                                  \
-      while (ptr_end > ptr) {                                                                         \
-        const auto to_copy = std::min<size_t>(size_t(ptr_end - ptr), buffer.size() - buff_i - 1);     \
-        std::memcpy(std::addressof(buffer[buff_i]), ptr, to_copy);                                    \
-        ptr += to_copy;                                                                               \
-        buff_i += to_copy;                                                                            \
-        /*write postion to connection layer*/                                                         \
-        auto send_res = co_await conn.write_buffer(std::span{buffer.data(), buffer.data() + buff_i}); \
-        buff_i = 0; /*reset buffer index*/                                                            \
-        if (!send_res) {                                                                              \
-          co_return res_t{unexpect, std::move(send_res).error()};                                     \
-        }                                                                                             \
-      }                                                                                               \
-    } else if (!str.empty()) {                                                                        \
-      std::memcpy(std::addressof(buffer[buff_i]), str.data(), str.size());                            \
-      buff_i += str.size();                                                                           \
-    }                                                                                                 \
-  }                                                                                                   \
+#define PUSH_TO_BUF(STR)                                                                                \
+  {                                                                                                     \
+    const std::string_view str{STR};                                                                    \
+    if (buff_i + str.size() >= buffer.size()) {                                                         \
+      const auto *ptr = str.data();                                                                     \
+      const auto *ptr_end = str.data() + str.size();                                                    \
+      while (ptr_end > ptr) {                                                                           \
+        const auto to_copy = std::min<size_t>(size_t(ptr_end - ptr), buffer.size() - buff_i - 1);       \
+        std::memcpy(std::addressof(buffer[buff_i]), ptr, to_copy);                                      \
+        ptr += to_copy;                                                                                 \
+        buff_i += to_copy;                                                                              \
+        if (buff_i == buffer.size()) {                                                                  \
+          /*send this portion to the client*/                                                           \
+          auto send_res = co_await conn.write_buffer(std::span{buffer.data(), buffer.data() + buff_i}); \
+          buff_i = 0; /*reset buffer index*/                                                            \
+          if (!send_res) {                                                                              \
+            co_return res_t{unexpect, std::move(send_res).error()};                                     \
+          }                                                                                             \
+        } else {                                                                                        \
+          /*accumulate buffer*/                                                                         \
+          break;                                                                                        \
+        }                                                                                               \
+      }                                                                                                 \
+    } else if (!str.empty()) {                                                                          \
+      std::memcpy(std::addressof(buffer[buff_i]), str.data(), str.size());                              \
+      buff_i += str.size();                                                                             \
+    }                                                                                                   \
+  }                                                                                                     \
   (void)0
 
   // http version
@@ -164,7 +169,7 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
 
 #undef PUSH_TO_BUF
 
-  // send
+  // send final part
   if (buff_i != 0) {
     auto send_res = co_await conn.write_buffer(std::span{buffer.data(), buffer.data() + buff_i});
     if (!send_res) {
