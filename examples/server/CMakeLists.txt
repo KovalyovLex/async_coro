@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(async_coro_server LANGUAGES CXX)
 
+add_subdirectory(third_party)
 add_subdirectory(lib)
 
 file(GLOB_RECURSE server_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "src/**.cpp")

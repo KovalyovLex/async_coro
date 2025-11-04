@@ -8,10 +8,17 @@
 #include <cstdint>
 #include <iostream>
 #include <span>
+#include <array>
 
-#if EPOLL_SOCKET && !WIN_SOCKET
+#if EPOLL_SOCKET
+#if WIN_SOCKET
+#include <wepoll.h>
+#else
 #include <sys/epoll.h>
 #endif
+#endif
+
+
 namespace server::socket_layer {
 
 static void epoll_ctl_impl(epoll_handle_t epoll_fd, socket_type socked_descriptor, int action, uint32_t flags, void* user_data) {  // NOLINT(*swappable*)

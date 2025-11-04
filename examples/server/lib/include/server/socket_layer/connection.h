@@ -9,6 +9,7 @@
 #include <memory>
 #include <span>
 #include <utility>
+#include <string>
 
 namespace server::socket_layer {
 
@@ -59,7 +60,7 @@ class connection {
   void close_connection();
 
  private:
-  static constexpr size_t k_invalid_index = -1;
+  static constexpr size_t k_invalid_index = size_t(-1);
 
   reactor* _reactor;
   ssl_connection _ssl;

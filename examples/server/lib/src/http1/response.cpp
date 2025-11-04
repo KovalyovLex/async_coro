@@ -84,9 +84,9 @@ void response::set_body(static_string body, static_string content_type) {  // NO
   _body = body.str;
 
   std::array<char, 16> buf;  // NOLINT(*)
-  auto res = std::to_chars(buf.begin(), buf.end(), _body.size());
+  auto res = std::to_chars(buf.data(), buf.data() + buf.size(), _body.size());
   if (res.ec == std::errc{}) {
-    std::string_view str{buf.begin(), res.ptr};
+    std::string_view str{buf.data(), res.ptr};
     _headers.emplace_back("Content-Length", add_string(str));
   }
   if (!content_type.str.empty()) {
@@ -104,12 +104,12 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
 
 #define PUSH_TO_BUF(STR)                                                                              \
   {                                                                                                   \
-    const std::string_view str = STR;                                                                 \
+    const std::string_view str{STR};                                                                  \
     if (buff_i + str.size() >= buffer.size()) {                                                       \
       const auto *ptr = str.data();                                                                   \
       const auto *ptr_end = str.data() + str.size();                                                  \
       while (ptr_end > ptr) {                                                                         \
-        const auto to_copy = std::min(size_t(ptr_end - ptr), buffer.size() - buff_i - 1);             \
+        const auto to_copy = std::min<size_t>(size_t(ptr_end - ptr), buffer.size() - buff_i - 1);     \
         std::memcpy(std::addressof(buffer[buff_i]), ptr, to_copy);                                    \
         ptr += to_copy;                                                                               \
         buff_i += to_copy;                                                                            \
@@ -133,9 +133,9 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
 
   // status code
   std::array<char, 6> buf;  // NOLINT(*)
-  auto res = std::to_chars(buf.begin(), buf.end(), _status_code.value);
+  auto res = std::to_chars(buf.data(), buf.data() + buf.size(), _status_code.value);
   if (res.ec == std::errc{}) {
-    std::string_view str_num{buf.begin(), res.ptr};
+    std::string_view str_num{buf.data(), res.ptr};
     PUSH_TO_BUF(str_num);
   } else {
     co_return res_t{unexpect, "Can't write status code"};

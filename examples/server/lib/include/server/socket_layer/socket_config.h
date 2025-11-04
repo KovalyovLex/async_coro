@@ -34,6 +34,7 @@ static_assert(false, "Unsupported platform");
 
 #if WIN_SOCKET
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <WinSock2.h>
 #endif
 

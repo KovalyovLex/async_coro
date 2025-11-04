@@ -100,7 +100,7 @@ async_coro::task<expected<void, std::string>> connection::write_buffer(std::span
   const auto fd_id = _sock.get_platform_id();
 
   while (true) {
-    const auto sent_local = ::send(fd_id, bytes.data(), bytes.size(), 0);
+    const auto sent_local = ::send(fd_id, reinterpret_cast<const char*>(bytes.data()), bytes.size(), 0);
     bool is_error = true;
 
     if (sent_local > 0) {
@@ -182,7 +182,7 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
   const auto fd_id = _sock.get_platform_id();
 
   while (true) {
-    const auto received = ::recv(fd_id, bytes.data(), bytes.size(), 0);
+    const auto received = ::recv(fd_id, reinterpret_cast<char*>(bytes.data()), bytes.size(), 0);
     if (received > 0) {
       co_return size_t(received);
     }

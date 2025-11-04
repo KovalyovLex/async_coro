@@ -10,6 +10,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <array>
 
 #if WIN_SOCKET
 #include <WS2tcpip.h>
@@ -53,7 +54,7 @@ static bool set_non_blocking_mode(socket_type sock, std::string* error_message) 
   if (ret) {
     if (error_message != nullptr) {
       *error_message = "Cannot set socket to non blocking mode with ioctlsocket: ";
-      error_message->append(std::to_tring(WSAGetLastError()));
+      error_message->append(std::to_string(WSAGetLastError()));
     }
     return false;
   }
@@ -89,14 +90,15 @@ static socket_type open_socket_impl(const std::string& ip_address, uint16_t port
     // starts listening on port
 
     std::array<char, 6> port_str;  // NOLINT(*)
-    const auto res = std::to_chars(port_str.begin(), port_str.end(), port);
+    const auto port_end = port_str.data() + port_str.size();
+    const auto res = std::to_chars(port_str.data(), port_end, port);
     if (res.ec != std::errc()) {
       if (error_message != nullptr) {
         *error_message = std::make_error_code(res.ec).message();
       }
       return invalid_socket_id;
     }
-    if (res.ptr != port_str.end()) {
+    if (res.ptr != port_end) {
       *res.ptr = '\0';
     } else {
       ASYNC_CORO_ASSERT(false && "To small buffer");  // NOLINT(*-static-*)
@@ -151,7 +153,7 @@ static socket_type open_socket_impl(const std::string& ip_address, uint16_t port
       // Turn of IPV6_V6ONLY to accept ipv4.
       // https://stackoverflow.com/questions/1618240/how-to-support-both-ipv4-and-ipv6-connections
       int ipv6only = 0;
-      if (::setsockopt(sfd, IPPROTO_IPV6, IPV6_V6ONLY, &ipv6only, sizeof(ipv6only)) != 0) {
+      if (::setsockopt(sfd, IPPROTO_IPV6, IPV6_V6ONLY, reinterpret_cast<const char*>(&ipv6only), sizeof(ipv6only)) != 0) {
         if (error_message != nullptr) {
           *error_message = "FATAL ERROR: setsockopt error when setting IPV6_V6ONLY to 0: ";
           error_message->append(strerror(errno));

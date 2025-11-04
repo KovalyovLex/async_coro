@@ -1,3 +1,9 @@
+#ifdef _WIN32 
+// avoid all this windows junk from openssl
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#endif
+
 #include <async_coro/thread_safety/mutex.h>
 #include <async_coro/thread_safety/unique_lock.h>
 #include <openssl/err.h>

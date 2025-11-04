@@ -15,6 +15,11 @@ target_include_directories(server_lib PUBLIC
 set_property(TARGET server_lib PROPERTY CXX_STANDARD 20)
 target_link_libraries(server_lib PUBLIC async_coro)
 
+if (WIN32)
+    target_link_libraries(server_lib PRIVATE wepoll "-lWs2_32")
+    target_link_libraries(server_lib PUBLIC ws2_32)
+endif()
+
 if(SERVER_ENABLE_TLS)
     find_package(OpenSSL REQUIRED)
     target_link_libraries(server_lib PRIVATE OpenSSL::SSL OpenSSL::Crypto)
