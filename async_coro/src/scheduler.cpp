@@ -41,8 +41,8 @@ bool scheduler::is_current_thread_fits(execution_queue_mark execution_queue) noe
   return _execution_system->is_current_thread_fits(execution_queue);
 }
 
-bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_parent_on_finish) {  // NOLINT
-  internal::scheduled_run_data local_run_data{};
+bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_parent_on_finish) {  // NOLINT(*complexity*)
+  internal::scheduled_run_data local_run_data{.continue_parent_on_finish = continue_parent_on_finish};
 
   internal::scheduled_run_data* curren_data{nullptr};
   bool run_data_was_set = false;
@@ -54,6 +54,7 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
 
   bool was_cancelled = handle_impl.set_coroutine_state_and_get_cancelled(coroutine_state::running);
 
+  continue_parent_on_finish &= curren_data->continue_parent_on_finish;
   ASYNC_CORO_ASSERT(!curren_data->external_continuation_request);
 
   coroutine_state state = coroutine_state::created;
@@ -86,9 +87,9 @@ bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_
     const auto cancelled_without_finish = state != coroutine_state::finished && was_cancelled;
 
     if (auto* parent = handle_impl.get_parent()) {
-      ASYNC_CORO_ASSERT(parent->_current_child == &handle_impl);
-
-      parent->_current_child = nullptr;
+      if (parent->_current_child == &handle_impl) {
+        parent->_current_child = nullptr;
+      }
 
       if (cancelled_without_finish) {
         if (auto* on_cancel = handle_impl._on_cancel.exchange(nullptr, std::memory_order::relaxed)) {

@@ -16,6 +16,8 @@
 #include <type_traits>
 #include <variant>
 
+#include "async_coro/utils/unique_function.h"
+
 namespace task_tests {
 struct coro_runner {
   template <typename T>
@@ -1395,4 +1397,61 @@ TEST(task, multiple_workers_any_execution) {
   EXPECT_GT(handle.get(), 0.f);
 
   handle = {};
+}
+
+TEST(task, multiple_immediate_children) {
+  async_coro::scheduler scheduler;
+
+  const auto child_task = [](bool cond) -> async_coro::task<> {
+    EXPECT_TRUE(cond);
+    co_return;
+  };
+
+  const auto parent_task = [child_task]() -> async_coro::task<> {
+    for (int i = 0; i < 100; i++) {
+      co_await child_task(true);
+    }
+  };
+
+  auto res = scheduler.start_task(parent_task);
+  ASSERT_TRUE(res.done());
+}
+
+TEST(task, multiple_immediate_children_with_continue) {
+  async_coro::scheduler scheduler;
+  async_coro::unique_function<void()> continuation;
+
+  const auto intern2 = [](bool cond) -> async_coro::task<> {
+    EXPECT_TRUE(cond);
+    co_await async_coro::await_callback([](auto cont) {
+      cont();
+    });
+  };
+
+  const auto child_task = [&continuation, &intern2](bool cond) -> async_coro::task<> {
+    if (cond) {
+      co_await intern2(cond);
+      co_return;
+    }
+    co_await async_coro::await_callback([&continuation](auto cont) {
+      continuation = std::move(cont);
+    });
+  };
+
+  const auto parent_task = [child_task]() -> async_coro::task<> {
+    for (int i = 0; i < 10; i++) {
+      co_await child_task((i % 2) == 0);
+      co_await child_task(true);
+    }
+  };
+
+  auto res = scheduler.start_task(parent_task);
+  EXPECT_FALSE(res.done());
+  EXPECT_TRUE(continuation);
+
+  while (continuation) {
+    const auto func = std::move(continuation);
+    func();
+  }
+  EXPECT_TRUE(res.done());
 }
