@@ -123,11 +123,11 @@ async_coro::task<expected<void, std::string>> connection::write_buffer(std::span
 
   const auto fd_id = _sock.get_platform_id();
   std::string error;
-  
+
   while (true) {
-    const auto sent_local = ::send(fd_id, reinterpret_cast<const char*>(bytes.data()), bytes.size(), 0);
+    const auto sent_local = ::send(fd_id, reinterpret_cast<const char*>(bytes.data()), bytes.size(), 0);  // NOLINT(*reinterpret-cast)
     bool is_error = true;
-    
+
     if (sent_local > 0) {
       is_error = false;
 
@@ -208,7 +208,7 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
   std::string error;
 
   while (true) {
-    const auto received = ::recv(fd_id, reinterpret_cast<char*>(bytes.data()), bytes.size(), 0);
+    const auto received = ::recv(fd_id, reinterpret_cast<char*>(bytes.data()), bytes.size(), 0);  // NOLINT(*reinterpret-cast)
     if (received > 0) {
       co_return size_t(received);
     }
@@ -229,8 +229,7 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
         close_connection();
         co_return 0;
       }
-    }
-    else {
+    } else {
       co_return expected<size_t, std::string>{unexpect, std::move(error)};
     }
   }

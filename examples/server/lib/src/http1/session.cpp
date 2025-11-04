@@ -33,7 +33,7 @@ session::session(server::socket_layer::connection conn, const router& router) no
       co_return;
     }
 
-    if (auto* head = req.find_header("Connection")) {
+    if (const auto* head = req.find_header("Connection")) {
       if (head->second == "close") {
         keep_alive = false;
       }

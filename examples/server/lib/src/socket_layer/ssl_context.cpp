@@ -1,4 +1,4 @@
-#ifdef _WIN32 
+#ifdef _WIN32
 // avoid all this windows junk from openssl
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX

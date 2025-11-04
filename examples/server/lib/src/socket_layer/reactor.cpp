@@ -4,11 +4,11 @@
 #include <server/socket_layer/reactor.h>
 #include <server/utils/expected.h>
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <iostream>
 #include <span>
-#include <array>
 
 #if EPOLL_SOCKET
 #if WIN_SOCKET
@@ -17,7 +17,6 @@
 #include <sys/epoll.h>
 #endif
 #endif
-
 
 namespace server::socket_layer {
 

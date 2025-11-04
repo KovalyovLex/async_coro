@@ -83,8 +83,9 @@ void response::set_body(static_string body, static_string content_type) {  // NO
 
   _body = body.str;
 
-  std::array<char, 16> buf;  // NOLINT(*)
-  auto res = std::to_chars(buf.data(), buf.data() + buf.size(), _body.size());
+  std::array<char, 16> buf;  // NOLINT(*init*, *magic*)
+
+  auto res = std::to_chars(buf.data(), buf.data() + buf.size(), _body.size());  // NOLINT(*pointer*)
   if (res.ec == std::errc{}) {
     std::string_view str{buf.data(), res.ptr};
     _headers.emplace_back("Content-Length", add_string(str));
