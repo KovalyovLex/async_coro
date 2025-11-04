@@ -1,4 +1,5 @@
 #include <async_coro/config.h>
+#include <async_coro/utils/set_thread_name.h>
 #include <server/socket_layer/connection.h>
 #include <server/socket_layer/listener.h>
 #include <server/socket_layer/reactor.h>
@@ -41,6 +42,8 @@ void tcp_server::serve(const tcp_server_config& conf, std::optional<ssl_config> 
         react.reactor_instance.process_loop(sleep);
       }
     });
+
+    async_coro::set_thread_name(react.thread, "reactor_" + std::to_string(i + 1));
   }
 
   if (ssl_conf) {

@@ -91,67 +91,84 @@ void reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOLINT(*-com
     return;
   }
 
-  std::span events_to_process{events.data(), static_cast<size_t>(n_events)};
-  for (const auto& event : events_to_process) {
-    void* user_data = nullptr;
-
-#if EPOLL_SOCKET
-    const auto event_flags = event.events;
-    user_data = event.data.ptr;
-#elif KQUEUE_SOCKET
-    const auto event_flags = event.flags;
-    user_data = event.udata;
-#endif
-
-#if EPOLL_SOCKET
-    const bool is_error = (event_flags & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0;
-    const bool is_read_available = (event_flags & EPOLLIN) == EPOLLIN;
-    const bool is_write_available = (event_flags & EPOLLOUT) == EPOLLOUT;
-#elif KQUEUE_SOCKET
-    const bool is_error = (event_flags & EV_ERROR) != 0;
-    const bool is_read_available = !is_error;
-    const bool is_write_available = !is_error;
-#endif
-
-    auto index = reinterpret_cast<uintptr_t>(user_data);  // NOLINT(*reinterpret-cast*)
-
+  struct continuation {
     continue_callback_t continuation;
     reactor_data_await_type awaited_for = reactor_data_await_type::receive_data;
-    {
-      async_coro::unique_lock lock{_mutex};
+    bool is_error = false;
+  };
 
-      auto& connection = _handled_connections[index];
+  std::array<continuation, MAXEVENTS> continuation_data;  // NOLINT(*-member-init*)
+  size_t num_continuations = 0;
 
-      awaited_for = connection.await;
-      if (!is_error) {
-        // skip unwanted events
-        if (awaited_for == reactor_data_await_type::send_data && !is_write_available) {
-          continue;
+  {
+    std::span events_to_process{events.data(), static_cast<size_t>(n_events)};
+
+    async_coro::unique_lock lock{_mutex};
+    for (const auto& event : events_to_process) {
+      void* user_data = nullptr;
+
+#if EPOLL_SOCKET
+      const auto event_flags = event.events;
+      user_data = event.data.ptr;
+#elif KQUEUE_SOCKET
+      const auto event_flags = event.flags;
+      user_data = event.udata;
+#endif
+
+#if EPOLL_SOCKET
+      const bool is_error = (event_flags & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0;
+      const bool is_read_available = (event_flags & EPOLLIN) == EPOLLIN;
+      const bool is_write_available = (event_flags & EPOLLOUT) == EPOLLOUT;
+#elif KQUEUE_SOCKET
+      const bool is_error = (event_flags & EV_ERROR) != 0;
+      const bool is_read_available = !is_error;
+      const bool is_write_available = !is_error;
+#endif
+
+      auto index = reinterpret_cast<uintptr_t>(user_data);  // NOLINT(*reinterpret-cast*)
+
+      auto& continue_struct = continuation_data[num_continuations];  // NOLINT(*array-index)
+
+      continue_struct.is_error = is_error;
+      {
+        auto& connection = _handled_connections[index];
+
+        continue_struct.awaited_for = connection.await;
+        if (!is_error) {
+          // skip unwanted events
+          if (continue_struct.awaited_for == reactor_data_await_type::send_data && !is_write_available) {
+            continue;
+          }
+          if (continue_struct.awaited_for == reactor_data_await_type::receive_data && !is_read_available) {
+            continue;
+          }
         }
-        if (awaited_for == reactor_data_await_type::receive_data && !is_read_available) {
-          continue;
-        }
+
+        continue_struct.continuation = std::move(connection.callback);
+        connection.await = reactor_data_await_type::no_await;
       }
 
-      continuation = std::move(connection.callback);
-      connection.await = reactor_data_await_type::no_await;
+      if (!continue_struct.continuation) {
+        continue;
+      }
+      num_continuations++;
     }
+  }
 
-    if (!continuation) {
-      continue;
-    }
-
-    if (is_error) {
+  std::span continuations_to_process{continuation_data.data(), num_continuations};
+  for (auto& continue_struct : continuations_to_process) {
+    if (continue_struct.is_error) {
       // Handle errors on socket associated with event_fd.
-      continuation(connection_state::closed);
+      continue_struct.continuation(connection_state::closed);
     } else {
       // Data available on existing sockets. Wake up the coroutine associated with event_fd.
-      if (awaited_for == reactor_data_await_type::receive_data) {
-        continuation(connection_state::available_read);
+      if (continue_struct.awaited_for == reactor_data_await_type::receive_data) {
+        continue_struct.continuation(connection_state::available_read);
       } else {
-        continuation(connection_state::available_write);
+        continue_struct.continuation(connection_state::available_write);
       }
     }
+    continue_struct.continuation = nullptr;
   }
 }
 
