@@ -9,10 +9,41 @@
 #include <server/tcp_server_config.h>
 
 #include <atomic>
+#include <csignal>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <thread>
+
+extern "C" using signal_handler_t = void(int);
+
+namespace server {
+
+std::atomic<tcp_server*> global_server;            // NOLINT(*-non-const-*)
+std::atomic<signal_handler_t*> prev_handler_int;   // NOLINT(*-non-const-*)
+std::atomic<signal_handler_t*> prev_handler_term;  // NOLINT(*-non-const-*)
+
+}  // namespace server
+
+extern "C" void tcp_server_signal_handler(int signal) {
+  signal_handler_t* prev_handler = nullptr;
+  if (signal == SIGINT) {
+    prev_handler = server::prev_handler_int.load(std::memory_order::acquire);
+  } else if (signal == SIGTERM) {
+    prev_handler = server::prev_handler_term.load(std::memory_order::acquire);
+  } else {
+    ASYNC_CORO_ASSERT(false && "Unsupported signal");
+  }
+
+  if (auto* serv = server::global_server.load(std::memory_order::acquire)) {
+    serv->terminate();
+  }
+
+  // call prev handler by chain
+  if (prev_handler != nullptr && prev_handler != SIG_ERR) {
+    prev_handler(signal);
+  }
+}
 
 namespace server {
 
@@ -28,6 +59,10 @@ void tcp_server::serve(const tcp_server_config& conf, std::optional<ssl_config> 
   ASYNC_CORO_ASSERT(_reactors == nullptr);
 
   _is_serving.store(true, std::memory_order::relaxed);
+
+  prev_handler_int.store(std::signal(SIGINT, tcp_server_signal_handler), std::memory_order::relaxed);
+  prev_handler_int.store(std::signal(SIGTERM, tcp_server_signal_handler), std::memory_order::relaxed);
+  global_server.store(this, std::memory_order::release);
 
   ASYNC_CORO_ASSERT(conf.num_reactors > 0);
 
@@ -97,6 +132,15 @@ void tcp_server::serve(const tcp_server_config& conf, std::optional<ssl_config> 
     listener.reset_opened_connection();
   }
 
+  // restore signal handlers
+  if (auto* sig = prev_handler_int.exchange(nullptr, std::memory_order::relaxed); sig != SIG_ERR) {
+    std::signal(SIGINT, sig);
+  }
+  if (auto* sig = prev_handler_term.exchange(nullptr, std::memory_order::relaxed); sig != SIG_ERR) {
+    std::signal(SIGTERM, sig);
+  }
+  global_server.store(this, std::memory_order::relaxed);
+
   _is_serving.store(false, std::memory_order::release);
   _is_serving.notify_one();
 }
@@ -117,9 +161,6 @@ void tcp_server::terminate() {
 
 tcp_server::~tcp_server() {
   terminate();
-}
-
-void new_connection(socket_layer::connection_id conn, std::string_view address) {
 }
 
 }  // namespace server
