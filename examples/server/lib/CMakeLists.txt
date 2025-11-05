@@ -3,6 +3,18 @@ cmake_minimum_required(VERSION 3.16)
 option(SERVER_ENABLE_TLS "Enable TLS support via OpenSSL" ON)
 option(SERVER_ENABLE_HTTP2 "Enable HTTP/2 support" OFF)
 
+include(FetchContent)
+
+# setup tracy
+FetchContent_Declare(
+    tracy
+    GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+    GIT_TAG v0.12.2
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+)
+FetchContent_MakeAvailable(tracy)
+
 # server lib
 file(GLOB_RECURSE server_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "src/**.cpp")
 
@@ -14,7 +26,8 @@ target_include_directories(server_lib
 )
 
 set_property(TARGET server_lib PROPERTY CXX_STANDARD 20)
-target_link_libraries(server_lib PUBLIC async_coro)
+
+target_link_libraries(server_lib PUBLIC async_coro Tracy::TracyClient)
 
 if (WIN32)
     target_link_libraries(server_lib PRIVATE wepoll)

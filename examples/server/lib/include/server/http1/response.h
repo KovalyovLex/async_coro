@@ -22,14 +22,17 @@ inline constexpr static_string json{"application/json"};
 
 class response {
  public:
-  using header_list_t = std::vector<std::pair<std::string_view, std::string_view>>;
+  // Constructs default response with 200 Ok status
+  explicit response(http_version ver) noexcept;
 
-  response(http_version ver, http_status_code status, std::string_view reason);
-  response(http_version ver, http_status_code status, static_string reason) noexcept;
-
-  response(http_version ver, status_code status) noexcept;
-
-  response(http_version ver, http_error&& error) noexcept;
+  // Sets status code and reason. Reason will be default explanation: as_string (status)
+  void set_status(status_code status) noexcept;
+  // Sets status code reason and body of message.
+  void set_status(http_error&& error) noexcept;
+  // Sets status code and reason as dynamic string
+  void set_status(http_status_code status, std::string_view reason);
+  // Sets status code and reason
+  void set_status(http_status_code status, static_string reason) noexcept;
 
   [[nodiscard]] http_status_code get_status_code() const noexcept { return _status_code; }
 
@@ -43,15 +46,26 @@ class response {
   void add_header(std::string name, std::string value) {
     add_header(static_string{add_string(std::move(name))}, static_string{add_string(std::move(value))});
   }
+  void add_header(static_string name, std::string value) {
+    add_header(name, static_string{add_string(std::move(value))});
+  }
 
   void set_body(static_string body, static_string content_type);
   void set_body(std::string body, std::string content_type) {
     set_body(static_string{add_string(std::move(body))}, static_string{add_string(std::move(content_type))});
   }
+  void set_body(std::string body, static_string content_type) {
+    set_body(static_string{add_string(std::move(body))}, content_type);
+  }
 
   async_coro::task<expected<void, std::string>> send(server::socket_layer::connection& conn);
 
+  // clears status (sets 200 ok), string storage and headers
+  void clear();
+
  private:
+  using header_list_t = std::vector<std::pair<std::string_view, std::string_view>>;
+
   http_version _ver;
   http_status_code _status_code;
   std::string_view _reason;

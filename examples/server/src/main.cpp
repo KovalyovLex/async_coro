@@ -2,31 +2,21 @@
 
 #include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>
+#include <async_coro/task.h>
+#include <server/http1/http_method.h>
 #include <server/http1/http_server.h>
+#include <server/http1/response.h>
 #include <server/tcp_server_config.h>
 
-#include <atomic>
 #include <csignal>
 #include <memory>
-
-#include "async_coro/task.h"
-#include "server/http1/http_method.h"
-#include "server/http1/response.h"
-
-std::atomic<server::http1::http_server*> global_server;  // NOLINT(*-non-const-*)
-
-void signal_handler(int signal) {
-  if (auto* serv = global_server.load(std::memory_order::acquire)) {
-    serv->terminate();
-  }
-}
+#include <tracy/Tracy.hpp>
 
 int main(int argc, char** argv) {
+  TracySetProgramName("Simple server");
+
   int port = 8080;                          // NOLINT
   if (argc > 1) port = std::atoi(argv[1]);  // NOLINT
-
-  std::signal(SIGINT, signal_handler);
-  std::signal(SIGTERM, signal_handler);
 
   server::http1::http_server server{
       std::make_unique<async_coro::execution_system>(
@@ -35,17 +25,11 @@ int main(int argc, char** argv) {
                                  {"worker2"}},
               .main_thread_allowed_tasks = async_coro::execution_thread_mask{}})};
 
-  global_server.store(std::addressof(server), std::memory_order::relaxed);
-
   server::tcp_server_config conf{
       .port = static_cast<uint16_t>(port),
   };
 
-  const auto send_html = [](const auto& request) -> async_coro::task<server::http1::response> {  // NOLINT(*reference*)
-    using namespace server::http1;
-
-    response res{request.get_version(), status_code::Ok};
-
+  const auto send_html = [](const auto& request, auto& resp) -> async_coro::task<> {  // NOLINT(*reference*)
     std::string_view html_body = R"(<!doctype html>
 <html>
   <body>
@@ -57,18 +41,15 @@ int main(int argc, char** argv) {
 </html>
 )";
 
-    res.set_body(server::static_string{html_body}, content_types::html);
+    resp.set_body(server::static_string{html_body}, server::http1::content_types::html);
 
-    co_return res;
+    co_return;
   };
 
-  const auto say_hello = [](const auto& request) -> async_coro::task<server::http1::response> {  // NOLINT(*reference*)
-    using namespace server::http1;
+  const auto say_hello = [](const auto& request, auto& resp) -> async_coro::task<> {  // NOLINT(*reference*)
+    resp.set_body(server::static_string{"Hello world"}, server::http1::content_types::plain_text);
 
-    response res{request.get_version(), status_code::Ok};
-    res.set_body(server::static_string{"Hello world"}, content_types::plain_text);
-
-    co_return res;
+    co_return;
   };
 
   server.get_router().add_route(server::http1::http_method::GET, "/", say_hello);
@@ -78,8 +59,6 @@ int main(int argc, char** argv) {
   server.get_router().add_route(server::http1::http_method::HEAD, "/hello.html", send_html);
 
   server.serve(conf, {});
-
-  global_server.store(nullptr, std::memory_order::relaxed);
 
   return 0;
 }

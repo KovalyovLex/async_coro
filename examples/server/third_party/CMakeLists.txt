@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 if (WIN32)
-    file(GLOB_RECURSE wepoll_srcs LIST_DIRECTORIES false CONFIGURE_DEPENDS "wepoll/**.c", "wepoll/**.cpp")
+    file(GLOB_RECURSE wepoll_srcs LIST_DIRECTORIES false CONFIGURE_DEPENDS "wepoll/**.c" "wepoll/**.cpp")
 
     add_library(wepoll ${wepoll_srcs})
 

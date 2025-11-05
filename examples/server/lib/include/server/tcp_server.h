@@ -26,7 +26,7 @@ class tcp_server {
   tcp_server& operator=(const tcp_server&) = delete;
   tcp_server& operator=(tcp_server&&) = delete;
 
-  // starts listening of socket and blocks current thread
+  // starts listening of socket and blocks current thread. On SIGTERM or SIGINT will be stopped (terminated)
   void serve(const tcp_server_config& conf, std::optional<ssl_config> ssl_conf, connection_callback_t on_connected);
 
   void terminate();

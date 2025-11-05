@@ -1,5 +1,6 @@
 #include <async_coro/config.h>
 #include <server/http1/http_error.h>
+#include <server/http1/http_status_code.h>
 #include <server/http1/response.h>
 #include <server/utils/expected.h>
 
@@ -15,27 +16,30 @@
 
 namespace server::http1 {
 
-response::response(http_version ver, http_status_code status, std::string_view reason)
+response::response(http_version ver) noexcept
     : _ver(ver),
-      _status_code(status),
-      _reason(add_string(reason)) {
+      _status_code(status_code::Ok),
+      _reason(as_string(status_code::Ok)) {
 }
 
-response::response(http_version ver, http_status_code status, static_string reason) noexcept
-    : _ver(ver),
-      _status_code(status),
-      _reason(reason.str) {
+void response::set_status(http_status_code status, std::string_view reason) {
+  _status_code = status;
+  _reason = add_string(reason);
 }
 
-response::response(http_version ver, status_code status) noexcept
-    : _ver(ver),
-      _status_code(status),
-      _reason(as_string(status)) {
+void response::set_status(http_status_code status, static_string reason) noexcept {
+  _status_code = status;
+  _reason = reason.str;
 }
 
-response::response(http_version ver, http_error &&error) noexcept
-    : _ver(ver),
-      _status_code(error.status_code) {
+void response::set_status(status_code status) noexcept {
+  _status_code = status;
+  _reason = as_string(status);
+}
+
+void response::set_status(http_error &&error) noexcept {
+  _status_code = error.status_code;
+
   std::visit(
       [&](auto &&val) {
         using T = std::decay_t<decltype(val)>;
@@ -92,6 +96,15 @@ void response::set_body(static_string body, static_string content_type) {  // NO
   }
   if (!content_type.str.empty()) {
     _headers.emplace_back("Content-Type", content_type.str);
+  }
+}
+
+void response::clear() {
+  _headers.clear();
+  _body = {};
+  set_status(status_code::Ok);
+  if (_string_storage) {
+    _string_storage->clear(_string_storage);
   }
 }
 

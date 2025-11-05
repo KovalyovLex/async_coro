@@ -1,3 +1,4 @@
+#include <async_coro/config.h>
 #include <server/utils/string_storage.h>
 
 #include <cstring>
@@ -14,6 +15,9 @@ class dynamic_string_storage : public i_string_storage {
  protected:
   std::optional<std::string_view> try_put_string(std::string_view str) override {
     return std::nullopt;
+  }
+  void clear(i_string_storage::ptr &current_holder) noexcept override {
+    current_holder = std::move(current_holder->next_storage);
   }
 
  public:
@@ -41,6 +45,22 @@ std::optional<std::string_view> string_storage::try_put_string(std::string_view 
   }
 
   return std::nullopt;
+}
+
+void string_storage::clear(ptr &this_holder) noexcept {
+  ASYNC_CORO_ASSERT(this == this_holder);
+
+  _empty_pos = 0;
+  if (this->next_storage) {
+    this->next_storage->clear(this->next_storage);
+  }
+}
+
+void string_storage::clear(i_string_storage::ptr &current_holder) noexcept {
+  _empty_pos = 0;
+  if (this->next_storage) {
+    this->next_storage->clear(this->next_storage);
+  }
 }
 
 std::string_view string_storage::put_string(std::string_view str, std::string *str_to_move) {
