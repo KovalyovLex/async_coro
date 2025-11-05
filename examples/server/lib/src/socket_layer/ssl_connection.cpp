@@ -1,14 +1,19 @@
 
+#include "utils/has_open_ssl.h"
+
+#if SERVER_HAS_SSL
 #ifdef _WIN32
 // avoid all this windows junk from openssl
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #endif
 
+#include <openssl/ssl.h>
+#endif
+
 #include <async_coro/await/await_callback.h>
 #include <async_coro/config.h>
 #include <async_coro/utils/passkey.h>
-#include <openssl/ssl.h>
 #include <server/socket_layer/connection.h>
 #include <server/socket_layer/reactor.h>
 #include <server/socket_layer/ssl_connection.h>
@@ -20,24 +25,31 @@
 namespace server::socket_layer {
 
 ssl_connection::ssl_connection(ssl_context& context, socket_layer::connection_id conn) {
-  auto* ssl_cnt = static_cast<SSL_CTX*>(context.get_context(async_coro::passkey{this}));
-  auto* ssl = SSL_new(ssl_cnt);
+  if (context) {
+#if SERVER_HAS_SSL
+    auto* ssl_cnt = static_cast<SSL_CTX*>(context.get_context(async_coro::passkey{this}));
+    auto* ssl = SSL_new(ssl_cnt);
 
-  SSL_set_fd(ssl, conn.get_platform_id());
+    SSL_set_fd(ssl, conn.get_platform_id());
 
-  _ssl = ssl;
+    _ssl = ssl;
+#endif
+  }
 }
 
 ssl_connection::~ssl_connection() noexcept {
+#if SERVER_HAS_SSL
   if (_ssl != nullptr) {
     auto* ssl = static_cast<SSL*>(_ssl);
 
     SSL_shutdown(ssl);
     SSL_free(ssl);
   }
+#endif
 }
 
 ssl_error ssl_connection::get_error(int result) const noexcept {
+#if SERVER_HAS_SSL
   const int err = SSL_get_error(static_cast<SSL*>(_ssl), result);
 
   if (err == SSL_ERROR_WANT_WRITE) {
@@ -54,11 +66,15 @@ ssl_error ssl_connection::get_error(int result) const noexcept {
   }
 
   return ssl_error::other_error;
+#else
+  return ssl_error::no_error;
+#endif
 }
 
 async_coro::task<expected<bool, std::string>> ssl_connection::handshake(connection& connection) {  // NOLINT(*-reference*)
   ASYNC_CORO_ASSERT(_ssl != nullptr);
 
+#if SERVER_HAS_SSL
   auto* ssl = static_cast<SSL*>(_ssl);
 
   while (int ret = SSL_accept(ssl)) {
@@ -105,6 +121,7 @@ async_coro::task<expected<bool, std::string>> ssl_connection::handshake(connecti
   }
 
   ASYNC_CORO_ASSERT(false && "SSL_accept returned zero");  // NOLINT(*static-assert)
+#endif
 
   co_return expected<bool, std::string>{unexpect, ssl_context::get_ssl_error()};
 }
@@ -112,17 +129,25 @@ async_coro::task<expected<bool, std::string>> ssl_connection::handshake(connecti
 int ssl_connection::read(std::span<std::byte> bytes) {
   ASYNC_CORO_ASSERT(size_t(std::numeric_limits<int>::max()) < bytes.size());
 
+#if SERVER_HAS_SSL
   auto* ssl = static_cast<SSL*>(_ssl);
 
   return SSL_read(ssl, bytes.data(), static_cast<int>(bytes.size()));
+#else
+  return 0;
+#endif
 }
 
 int ssl_connection::write(std::span<const std::byte> bytes) {
   ASYNC_CORO_ASSERT(size_t(std::numeric_limits<int>::max()) < bytes.size());
 
+#if SERVER_HAS_SSL
   auto* ssl = static_cast<SSL*>(_ssl);
 
   return SSL_write(ssl, bytes.data(), static_cast<int>(bytes.size()));
+#else
+  return 0;
+#endif
 }
 
 }  // namespace server::socket_layer

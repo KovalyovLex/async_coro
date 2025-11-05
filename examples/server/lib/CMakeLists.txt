@@ -8,15 +8,16 @@ file(GLOB_RECURSE server_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "src/**.cp
 
 add_library(server_lib ${server_src})
 
-target_include_directories(server_lib PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
+target_include_directories(server_lib 
+    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 set_property(TARGET server_lib PROPERTY CXX_STANDARD 20)
 target_link_libraries(server_lib PUBLIC async_coro)
 
 if (WIN32)
-    target_link_libraries(server_lib PRIVATE wepoll "-lWs2_32")
+    target_link_libraries(server_lib PRIVATE wepoll)
     target_link_libraries(server_lib PUBLIC ws2_32)
 endif()
 
