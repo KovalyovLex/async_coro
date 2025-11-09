@@ -48,7 +48,7 @@ std::optional<std::string_view> string_storage::try_put_string(std::string_view 
 }
 
 void string_storage::clear(ptr &this_holder) noexcept {
-  ASYNC_CORO_ASSERT(this == this_holder);
+  ASYNC_CORO_ASSERT(this == this_holder.get());
 
   _empty_pos = 0;
   if (this->next_storage) {

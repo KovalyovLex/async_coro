@@ -58,7 +58,9 @@ class response {
     set_body(static_string{add_string(std::move(body))}, content_type);
   }
 
-  async_coro::task<expected<void, std::string>> send(server::socket_layer::connection& conn);
+  [[nodiscard]] bool was_sent() const noexcept { return _was_sent; }
+
+  [[nodiscard]] async_coro::task<expected<void, std::string>> send(server::socket_layer::connection& conn);
 
   // clears status (sets 200 ok), string storage and headers
   void clear();
@@ -68,6 +70,7 @@ class response {
 
   http_version _ver;
   http_status_code _status_code;
+  bool _was_sent = false;
   std::string_view _reason;
   header_list_t _headers;
   std::string_view _body;

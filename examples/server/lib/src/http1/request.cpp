@@ -330,7 +330,7 @@ void request::parse_deleter::operator()(parser* parser) const noexcept {
   delete parser;  // NOLINT(*owning-memory)
 }
 
-async_coro::task<expected<void, http_error>> request::read(server::socket_layer::connection& conn) {  // NOLINT(*reference*)
+async_coro::task<expected<void, http_error>> request::read(server::socket_layer::connection& conn) {
   using res_t = expected<void, http_error>;
 
   reset();

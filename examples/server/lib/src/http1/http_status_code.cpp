@@ -5,51 +5,55 @@ namespace server::http1 {
 std::string_view as_string(status_code met) noexcept {
   switch (met) {
     case status_code::Ok:
-      return "200 OK";
+      return "OK";
+    case status_code::SwitchingProtocols:
+      return "Switching Protocols";
     case status_code::Created:
-      return "201 Created";
+      return "Created";
     case status_code::Accepted:
-      return "202 Accepted";
+      return "Accepted";
     case status_code::NoContent:
-      return "204 No Content";
+      return "No Content";
     case status_code::PartialContent:
-      return "206 Partial Content";
+      return "Partial Content";
     case status_code::MultipleChoices:
-      return "300 Multiple Choices";
+      return "Multiple Choices";
     case status_code::MovedPermanently:
-      return "301 Moved Permanently";
+      return "Moved Permanently";
     case status_code::Found:
-      return "302 Found";
+      return "Found";
     case status_code::NotModified:
-      return "304 Not Modified";
+      return "Not Modified";
     case status_code::TemporaryRedirect:
-      return "307 Temporary Redirect";
+      return "Temporary Redirect";
     case status_code::BadRequest:
-      return "400 Bad Request";
+      return "Bad Request";
     case status_code::Unauthorized:
-      return "401 Unauthorized";
+      return "Unauthorized";
     case status_code::Forbidden:
-      return "403 Forbidden";
+      return "Forbidden";
     case status_code::NotFound:
-      return "404 Not Found";
+      return "Not Found";
     case status_code::MethodNotAllowed:
-      return "405 Method Not Allowed";
+      return "Method Not Allowed";
     case status_code::RequestTimeout:
-      return "408 Request Timeout";
+      return "Request Timeout";
     case status_code::LengthRequired:
-      return "411 Length Required";
+      return "Length Required";
+    case status_code::UpgradeRequired:
+      return "Upgrade Required";
     case status_code::InternalServerError:
-      return "500 Internal Server Error";
+      return "Internal Server Error";
     case status_code::NotImplemented:
-      return "501 Not Implemented";
+      return "Not Implemented";
     case status_code::BadGateway:
-      return "502 Bad Gateway";
+      return "Bad Gateway";
     case status_code::ServiceUnavailable:
-      return "503 Service Unavailable";
+      return "Service Unavailable";
     case status_code::GatewayTimeout:
-      return "504 Gateway Timeout";
+      return "Gateway Timeout";
     case status_code::HttpVersionNotSupported:
-      return "505 Http Version Not Supported";
+      return "Http Version Not Supported";
   }
   return {};
 }

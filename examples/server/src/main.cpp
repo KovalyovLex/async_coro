@@ -29,7 +29,7 @@ int main(int argc, char** argv) {
       .port = static_cast<uint16_t>(port),
   };
 
-  const auto send_html = [](const auto& request, auto& resp) -> async_coro::task<> {  // NOLINT(*reference*)
+  const auto send_html = [](const auto& request, auto& resp) -> async_coro::task<> {
     std::string_view html_body = R"(<!doctype html>
 <html>
   <body>
@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
     co_return;
   };
 
-  const auto say_hello = [](const auto& request, auto& resp) -> async_coro::task<> {  // NOLINT(*reference*)
+  const auto say_hello = [](const auto& request, auto& resp) -> async_coro::task<> {
     resp.set_body(server::static_string{"Hello world"}, server::http1::content_types::plain_text);
 
     co_return;

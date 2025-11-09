@@ -102,6 +102,7 @@ void response::set_body(static_string body, static_string content_type) {  // NO
 void response::clear() {
   _headers.clear();
   _body = {};
+  _was_sent = false;
   set_status(status_code::Ok);
   if (_string_storage) {
     _string_storage->clear(_string_storage);
@@ -109,7 +110,7 @@ void response::clear() {
 }
 
 // NOLINTBEGIN(*pointer*,*array-index*,*macro*)
-async_coro::task<expected<void, std::string>> response::send(server::socket_layer::connection &conn) {  // NOLINT(*reference*,*complexity*)
+async_coro::task<expected<void, std::string>> response::send(server::socket_layer::connection &conn) {  // NOLINT(*complexity*)
   using res_t = expected<void, std::string>;
   using namespace std::string_view_literals;
 
@@ -191,6 +192,7 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
     }
   }
 
+  _was_sent = true;
   co_return res_t{};
 }
 // NOLINTEND(*pointer*,*array-index*,*macro*)

@@ -18,7 +18,6 @@ class session {
   session& operator=(session&&) noexcept = default;
 
   // Runs request->response loop until connection closed or handler signals close.
-  // Handler is expected to be a callable returning async_coro::task<response> (coroutine).
   [[nodiscard]] async_coro::task<void> run();
 
  private:

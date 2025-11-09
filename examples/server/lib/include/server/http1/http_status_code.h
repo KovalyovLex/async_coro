@@ -7,6 +7,7 @@ namespace server::http1 {
 
 // Some of the error codes listed in https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
 enum class status_code : uint16_t {
+  SwitchingProtocols = 101,
   Ok = 200,
   Created = 201,
   Accepted = 202,
@@ -24,6 +25,7 @@ enum class status_code : uint16_t {
   MethodNotAllowed = 405,
   RequestTimeout = 408,
   LengthRequired = 411,
+  UpgradeRequired = 426,
   InternalServerError = 500,
   NotImplemented = 501,
   BadGateway = 502,
