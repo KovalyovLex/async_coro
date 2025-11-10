@@ -98,7 +98,16 @@ async_coro::task<void> web_socket_session::run(const server::http1::request& han
 
     key_str.resize(key_buffer_size);
     base64_encoder enc{false};
-    if (!enc.encode_to_buffer(key_str, hash_str)) {
+
+    {
+      auto* end = enc.encode_to_buffer(key_str, hash_str);
+      // remove extra paddings
+      while ((key_str.data() + key_str.size()) > end) {  // NOLINT(*pointer*)
+        key_str.pop_back();
+      }
+    }
+
+    if (key_str.empty()) {
       response res{http_version::http_1_1};
       http_error error{.status_code = status_code::InternalServerError, .reason = static_string{"Can't encode base64 Sec-WebSocket-Key."}};
       res.set_status(std::move(error));

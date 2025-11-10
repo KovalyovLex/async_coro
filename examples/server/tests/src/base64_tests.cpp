@@ -33,6 +33,71 @@ TEST(base64, test_simple_url) {
   EXPECT_EQ(base64_url_encode("<?�"), "PD_vv70");
 }
 
+TEST(base64, test_simple_reverse) {
+  using namespace server;
+
+  EXPECT_EQ(base64_decode_str(base64_encode("")), "");
+  EXPECT_EQ(base64_decode_str(base64_encode("f")), "f");
+  EXPECT_EQ(base64_decode_str(base64_encode("fo")), "fo");
+  EXPECT_EQ(base64_decode_str(base64_encode("foo")), "foo");
+  EXPECT_EQ(base64_decode_str(base64_encode("foob")), "foob");
+  EXPECT_EQ(base64_decode_str(base64_encode("fooba")), "fooba");
+  EXPECT_EQ(base64_decode_str(base64_encode("foobar")), "foobar");
+  EXPECT_EQ(base64_decode_str(base64_encode("Many hands make light work.")), "Many hands make light work.");
+  EXPECT_EQ(base64_decode_str(base64_encode("<=>h")), "<=>h");
+  EXPECT_EQ(base64_decode_str(base64_encode("<?�")), "<?�");
+}
+
+TEST(base64, test_strict_base64) {
+  using namespace server;
+
+  {
+    base64_decoder dec{base64_decoder::decode_policy::strict_base64};
+    EXPECT_EQ(dec.decode_str("Zm9v"), "foo");
+  }
+  {
+    base64_decoder dec{base64_decoder::decode_policy::strict_base64};
+    EXPECT_EQ(dec.decode_str("PD0+aA=="), "<=>h");
+  }
+  {
+    base64_decoder dec{base64_decoder::decode_policy::strict_base64};
+    EXPECT_EQ(dec.decode_str("PD0+aA="), "<=>h");
+  }
+  {
+    base64_decoder dec{base64_decoder::decode_policy::strict_base64};
+    EXPECT_EQ(dec.decode_str("PD0+aA"), "<=>h");
+  }
+  {
+    base64_decoder dec{base64_decoder::decode_policy::strict_base64};
+    EXPECT_EQ(dec.decode_str("PD0-aA"), "");
+  }
+  {
+    base64_decoder dec{base64_decoder::decode_policy::strict_base64};
+    EXPECT_EQ(dec.decode_str("PD0_aA"), "");
+  }
+}
+
+TEST(base64, test_strict_base64_url) {
+  using namespace server;
+
+  {
+    base64_decoder dec{base64_decoder::decode_policy::strict_base64_url};
+    EXPECT_EQ(dec.decode_str("Zm9v"), "foo");
+  }
+  {
+    base64_decoder dec{base64_decoder::decode_policy::strict_base64_url};
+    EXPECT_EQ(dec.decode_str("PD0-aA"), "<=>h");
+  }
+  {
+    base64_decoder dec{base64_decoder::decode_policy::strict_base64_url};
+    EXPECT_EQ(dec.decode_str("PD0+aA"), "");
+  }
+  {
+    base64_decoder dec{base64_decoder::decode_policy::strict_base64_url};
+    EXPECT_EQ(dec.decode_str("PD0/aA"), "");
+  }
+}
+
 TEST(base64, test_constexpr_simple) {
   using namespace server;
 

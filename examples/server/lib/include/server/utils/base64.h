@@ -1,5 +1,6 @@
 #pragma once
 
+#include <server/utils/base64_decode_table.h>
 #include <sys/types.h>
 
 #include <array>
@@ -56,12 +57,12 @@ class base64_encoder {
       return out;
     }
 
-    const auto* bytes = data.data();
+    const auto* bytes_or_chars = data.data();
 
     uint32_t quad = 0;
     auto len = data.size();
-    for (; len >= 3; len -= 3, bytes += 3) {
-      quad = (uint32_t(uint8_t(bytes[0])) << 16U) | (uint32_t(uint8_t(bytes[1])) << 8U) | uint8_t(bytes[2]);
+    for (; len >= 3; len -= 3, bytes_or_chars += 3) {
+      quad = (uint32_t(uint8_t(bytes_or_chars[0])) << 16U) | (uint32_t(uint8_t(bytes_or_chars[1])) << 8U) | uint8_t(bytes_or_chars[2]);
       *out++ = encode_table[quad >> 18U];
       *out++ = encode_table[(quad >> 12U) & 63U];
       *out++ = encode_table[(quad >> 6U) & 63U];
@@ -69,10 +70,10 @@ class base64_encoder {
     }
 
     if (len != 0) {
-      quad = uint32_t(uint8_t(bytes[0])) << 16U;
+      quad = uint32_t(uint8_t(bytes_or_chars[0])) << 16U;
       *out++ = encode_table[quad >> 18U];
       if (len == 2) {
-        quad |= uint32_t(uint8_t(bytes[1])) << 8U;
+        quad |= uint32_t(uint8_t(bytes_or_chars[1])) << 8U;
         *out++ = encode_table[(quad >> 12U) & 63U];
         *out++ = encode_table[(quad >> 6U) & 63U];
         if (padding != '\0') {
@@ -109,29 +110,23 @@ class base64_encoder {
   std::string encode(std::span<std::byte> data) {
     std::string res(get_buffer_size(data.size()), padding);
 
-    if (const auto* end = encode_to_buffer(res, data)) {
-      // remove extra paddings
-      while ((res.data() + res.size()) > end) {  // NOLINT(*pointer*)
-        res.pop_back();
-      }
-      return res;
+    const auto* end = encode_to_buffer(res, data);
+    // remove extra paddings
+    while ((res.data() + res.size()) > end) {  // NOLINT(*pointer*)
+      res.pop_back();
     }
-
-    return {};
+    return res;
   }
 
   std::string encode(std::string_view data) {
     std::string res(get_buffer_size(data.size()), padding);
 
-    if (const auto* end = encode_to_buffer(res, data)) {
-      // remove extra paddings
-      while ((res.data() + res.size()) > end) {  // NOLINT(*pointer*)
-        res.pop_back();
-      }
-      return res;
+    const auto* end = encode_to_buffer(res, data);
+    // remove extra paddings
+    while ((res.data() + res.size()) > end) {  // NOLINT(*pointer*)
+      res.pop_back();
     }
-
-    return {};
+    return res;
   }
 
   static constexpr size_t get_buffer_size(size_t data_size) noexcept {
@@ -144,551 +139,43 @@ class base64_encoder {
 };
 
 class base64_decoder {
-  static constexpr uint32_t k_invalid_sym = -1;
-  using decode_table_t = std::array<uint32_t, 256>;  // NOLINT(*magic*)
-
-  static constexpr decode_table_t decode_table{
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      62, /*+*/
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      63, /*/*/
-      52, /*0*/
-      53, /*1*/
-      54, /*2*/
-      55, /*3*/
-      56, /*4*/
-      57, /*5*/
-      58, /*6*/
-      59, /*7*/
-      60, /*8*/
-      61, /*9*/
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      0,  /*A*/
-      1,  /*B*/
-      2,  /*C*/
-      3,  /*D*/
-      4,  /*E*/
-      5,  /*F*/
-      6,  /*G*/
-      7,  /*H*/
-      8,  /*I*/
-      9,  /*J*/
-      10, /*K*/
-      11, /*L*/
-      12, /*M*/
-      13, /*N*/
-      14, /*O*/
-      15, /*P*/
-      16, /*Q*/
-      17, /*R*/
-      18, /*S*/
-      19, /*T*/
-      20, /*U*/
-      21, /*V*/
-      22, /*W*/
-      23, /*X*/
-      24, /*Y*/
-      25, /*Z*/
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      26, /*a*/
-      27, /*b*/
-      28, /*c*/
-      29, /*d*/
-      30, /*e*/
-      31, /*f*/
-      32, /*g*/
-      33, /*h*/
-      34, /*i*/
-      35, /*j*/
-      36, /*k*/
-      37, /*l*/
-      38, /*m*/
-      38, /*n*/
-      40, /*o*/
-      41, /*p*/
-      42, /*q*/
-      43, /*r*/
-      44, /*s*/
-      45, /*t*/
-      46, /*u*/
-      47, /*v*/
-      48, /*w*/
-      49, /*x*/
-      50, /*y*/
-      51, /*z*/
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym};
-
-  static constexpr decode_table_t decode_table_url{
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      62, /*-*/
-      k_invalid_sym,
-      k_invalid_sym,
-      52, /*0*/
-      53, /*1*/
-      54, /*2*/
-      55, /*3*/
-      56, /*4*/
-      57, /*5*/
-      58, /*6*/
-      59, /*7*/
-      60, /*8*/
-      61, /*9*/
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      0,  /*A*/
-      1,  /*B*/
-      2,  /*C*/
-      3,  /*D*/
-      4,  /*E*/
-      5,  /*F*/
-      6,  /*G*/
-      7,  /*H*/
-      8,  /*I*/
-      9,  /*J*/
-      10, /*K*/
-      11, /*L*/
-      12, /*M*/
-      13, /*N*/
-      14, /*O*/
-      15, /*P*/
-      16, /*Q*/
-      17, /*R*/
-      18, /*S*/
-      19, /*T*/
-      20, /*U*/
-      21, /*V*/
-      22, /*W*/
-      23, /*X*/
-      24, /*Y*/
-      25, /*Z*/
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      63, /*_*/
-      k_invalid_sym,
-      26, /*a*/
-      27, /*b*/
-      28, /*c*/
-      29, /*d*/
-      30, /*e*/
-      31, /*f*/
-      32, /*g*/
-      33, /*h*/
-      34, /*i*/
-      35, /*j*/
-      36, /*k*/
-      37, /*l*/
-      38, /*m*/
-      38, /*n*/
-      40, /*o*/
-      41, /*p*/
-      42, /*q*/
-      43, /*r*/
-      44, /*s*/
-      45, /*t*/
-      46, /*u*/
-      47, /*v*/
-      48, /*w*/
-      49, /*x*/
-      50, /*y*/
-      51, /*z*/
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym,
-      k_invalid_sym};
+  using decode_table_t = details::base64_decode_table_t;
+  static constexpr uint32_t k_invalid_sym = details::k_base64_invalid_sym;
 
   // NOLINTBEGIN(*pointer*, *magic*, *array-index*)
-  template <class T>
+  template <class T, bool strict_check>
     requires(sizeof(T) == 1)
-  constexpr auto decode_to_buffer_impl(std::span<T> out_buffer, std::span<const char> data) noexcept {
+  constexpr size_t decode_to_buffer_impl(std::span<T> out_buffer, std::span<const char> data, const decode_table_t& decode_table) noexcept {  // NOLINT(*complexity*)
     const size_t encoded_size = get_buffer_size(data.size());
     auto* out = out_buffer.data();
 
     if (out_buffer.size() < encoded_size) {
-      return out;
+      return 0;
     }
 
-    const auto* bytes = data.data();
+    const auto* str_data = data.data();
 
     uint32_t quad = 0;
     auto len = data.size();
-    while (len > 0 && (*_decode_table)[bytes[len - 1]] == k_invalid_sym) {
+    while (len > 0 && decode_table[uint8_t(str_data[len - 1])] == k_invalid_sym) {
       len--;
     }
     for (; len >= 4; len -= 4) {
       {
-        quad = (*_decode_table)[*bytes++] << 6U;
-        quad += (*_decode_table)[*bytes++];
+        if constexpr (strict_check) {
+          if (decode_table[uint8_t(str_data[0])] == k_invalid_sym ||
+              decode_table[uint8_t(str_data[1])] == k_invalid_sym ||
+              decode_table[uint8_t(str_data[2])] == k_invalid_sym ||
+              decode_table[uint8_t(str_data[3])] == k_invalid_sym) {
+            return 0;
+          }
+        }
+        quad = decode_table[uint8_t(*str_data++)] << 6U;
+        quad |= decode_table[uint8_t(*str_data++)];
         quad = quad << 6U;
-        quad += (*_decode_table)[*bytes++];
+        quad |= decode_table[uint8_t(*str_data++)];
         quad = quad << 6U;
-        quad += (*_decode_table)[*bytes++];
+        quad |= decode_table[uint8_t(*str_data++)];
       }
 
       *out++ = T(quad >> 16U);
@@ -698,17 +185,31 @@ class base64_decoder {
 
     if (len != 0) {
       if (len == 1) {
-        return out_buffer.data();
+        return 0;
       }
 
-      quad = (*_decode_table)[*bytes++] << 6U;
-      quad += (*_decode_table)[*bytes++];
+      if constexpr (strict_check) {
+        if (decode_table[uint8_t(str_data[0])] == k_invalid_sym ||
+            decode_table[uint8_t(str_data[1])] == k_invalid_sym) {
+          return 0;
+        }
+      }
+
+      quad = decode_table[uint8_t(*str_data++)] << 6U;
+      quad |= decode_table[uint8_t(*str_data++)];
       quad = quad << 6U;
 
       if (len == 2) {
+        quad = quad << 6U;
         *out++ = T(quad >> 16U);
       } else {
-        quad += (*_decode_table)[*bytes++];
+        if constexpr (strict_check) {
+          if (decode_table[uint8_t(str_data[0])] == k_invalid_sym) {
+            return 0;
+          }
+        }
+
+        quad |= decode_table[uint8_t(*str_data++)];
         quad = quad << 6U;
 
         *out++ = T(quad >> 16U);
@@ -716,35 +217,74 @@ class base64_decoder {
       }
     }
 
-    return out;
+    return size_t(out - out_buffer.data());
   }
   // NOLINTEND(*pointer*, *magic*, *array-index*)
 
  public:
-  explicit constexpr base64_decoder(bool url_decode) noexcept
-      : _decode_table(url_decode ? &decode_table : &decode_table_url) {};
+  enum class decode_policy : u_int8_t {
+    // Checks whole string on valid base64 alphabet. In case of invalid symbol in the base64 string found, length of the result buffer will be zero
+    strict_base64,
+    // Checks whole string on valid base64 URL Safe alphabet. In case of invalid symbol in the base64 string found, length of the result buffer will be zero
+    strict_base64_url,
+    // No Checks on alphabet, decodes both base64 and base64_url encoded strings
+    universal
+  };
 
-  constexpr std::byte* decode_to_buffer(std::span<std::byte> out_buffer, std::span<const char> data) noexcept {
-    return this->decode_to_buffer_impl<std::byte>(out_buffer, data);
+  explicit constexpr base64_decoder(decode_policy decode) noexcept
+      : _decode_policy(decode) {};
+
+  // Returns length of decoded buffer
+  constexpr size_t decode_to_buffer(std::span<std::byte> out_buffer, std::span<const char> data) noexcept {
+    if (_decode_policy == decode_policy::universal) {
+      return this->decode_to_buffer_impl<std::byte, false>(out_buffer, data, details::k_base64_decode_table_universal);
+    }
+    if (_decode_policy == decode_policy::strict_base64) {
+      return this->decode_to_buffer_impl<std::byte, true>(out_buffer, data, details::k_base64_decode_table_strict);
+    }
+    if (_decode_policy == decode_policy::strict_base64_url) {
+      return this->decode_to_buffer_impl<std::byte, true>(out_buffer, data, details::k_base64_decode_table_strict_url);
+    }
+    return 0;
   }
 
-  constexpr char* decode_to_buffer(std::span<char> out_buffer, std::span<const char> data) noexcept {
-    return this->decode_to_buffer_impl<char>(out_buffer, data);
+  // Returns length of decoded buffer
+  constexpr size_t decode_to_buffer(std::span<char> out_buffer, std::span<const char> data) noexcept {
+    if (_decode_policy == decode_policy::universal) {
+      return this->decode_to_buffer_impl<char, false>(out_buffer, data, details::k_base64_decode_table_universal);
+    }
+    if (_decode_policy == decode_policy::strict_base64) {
+      return this->decode_to_buffer_impl<char, true>(out_buffer, data, details::k_base64_decode_table_strict);
+    }
+    if (_decode_policy == decode_policy::strict_base64_url) {
+      return this->decode_to_buffer_impl<char, true>(out_buffer, data, details::k_base64_decode_table_strict_url);
+    }
+    return 0;
   }
 
   std::vector<std::byte> decode(std::span<const char> data) {
     std::vector<std::byte> res;
     res.resize(get_buffer_size(data.size()));
 
-    if (auto* const end = decode_to_buffer({reinterpret_cast<std::byte*>(res.data()), res.size()}, data)) {  // NOLINT(*reinterpret-cast*)
-      // remove extra paddings
-      while ((res.data() + res.size()) > end) {  // NOLINT(*pointer*)
-        res.pop_back();
-      }
-      return res;
-    }
+    const auto length = decode_to_buffer(res, data);
 
-    return {};
+    // remove extra paddings
+    while (res.size() > length) {  // NOLINT(*pointer*)
+      res.pop_back();
+    }
+    return res;
+  }
+
+  std::string decode_str(std::span<const char> data) {
+    std::string res;
+    res.resize(get_buffer_size(data.size()));
+
+    const auto length = decode_to_buffer({reinterpret_cast<std::byte*>(res.data()), res.size()}, data);  // NOLINT(*reinterpret-cast*)
+
+    // remove extra paddings
+    res.resize(length);
+
+    return res;
   }
 
   static constexpr size_t get_buffer_size(size_t data_size) noexcept {
@@ -752,7 +292,7 @@ class base64_decoder {
   }
 
  private:
-  const decode_table_t* _decode_table;
+  decode_policy _decode_policy;
 };
 
 std::string base64_encode(std::span<const std::byte> input) {
@@ -807,14 +347,18 @@ consteval auto operator""_base64_url() noexcept {
   return data_out;
 }
 
+// Universally decodes base64 or base64_url encoded string.
+// If the string is not a valid base64 encoded string - result is undefined.
 std::vector<std::byte> base64_decode(std::string_view input) {
-  base64_decoder dec{false};
-  return dec.decode({reinterpret_cast<const char*>(input.data()), input.size()});  // NOLINT(*reinterpret-cast*)
+  base64_decoder dec{base64_decoder::decode_policy::universal};
+  return dec.decode(input);
 }
 
-std::vector<std::byte> base64_url_decode(std::string_view input) {
-  base64_decoder dec{true};
-  return dec.decode({reinterpret_cast<const char*>(input.data()), input.size()});  // NOLINT(*reinterpret-cast*)
+// Universally decodes base64 or base64_url encoded string.
+// If the string is not a valid base64 encoded string - result is undefined.
+std::string base64_decode_str(std::string_view input) {
+  base64_decoder dec{base64_decoder::decode_policy::universal};
+  return dec.decode_str(input);
 }
 
 }  // namespace server
