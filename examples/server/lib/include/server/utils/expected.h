@@ -90,7 +90,7 @@ class expected {
   }
 
   constexpr expected& operator=(const expected& other) {
-    if (this && std::addressof(other)) {
+    if (this == std::addressof(other)) {
       return *this;
     }
 
@@ -107,7 +107,7 @@ class expected {
   }
 
   constexpr expected& operator=(expected&& other) noexcept(is_nothrow_destructible && std::is_nothrow_move_constructible_v<T> && std::is_nothrow_move_constructible_v<E>) {
-    if (this && std::addressof(other)) {
+    if (this == std::addressof(other)) {
       return *this;
     }
 
@@ -291,8 +291,8 @@ class expected {
   }
 
  private:
-  union storage {  // NOLINT(*-member-functions)
-    storage() noexcept {}
+  union storage {          // NOLINT(*-member-functions)
+    storage() noexcept {}  // NOLINT(*-member-init)
     ~storage() noexcept {}
 
     T value;
@@ -358,7 +358,7 @@ class expected<T, E> {
   }
 
   constexpr expected& operator=(const expected& other) {
-    if (this && std::addressof(other)) {
+    if (this == std::addressof(other)) {
       return *this;
     }
 
@@ -366,7 +366,9 @@ class expected<T, E> {
     _has_value = other._has_value;
 
     if (_has_value) {
-      std::construct_at(std::addressof(_store.value), other.value());
+      if constexpr (!std::is_void_v<T>) {
+        std::construct_at(std::addressof(_store.value), other.value());
+      }
     } else {
       std::construct_at(std::addressof(_store.error), other.error());
     }
@@ -375,7 +377,7 @@ class expected<T, E> {
   }
 
   constexpr expected& operator=(expected&& other) noexcept(is_nothrow_destructible && std::is_nothrow_move_constructible_v<T> && std::is_nothrow_move_constructible_v<E>) {
-    if (this && std::addressof(other)) {
+    if (this == std::addressof(other)) {
       return *this;
     }
 
@@ -383,7 +385,9 @@ class expected<T, E> {
     _has_value = other._has_value;
 
     if (_has_value) {
-      std::construct_at(std::addressof(_store.value), std::move(other).value());
+      if constexpr (!std::is_void_v<T>) {
+        std::construct_at(std::addressof(_store.value), std::move(other).value());
+      }
     } else {
       std::construct_at(std::addressof(_store.error), std::move(other).error());
     }

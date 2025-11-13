@@ -85,7 +85,7 @@ expected<void, http_error> request::parse_header_line(std::string_view start_lin
   std::string_view version;
 
   if (start_line.empty()) {
-    return res_t{unexpect, http_error{.status_code = status_code::BadRequest, .reason = static_string{"Wrong request format. Empty request header."}}};
+    return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = static_string{"Wrong request format. Empty request header."}}};
   }
 
   auto split_index = start_line.find(' ');
@@ -94,11 +94,11 @@ expected<void, http_error> request::parse_header_line(std::string_view start_lin
   if (auto method_val = as_method(method)) {
     _method = *method_val;
   } else {
-    return res_t{unexpect, http_error{.status_code = status_code::BadRequest, .reason = static_string{"Unsupported HTTP method type."}}};
+    return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = static_string{"Unsupported HTTP method type."}}};
   }
 
   if (split_index == std::string_view::npos) {
-    return res_t{unexpect, http_error{.status_code = status_code::BadRequest, .reason = static_string{"Wrong request format. No URI."}}};
+    return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = static_string{"Wrong request format. No URI."}}};
   }
 
   start_line = start_line.substr(split_index + 1);
@@ -111,7 +111,7 @@ expected<void, http_error> request::parse_header_line(std::string_view start_lin
   _target = path;
 
   if (split_index == std::string_view::npos) {
-    return res_t{unexpect, http_error{.status_code = status_code::BadRequest, .reason = static_string{"Wrong request format. No HTTP version."}}};
+    return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = static_string{"Wrong request format. No HTTP version."}}};
   }
 
   version = start_line.substr(split_index + 1);
@@ -120,7 +120,7 @@ expected<void, http_error> request::parse_header_line(std::string_view start_lin
   if (auto ver_val = as_http_version(version)) {
     _version = *ver_val;
   } else {
-    return res_t{unexpect, http_error{.status_code = status_code::HttpVersionNotSupported, .reason = static_string{as_string(status_code::HttpVersionNotSupported)}}};
+    return res_t{unexpect, http_error{.status_code = status_code::http_version_not_supported, .reason = static_string{as_string(status_code::http_version_not_supported)}}};
   }
 
   return res_t{};
@@ -190,7 +190,7 @@ struct request::parser {
 
           if (!content_length.has_value() && !is_chunked) {
             if (req._bytes.size() > line_start) {
-              return res_t{unexpect, http_error{.status_code = status_code::LengthRequired, .reason = static_string{"Non empty body should have Content-Length."}}};
+              return res_t{unexpect, http_error{.status_code = status_code::length_required, .reason = static_string{"Non empty body should have Content-Length."}}};
             }
             content_length = 0;
           }
@@ -213,7 +213,7 @@ struct request::parser {
             auto res = std::from_chars(value.data(), value.data() + value.size(), size);
             if (res.ec != std::errc{}) {
               auto detailed_ec = std::make_error_code(res.ec);
-              return res_t{unexpect, http_error{.status_code = status_code::BadRequest, .reason = std::string{"Wrong Content-Length: "}.append(detailed_ec.message())}};
+              return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = std::string{"Wrong Content-Length: "}.append(detailed_ec.message())}};
             }
             content_length = size;
 
@@ -290,14 +290,14 @@ struct request::parser {
           }
 
           if (line.empty()) {
-            return res_t{unexpect, http_error{.status_code = status_code::BadRequest, .reason = static_string{"Unexpected chunked contend format. Can't read chunk length"}}};
+            return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = static_string{"Unexpected chunked contend format. Can't read chunk length"}}};
           }
 
           size_t size = 0;
           auto res = std::from_chars(line.data(), line.data() + line.size(), size);
           if (res.ec != std::errc{}) {
             auto detailed_ec = std::make_error_code(res.ec);
-            return res_t{unexpect, http_error{.status_code = status_code::BadRequest, .reason = std::string{"Wrong chunk size: "}.append(detailed_ec.message()).append(". Size: ").append(line)}};
+            return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = std::string{"Wrong chunk size: "}.append(detailed_ec.message()).append(". Size: ").append(line)}};
           }
           content_length = size;
 
@@ -342,7 +342,7 @@ async_coro::task<expected<void, http_error>> request::read(server::socket_layer:
   while (!conn.is_closed() && parse.state != parser::parse_state::finished) {
     auto read = co_await conn.read_buffer(std::span{buffer});
     if (!read.has_value()) {
-      co_return res_t{unexpect, http_error{.status_code = status_code::BadRequest, .reason = std::move(read).error()}};
+      co_return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = std::move(read).error()}};
     }
 
     const auto bytes_read = read.value();
@@ -356,7 +356,7 @@ async_coro::task<expected<void, http_error>> request::read(server::socket_layer:
   }
 
   if (parse.state != parser::parse_state::finished) {
-    co_return res_t{unexpect, http_error{.status_code = status_code::BadRequest, .reason = static_string{"Request Parse error."}}};
+    co_return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = static_string{"Request Parse error."}}};
   }
 
   _parsed = true;

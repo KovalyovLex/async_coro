@@ -50,7 +50,7 @@ TEST(request_parser, wrong_method) {
   auto res = req.parse_data_part(parser, to_span(bytes));
 
   ASSERT_FALSE(res);
-  EXPECT_EQ(res.error().status_code, status_code::BadRequest);
+  EXPECT_EQ(res.error().status_code, status_code::bad_request);
   EXPECT_FALSE(req.is_parsed());
 }
 
@@ -64,7 +64,7 @@ TEST(request_parser, missing_version) {
   auto res = req.parse_data_part(parser, to_span(bytes));
 
   ASSERT_FALSE(res);
-  EXPECT_EQ(res.error().status_code, status_code::BadRequest);
+  EXPECT_EQ(res.error().status_code, status_code::bad_request);
   EXPECT_FALSE(req.is_parsed());
 }
 
@@ -137,5 +137,5 @@ TEST(request_parser, chunked_invalid_chunk_size) {
 
   auto res = req.parse_data_part(parser, to_span(to_bytes(total)));
   ASSERT_FALSE(res);
-  EXPECT_EQ(res.error().status_code, status_code::BadRequest);
+  EXPECT_EQ(res.error().status_code, status_code::bad_request);
 }

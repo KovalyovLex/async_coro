@@ -18,8 +18,8 @@ namespace server::http1 {
 
 response::response(http_version ver) noexcept
     : _ver(ver),
-      _status_code(status_code::Ok),
-      _reason(as_string(status_code::Ok)) {
+      _status_code(status_code::ok),
+      _reason(as_string(status_code::ok)) {
 }
 
 void response::set_status(http_status_code status, std::string_view reason) {
@@ -103,7 +103,7 @@ void response::clear() {
   _headers.clear();
   _body = {};
   _was_sent = false;
-  set_status(status_code::Ok);
+  set_status(status_code::ok);
   if (_string_storage) {
     _string_storage->clear(_string_storage);
   }
@@ -116,6 +116,9 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
 
   std::array<std::byte, 4 * 1024> buffer;  // NOLINT(*)
   size_t buff_i = 0;
+
+  const auto prev_delay = conn.is_no_delay();
+  conn.set_no_delay(false);
 
 #define PUSH_TO_BUF(STR)                                                                                \
   {                                                                                                     \
@@ -133,6 +136,7 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
           auto send_res = co_await conn.write_buffer(std::span{buffer.data(), buffer.data() + buff_i}); \
           buff_i = 0; /*reset buffer index*/                                                            \
           if (!send_res) {                                                                              \
+            conn.set_no_delay(prev_delay);                                                              \
             co_return res_t{unexpect, std::move(send_res).error()};                                     \
           }                                                                                             \
         } else {                                                                                        \
@@ -179,7 +183,11 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
   // write body
   if (!_body.empty()) {
     PUSH_TO_BUF("\r\n");
+    conn.set_no_delay(prev_delay);
     PUSH_TO_BUF(_body);
+  } else {
+    conn.set_no_delay(prev_delay);
+    PUSH_TO_BUF("\r\n");
   }
 
 #undef PUSH_TO_BUF

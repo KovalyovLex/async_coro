@@ -28,7 +28,7 @@ session::session(server::socket_layer::connection conn, const router& router) no
     }
 
     if (req.get_version() < http_version::http_1_1) {
-      res.set_status(status_code::HttpVersionNotSupported);
+      res.set_status(status_code::http_version_not_supported);
       res.add_header(static_string{"Connection"}, static_string{"close"});
       co_await res.send(_conn);
       _conn.close_connection();
@@ -47,7 +47,7 @@ session::session(server::socket_layer::connection conn, const router& router) no
         co_await res.send(_conn);
       }
     } else {
-      res.set_status(status_code::NotFound);
+      res.set_status(status_code::not_found);
       co_await res.send(_conn);
     }
 

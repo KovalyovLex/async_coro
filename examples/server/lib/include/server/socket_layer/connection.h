@@ -59,6 +59,10 @@ class connection {
 
   void close_connection();
 
+  void set_no_delay(bool value) noexcept;
+
+  [[nodiscard]] bool is_no_delay() const noexcept { return _no_delay; }
+
  private:
   static constexpr size_t k_invalid_index = size_t(-1);
 
@@ -66,5 +70,6 @@ class connection {
   ssl_connection _ssl;
   size_t _subscription_index = k_invalid_index;
   connection_id _sock;
+  bool _no_delay = false;
 };
 }  // namespace server::socket_layer

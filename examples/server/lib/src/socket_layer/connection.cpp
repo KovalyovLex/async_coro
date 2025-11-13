@@ -8,6 +8,8 @@
 #include <server/utils/expected.h>
 
 #if !WIN_SOCKET
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #endif
 
@@ -54,6 +56,23 @@ void connection::close_connection() {
   }
 
   _reactor = nullptr;
+}
+
+void connection::set_no_delay(bool value) noexcept {
+  if (_no_delay == value) {
+    return;
+  }
+
+  if (_sock != invalid_connection) {
+    int val = value ? 1 : 0;
+
+    int res = ::setsockopt(_sock.get_platform_id(), IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&val), sizeof(val));  // NOLINT(*reinterpret-cast)
+    if (res < 0) {
+      return;
+    }
+  }
+
+  _no_delay = value;
 }
 
 async_coro::task<expected<void, std::string>> connection::write_buffer(std::span<const std::byte> bytes) {  // NOLINT(*-complexity*)
