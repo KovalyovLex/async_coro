@@ -1,6 +1,6 @@
 #pragma once
 
-#include <async_coro/internal/always_false.h>
+#include <async_coro/utils/always_false.h>
 
 #include <type_traits>
 
