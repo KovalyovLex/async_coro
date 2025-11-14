@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 option(SERVER_ENABLE_TLS "Enable TLS support via OpenSSL" ON)
+option(SERVER_ENABLE_DEFLATE_GZIP "Enable deflate/gzip compression for content" ON)
 option(SERVER_ENABLE_HTTP2 "Enable HTTP/2 support" OFF)
 
 include(FetchContent)
@@ -37,4 +38,9 @@ endif()
 if(SERVER_ENABLE_TLS)
     find_package(OpenSSL REQUIRED)
     target_link_libraries(server_lib PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+endif()
+
+if(SERVER_ENABLE_DEFLATE_GZIP)
+    find_package(ZLIB REQUIRED)
+    target_link_libraries(server_lib PRIVATE ZLIB::ZLIB)
 endif()

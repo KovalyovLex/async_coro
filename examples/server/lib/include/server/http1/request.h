@@ -38,7 +38,11 @@ class request {
   [[nodiscard]] const auto& get_headers() const noexcept { return _headers; }
 
   // optimized search for header with name
-  [[nodiscard]] const std::pair<ci_string_view, std::string_view>* find_header(std::string_view name) const;
+  [[nodiscard]] const std::pair<ci_string_view, std::string_view>* find_header(std::string_view name) const noexcept;
+
+  void foreach_header_with_name(std::string_view name, async_coro::function_view<void(const std::pair<ci_string_view, std::string_view>&)>) const;
+
+  [[nodiscard]] bool has_value_in_header(std::string_view name, std::string_view value) const noexcept;
 
   [[nodiscard]] http_method get_method() const noexcept { return _method; }
 

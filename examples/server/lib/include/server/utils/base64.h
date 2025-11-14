@@ -295,22 +295,22 @@ class base64_decoder {
   decode_policy _decode_policy;
 };
 
-std::string base64_encode(std::span<const std::byte> input) {
+inline std::string base64_encode(std::span<const std::byte> input) {
   base64_encoder enc{false};
   return enc.encode({reinterpret_cast<const char*>(input.data()), input.size()});  // NOLINT(*reinterpret-cast*)
 }
 
-std::string base64_encode(std::string_view input) {
+inline std::string base64_encode(std::string_view input) {
   base64_encoder enc{false};
   return enc.encode(input);
 }
 
-std::string base64_url_encode(std::span<const std::byte> input) {
+inline std::string base64_url_encode(std::span<const std::byte> input) {
   base64_encoder enc{true};
   return enc.encode({reinterpret_cast<const char*>(input.data()), input.size()});  // NOLINT(*reinterpret-cast*)
 }
 
-std::string base64_url_encode(std::string_view input) {
+inline std::string base64_url_encode(std::string_view input) {
   base64_encoder enc{true};
   return enc.encode(input);
 }
@@ -349,14 +349,14 @@ consteval auto operator""_base64_url() noexcept {
 
 // Universally decodes base64 or base64_url encoded string.
 // If the string is not a valid base64 encoded string - result is undefined.
-std::vector<std::byte> base64_decode(std::string_view input) {
+inline std::vector<std::byte> base64_decode(std::string_view input) {
   base64_decoder dec{base64_decoder::decode_policy::universal};
   return dec.decode(input);
 }
 
 // Universally decodes base64 or base64_url encoded string.
 // If the string is not a valid base64 encoded string - result is undefined.
-std::string base64_decode_str(std::string_view input) {
+inline std::string base64_decode_str(std::string_view input) {
   base64_decoder dec{base64_decoder::decode_policy::universal};
   return dec.decode_str(input);
 }

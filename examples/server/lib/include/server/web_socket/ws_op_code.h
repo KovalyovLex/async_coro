@@ -4,7 +4,7 @@
 
 namespace server::web_socket {
 
-enum class op_code : uint8_t {
+enum class ws_op_code : uint8_t {
   continuation = 0,
   text_frame = 1,
   binary_frame = 2,

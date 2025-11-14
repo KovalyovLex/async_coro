@@ -82,6 +82,29 @@ class sha1_hash {
     return str;
   }
 
+  [[nodiscard]] auto get_bytes() noexcept {
+    if (!_finalized) [[likely]] {
+      finalize();
+    }
+
+    std::array<std::byte, digest_t{}.size() * sizeof(digest_t::value_type)> bytes;  // NOLINT(*member-init)
+
+    std::memcpy(bytes.data(), _digest.data(), bytes.size());
+
+    if constexpr (std::endian::native != std::endian::big) {
+      static_assert(sizeof(digest_t::value_type) == 4);
+
+      size_t indx = 0;
+      while (indx < bytes.size()) {
+        std::swap(bytes[indx], bytes[indx + 3]);
+        std::swap(bytes[indx + 1], bytes[indx + 2]);
+        indx += 4;
+      }
+    }
+
+    return bytes;
+  }
+
  private:
   constexpr void append_bytes(const char *val, uint32_t size) noexcept {
     if (std::is_constant_evaluated()) {
@@ -324,13 +347,13 @@ class sha1_hash {
 };
 // NOLINTEND(*array*, *magic*, *identifier-length*)
 
-std::string sha1(std::span<const std::byte> input) {
+inline std::string sha1(std::span<const std::byte> input) {
   sha1_hash hash;
   hash.update(input);
   return hash.get_value_str();
 }
 
-std::string sha1(std::string_view input) {
+inline std::string sha1(std::string_view input) {
   sha1_hash hash;
   hash.update(input);
   return hash.get_value_str();

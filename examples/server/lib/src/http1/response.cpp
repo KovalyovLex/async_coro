@@ -117,9 +117,6 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
   std::array<std::byte, 4 * 1024> buffer;  // NOLINT(*)
   size_t buff_i = 0;
 
-  const auto prev_delay = conn.is_no_delay();
-  conn.set_no_delay(false);
-
 #define PUSH_TO_BUF(STR)                                                                                \
   {                                                                                                     \
     const std::string_view str{STR};                                                                    \
@@ -136,7 +133,6 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
           auto send_res = co_await conn.write_buffer(std::span{buffer.data(), buffer.data() + buff_i}); \
           buff_i = 0; /*reset buffer index*/                                                            \
           if (!send_res) {                                                                              \
-            conn.set_no_delay(prev_delay);                                                              \
             co_return res_t{unexpect, std::move(send_res).error()};                                     \
           }                                                                                             \
         } else {                                                                                        \
@@ -183,10 +179,8 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
   // write body
   if (!_body.empty()) {
     PUSH_TO_BUF("\r\n");
-    conn.set_no_delay(prev_delay);
     PUSH_TO_BUF(_body);
   } else {
-    conn.set_no_delay(prev_delay);
     PUSH_TO_BUF("\r\n");
   }
 
@@ -194,7 +188,7 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
 
   // send final part
   if (buff_i != 0) {
-    auto send_res = co_await conn.write_buffer(std::span{buffer.data(), buffer.data() + buff_i});
+    auto send_res = co_await conn.write_buffer(std::span{buffer.data(), buff_i});
     if (!send_res) {
       co_return res_t{unexpect, std::move(send_res).error()};
     }

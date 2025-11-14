@@ -4,7 +4,7 @@
 
 namespace server::web_socket {
 
-enum class status_code : uint16_t {
+enum class ws_status_code : uint16_t {
   normal_closure = 1000,
   going_away = 1001,
   protocol_error = 1002,
