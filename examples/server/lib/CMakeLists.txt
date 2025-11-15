@@ -41,6 +41,10 @@ if(SERVER_ENABLE_TLS)
 endif()
 
 if(SERVER_ENABLE_DEFLATE_GZIP)
+    target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_DEFLATE_GZIP=1)
+
     find_package(ZLIB REQUIRED)
-    target_link_libraries(server_lib PRIVATE ZLIB::ZLIB)
+    target_link_libraries(server_lib PUBLIC ZLIB::ZLIB)
+else()
+    target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_DEFLATE_GZIP=0)
 endif()
