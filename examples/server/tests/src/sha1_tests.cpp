@@ -3,6 +3,7 @@
 #include <openssl/sha.h>
 #include <server/utils/sha1.h>
 
+#include <cstring>
 #include <string_view>
 
 /*
@@ -62,6 +63,40 @@ TEST(sha1_hash, test_standard) {
   }
 }
 
+TEST(sha1_hash, test_str_conversions) {
+  constexpr std::string_view data_str{"The quick brown fox jumps over the lazy cog"};
+
+  {
+    server::sha1_hash checksum;
+    checksum.update(data_str);
+    EXPECT_EQ(checksum.get_value_str(), "de9f2c7fd25e1b3afad3e85a0bd17d9b100db4b3") << "test 'The quick brown fox jumps over the lazy cog'";
+  }
+
+  {
+    server::sha1_hash checksum;
+    checksum.update(data_str);
+    auto array = checksum.get_value();
+    std::string_view data_view{array.data(), array.size()};
+    EXPECT_EQ(data_view, "de9f2c7fd25e1b3afad3e85a0bd17d9b100db4b3") << "test 'The quick brown fox jumps over the lazy cog'";
+  }
+
+  {
+    server::sha1_hash checksum;
+    checksum.update(data_str);
+    auto array = checksum.get_bytes();
+    EXPECT_EQ(server::sha1_hash::convert_digest_to_value_str(array), "de9f2c7fd25e1b3afad3e85a0bd17d9b100db4b3") << "test 'The quick brown fox jumps over the lazy cog'";
+  }
+
+  {
+    server::sha1_hash checksum;
+    checksum.update(data_str);
+    auto digest = checksum.get_bytes();
+    auto array = server::sha1_hash::convert_digest_to_value(digest);
+    std::string_view data_view{array.data(), array.size()};
+    EXPECT_EQ(data_view, "de9f2c7fd25e1b3afad3e85a0bd17d9b100db4b3") << "test 'The quick brown fox jumps over the lazy cog'";
+  }
+}
+
 TEST(sha1_hash, test_slow) {
   // https://www.di-mgt.com.au/sha_testvectors.html
 
@@ -89,6 +124,13 @@ TEST(sha1_hash, test_slow_open_ssl) {
   }
   std::array<unsigned char, SHA_DIGEST_LENGTH> res_array;  // NOLINT(*init*)
   SHA1_Final(res_array.data(), &checksum);
+
+  server::sha1_hash::bytes_digest_buffer_t buf;
+  static_assert(res_array.size() == buf.size());
+
+  std::memcpy(buf.data(), res_array.data(), res_array.size());
+
+  EXPECT_EQ(server::sha1_hash::convert_digest_to_value_str(buf), "7789f0c9ef7bfc40d93311143dfbe69e2017f592") << "test 16,777,216 repititions of abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno";
 }
 
 ASYNC_CORO_WARNINGS_POP

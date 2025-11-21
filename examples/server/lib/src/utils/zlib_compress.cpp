@@ -10,6 +10,7 @@
 
 #include <cstring>
 #include <memory>
+
 namespace server {
 
 static_assert(zlib::compression_level{}.value == Z_DEFAULT_COMPRESSION);

@@ -24,10 +24,14 @@ class sha1_hash {
   using bytes_buffer_t = std::array<unsigned char, k_block_size_bytes>;
 
   static constexpr auto k_hex_len = sizeof(uint32_t) << 1U;
+  static constexpr auto k_digest_bytes_size = digest_t{}.size() * sizeof(digest_t::value_type);
 
  public:
   // Buffer for hex representation of sha1 hash
-  using sha1_str_buffer_t = std::array<char, k_hex_len * digest_t{}.size()>;
+  using str_buffer_t = std::array<char, k_hex_len * digest_t{}.size()>;
+
+  // Bytes buffer for storage of digest representation of sha1
+  using bytes_digest_buffer_t = std::array<std::byte, k_digest_bytes_size>;
 
   constexpr sha1_hash() noexcept = default;
   explicit constexpr sha1_hash(std::string_view str) noexcept {
@@ -45,7 +49,7 @@ class sha1_hash {
   }
 
   // Fills result string buffer with hex string
-  constexpr void get_value(sha1_str_buffer_t &buffer_str) noexcept {
+  constexpr void get_value(str_buffer_t &buffer_str) noexcept {
     if (!_finalized) [[likely]] {
       finalize();
     }
@@ -58,8 +62,8 @@ class sha1_hash {
     }
   }
 
-  constexpr sha1_str_buffer_t get_value() noexcept {
-    sha1_str_buffer_t buf;
+  constexpr str_buffer_t get_value() noexcept {
+    str_buffer_t buf;
     get_value(buf);
     return buf;
   }
@@ -70,7 +74,7 @@ class sha1_hash {
       finalize();
     }
 
-    std::string str(sha1_str_buffer_t{}.size(), '\0');
+    std::string str(str_buffer_t{}.size(), '\0');
 
     uint32_t start_index = 0;
     for (auto val : _digest) {
@@ -82,12 +86,12 @@ class sha1_hash {
     return str;
   }
 
-  [[nodiscard]] auto get_bytes() noexcept {
+  [[nodiscard]] bytes_digest_buffer_t get_bytes() noexcept {
     if (!_finalized) [[likely]] {
       finalize();
     }
 
-    std::array<std::byte, digest_t{}.size() * sizeof(digest_t::value_type)> bytes;  // NOLINT(*member-init)
+    bytes_digest_buffer_t bytes;  // NOLINT(*member-init)
 
     std::memcpy(bytes.data(), _digest.data(), bytes.size());
 
@@ -103,6 +107,31 @@ class sha1_hash {
     }
 
     return bytes;
+  }
+
+  // Returns string buffer with hex representation
+  static constexpr str_buffer_t convert_digest_to_value(const bytes_digest_buffer_t &digest) noexcept {
+    str_buffer_t buffer_str;
+    uint32_t start_index = 0;
+    for (auto val : digest) {
+      const auto bytes = std::span<char, 2>(&buffer_str[start_index], k_hex_len);
+      byte_to_hex(bytes, val);
+      start_index += 2;
+    }
+    return buffer_str;
+  }
+
+  // Returns string with hex representation of digest
+  static std::string convert_digest_to_value_str(const bytes_digest_buffer_t &digest) {
+    str_buffer_t buffer_str;
+    uint32_t start_index = 0;
+    for (auto val : digest) {
+      const auto bytes = std::span<char, 2>(&buffer_str[start_index], k_hex_len);
+      byte_to_hex(bytes, val);
+      start_index += 2;
+    }
+
+    return {buffer_str.data(), buffer_str.size()};
   }
 
  private:
@@ -336,6 +365,14 @@ class sha1_hash {
     for (uint32_t i = 0, j = (buffer.size() - 1) * sizeof(uint32_t); i < buffer.size(); ++i, j -= sizeof(uint32_t)) {
       buffer[i] = digits[(value >> j) & 0x0FU];
     }
+  }
+
+  static constexpr void byte_to_hex(std::span<char, 2> buffer, std::byte value) noexcept {
+    constexpr std::string_view digits{"0123456789abcdef"};
+    static_assert(digits.size() >= 0x0FU);
+
+    buffer[0] = digits[uint8_t(value >> 4U) & 0x0FU];
+    buffer[1] = digits[uint8_t(value) & 0x0FU];
   }
 
  private:
