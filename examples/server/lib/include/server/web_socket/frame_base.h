@@ -68,7 +68,7 @@ struct frame_base {
   }
 
   void set_opcode(uint8_t value) noexcept {
-    byte1 = (byte1 & 0b11110000U) | (value | 0b00001111U);
+    byte1 = (byte1 & 0b11110000U) | (value & 0b00001111U);
   }
 
   [[nodiscard]] bool is_masked() const noexcept {
@@ -84,7 +84,7 @@ struct frame_base {
   }
 
   void set_payload_len(uint8_t value) noexcept {
-    byte2 = (byte2 & 0b10000000U) | (value | 0b01111111U);
+    byte2 = (byte2 & 0b10000000U) | (value & 0b01111111U);
   }
 };
 // NOLINTEND(*magic*)

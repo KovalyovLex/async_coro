@@ -24,12 +24,6 @@ class response_frame {
   explicit constexpr response_frame(uint8_t code) noexcept
       : _opcode_dec(code) {}
 
-  async_coro::task<expected<void, std::string>> send_data(socket_layer::connection& conn, std::span<const std::byte> data) const;
-
-  async_coro::task<expected<void, std::string>> begin_fragmented_send(socket_layer::connection& conn, std::span<const std::byte> data) const;
-
-  async_coro::task<expected<void, std::string>> continue_fragmented_send(socket_layer::connection& conn, std::span<const std::byte> data, bool last_chunk) const;
-
   [[nodiscard]] ws_op_code get_op_code() const noexcept { return static_cast<ws_op_code>(_opcode_dec); }
   [[nodiscard]] uint8_t get_op_code_dec() const noexcept { return _opcode_dec; }
 
@@ -37,8 +31,7 @@ class response_frame {
 
   static async_coro::task<void> close_connection(socket_layer::connection& conn);
 
- private:
-  static std::byte* fill_frame_size(std::byte* buffer_after_frame, frame_base& frame, size_t cont_length) noexcept;
+  static void fill_frame_size(std::span<std::byte>& buffer_after_frame, frame_base& frame, size_t cont_length) noexcept;
 
  private:
   uint8_t _opcode_dec;

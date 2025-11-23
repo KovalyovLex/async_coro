@@ -12,6 +12,7 @@ namespace server {
 
 class zlib_compress {
  public:
+  zlib_compress() noexcept = default;
   explicit zlib_compress(zlib::compression_method method, zlib::compression_level compression_level = {}, zlib::window_bits window_bits = {}, zlib::memory_level memory_level = {});
   zlib_compress(const zlib_compress&) = delete;
   zlib_compress(zlib_compress&&) noexcept;
@@ -32,6 +33,8 @@ class zlib_compress {
   bool end_stream(std::span<const std::byte>& data_in, std::span<std::byte>& data_out) noexcept;
 
   [[nodiscard]] bool is_valid() const noexcept { return _impl != nullptr; }
+
+  explicit operator bool() const noexcept { return _impl != nullptr; }
 
  private:
   class impl;

@@ -13,6 +13,7 @@ namespace server {
 
 class zlib_decompress {
  public:
+  zlib_decompress() noexcept = default;
   explicit zlib_decompress(zlib::compression_method method, zlib::window_bits window_bits = {});
   zlib_decompress(const zlib_decompress&) = delete;
   zlib_decompress(zlib_decompress&&) noexcept;
@@ -33,6 +34,8 @@ class zlib_decompress {
   bool end_stream(std::span<const std::byte>& data_in, std::span<std::byte>& data_out) noexcept;
 
   [[nodiscard]] bool is_valid() const noexcept { return _impl != nullptr; }
+
+  explicit operator bool() const noexcept { return _impl != nullptr; }
 
  private:
   class impl;

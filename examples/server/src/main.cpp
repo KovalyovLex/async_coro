@@ -72,7 +72,18 @@ int main(int argc, char** argv) {
         answer += "got: ";
         answer += req_frame.get_payload_as_string();
 
-        co_await resp.send_data(this_session.get_connection(), std::as_bytes(std::span{answer}));
+        co_await this_session.send_data(resp, std::as_bytes(std::span{answer}));
+
+        answer = "Message 2!";
+        co_await this_session.send_data(resp, std::as_bytes(std::span{answer}));
+
+        answer = "Message 3!";
+        co_await this_session.send_data(resp, std::as_bytes(std::span{answer}));
+
+        answer = "Echo:";
+        co_await this_session.send_data(resp, std::as_bytes(std::span{answer}));
+
+        co_await this_session.send_data(resp, std::as_bytes(std::span{req_frame.get_payload_as_string()}));
       } else {
         ws_error error(ws_status_code::invalid_frame_payload_data, "Expected text");
         co_await response_frame::send_error_and_close_connection(this_session.get_connection(), error);

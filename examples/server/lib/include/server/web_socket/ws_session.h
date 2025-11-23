@@ -9,6 +9,7 @@
 namespace server::web_socket {
 
 class request_frame;
+class response_frame;
 
 class ws_session {
  public:
@@ -23,7 +24,16 @@ class ws_session {
   [[nodiscard]] auto& get_connection() noexcept { return _conn; }
   [[nodiscard]] const auto& get_connection() const noexcept { return _conn; }
 
+  [[nodiscard]] async_coro::task<void> send_data(const response_frame& frame, std::span<const std::byte> data);
+
+  [[nodiscard]] async_coro::task<void> begin_fragmented_send(const response_frame& frame, std::span<const std::byte> data);
+
+  [[nodiscard]] async_coro::task<void> continue_fragmented_send(const response_frame& frame, std::span<const std::byte> data, bool last_chunk);
+
   static std::string get_web_socket_key_result(std::string_view client_key);
+
+ private:
+  async_coro::task<void> send_data_impl(const response_frame& frame, std::span<const std::byte> data, bool last_chunk, uint8_t dec_code);
 
  private:
   server::socket_layer::connection _conn;

@@ -8,6 +8,7 @@
 #include <server/web_socket/ws_op_code.h>
 #include <server/web_socket/ws_session.h>
 
+#include <cstddef>
 #include <cstring>
 #include <memory>
 
@@ -204,19 +205,7 @@ async_coro::task<void> ws_session::run(const server::http1::request& handshake_r
       co_await frame_s.read_payload(_conn, frame_res->rest_data_in_buffer);
 
       response_frame resp{ws_op_code::pong};
-      auto res = co_await resp.send_data(_conn, std::span{frame_s.payload.get(), frame_s.payload_length});
-      if (!res) {
-        if (_conn.is_closed()) {
-          co_return;
-        }
-
-        web_socket::ws_error err{
-            ws_status_code::policy_violation,
-            res.error()};
-        co_await response_frame::send_error_and_close_connection(_conn, err);
-        co_return;
-      }
-
+      co_await this->send_data(resp, std::span{frame_s.payload.get(), frame_s.payload_length});
       continue;
     }
     if (frame_s.get_op_code() == ws_op_code::pong) {
@@ -290,6 +279,64 @@ async_coro::task<void> ws_session::run(const server::http1::request& handshake_r
   }
 
   co_return;
+}
+
+async_coro::task<void> ws_session::send_data(const response_frame& res_frame, std::span<const std::byte> data) {
+  return send_data_impl(res_frame, data, true, res_frame.get_op_code_dec());
+}
+
+async_coro::task<void> ws_session::begin_fragmented_send(const response_frame& res_frame, std::span<const std::byte> data) {
+  return send_data_impl(res_frame, data, false, res_frame.get_op_code_dec());
+}
+
+async_coro::task<void> ws_session::continue_fragmented_send(const response_frame& res_frame, std::span<const std::byte> data, bool last_chunk) {
+  return send_data_impl(res_frame, data, last_chunk, static_cast<uint8_t>(ws_op_code::continuation));
+}
+
+async_coro::task<void> ws_session::send_data_impl(const response_frame& res_frame, std::span<const std::byte> data, bool last_chunk, uint8_t dec_code) {
+  using data_buf_on_stack = std::array<std::byte, 1024UL * 4U>;  // NOLINT(*magic*)
+
+  union frame_union {  // NOLINT(*init*)
+    data_buf_on_stack buffer;
+    frame_base frame;
+  };
+
+  frame_union frame{.frame = {last_chunk,
+                              dec_code,
+                              res_frame.rsv1,
+                              res_frame.rsv2,
+                              res_frame.rsv3}};
+
+  std::span<std::byte> buffer_after_frame{frame.buffer};
+  buffer_after_frame = buffer_after_frame.subspan(sizeof(frame_base));
+
+  response_frame::fill_frame_size(buffer_after_frame, frame.frame, data.size());
+
+  const auto count_to_copy = std::min(buffer_after_frame.size(), data.size());
+  std::memcpy(buffer_after_frame.data(), data.data(), count_to_copy);
+
+  buffer_after_frame = buffer_after_frame.subspan(count_to_copy);
+  data = data.subspan(count_to_copy);
+
+  auto res = co_await _conn.write_buffer({frame.buffer.data(), buffer_after_frame.data()});
+  if (!res) {
+    if (!_conn.is_closed()) {
+      ws_error error{ws_status_code::policy_violation, res.error()};
+      co_await response_frame::send_error_and_close_connection(_conn, error);
+    }
+    co_return;
+  }
+
+  if (!data.empty()) {
+    res = co_await _conn.write_buffer(data);
+    if (!res) {
+      if (!_conn.is_closed()) {
+        ws_error error{ws_status_code::policy_violation, res.error()};
+        co_await response_frame::send_error_and_close_connection(_conn, error);
+      }
+      co_return;
+    }
+  }
 }
 
 }  // namespace server::web_socket
