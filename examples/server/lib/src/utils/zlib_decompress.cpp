@@ -39,6 +39,8 @@ class zlib_decompress::impl {
   z_stream stream;
 };
 
+zlib_decompress::zlib_decompress() noexcept = default;
+
 zlib_decompress::zlib_decompress(zlib::compression_method method, zlib::window_bits window_bits)
     : _impl(impl::make_impl(method, window_bits)) {  // NOLINT(*init)
 }
@@ -107,6 +109,30 @@ bool zlib_decompress::end_stream(std::span<const std::byte>& data_in, std::span<
   }
 
   return !_is_finished;
+}
+
+bool zlib_decompress::flush(std::span<const std::byte>& data_in, std::span<std::byte>& data_out) noexcept {
+  if (!_impl) {
+    return false;
+  }
+  ASYNC_CORO_ASSERT(!_is_finished);
+
+  auto& stream = _impl->stream;
+
+  stream.next_in = const_cast<Bytef*>(reinterpret_cast<const Bytef*>(data_in.data()));  // NOLINT(*cast*)
+  stream.avail_in = static_cast<uInt>(data_in.size());
+  stream.next_out = reinterpret_cast<Bytef*>(data_out.data());  // NOLINT(*cast*)
+  stream.avail_out = static_cast<uInt>(data_out.size());
+
+  const auto ret = ::inflate(&stream, Z_SYNC_FLUSH);
+  if (ret == Z_STREAM_ERROR) {
+    return false;
+  }
+
+  data_in = data_in.subspan(data_in.size() - stream.avail_in);
+  data_out = data_out.subspan(data_out.size() - stream.avail_out);
+
+  return stream.avail_out == 0;
 }
 
 zlib_decompress::~zlib_decompress() noexcept = default;

@@ -12,7 +12,7 @@ namespace server {
 
 class zlib_compress {
  public:
-  zlib_compress() noexcept = default;
+  zlib_compress() noexcept;
   explicit zlib_compress(zlib::compression_method method, zlib::compression_level compression_level = {}, zlib::window_bits window_bits = {}, zlib::memory_level memory_level = {});
   zlib_compress(const zlib_compress&) = delete;
   zlib_compress(zlib_compress&&) noexcept;
@@ -31,6 +31,11 @@ class zlib_compress {
   // Returns false when compression ends or error happened.
   // Returns true if more output buffer space needed. Should be called in a while loop then.
   bool end_stream(std::span<const std::byte>& data_in, std::span<std::byte>& data_out) noexcept;
+
+  // Modifies spans removing consumend or written data from them (shifts right beginning of spans).
+  // Returns false when compression ends or error happened.
+  // Returns true if more output buffer space needed. Should be called in a while loop then.
+  bool flush(std::span<const std::byte>& data_in, std::span<std::byte>& data_out) noexcept;
 
   [[nodiscard]] bool is_valid() const noexcept { return _impl != nullptr; }
 

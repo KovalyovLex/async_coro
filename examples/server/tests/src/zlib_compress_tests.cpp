@@ -74,7 +74,7 @@ std::vector<std::byte> decompress_data(const std::vector<std::byte>& input,
     const bool cnt = decompressor.end_stream(input_data, buffer_span);
     const auto produced = std::span{buffer.data(), buffer_span.data()};
     output.insert(output.end(), produced.begin(), produced.end());
-    if (!cnt) {
+    if (!cnt || produced.empty()) {
       break;
     }
   }
@@ -592,6 +592,161 @@ TEST(zlib_compress, incompatible_compression_method) {
 
     // We just verify it doesn't crash
     EXPECT_TRUE(true);
+  }
+}
+
+// Test flush behavior for compressor
+TEST(zlib_compress, flush_deflate) {
+  {
+    constexpr std::string_view text = "Flush test data for compressor";
+    const auto text_span = std::as_bytes(std::span{text});
+
+    zlib_compress compressor(zlib::compression_method::deflate);
+    ASSERT_TRUE(compressor.is_valid());
+
+    std::array<std::byte, 32> buffer{};  // intentionally small to force intermediate buffering
+    std::vector<std::byte> output;
+
+    std::span<const std::byte> input_span(text_span.begin(), text_span.end());
+
+    {
+      std::span<std::byte> buf_span(buffer);
+      // produce some output by updating stream with a small buffer
+      const auto ok = compressor.update_stream(input_span, buf_span);
+      EXPECT_TRUE(ok);
+      auto produced = std::span{buffer.data(), buf_span.data()};
+      output.insert(output.end(), produced.begin(), produced.end());
+    }
+
+    while (true) {
+      std::span<std::byte> buf_span(buffer);
+      const bool more = compressor.flush(input_span, buf_span);
+      auto produced = std::span{buffer.data(), buf_span.data()};
+      output.insert(output.end(), produced.begin(), produced.end());
+      if (!more) {
+        break;
+      }
+    }
+    EXPECT_EQ(input_span.size(), 0);
+
+    auto decompressed = decompress_data(output, zlib::compression_method::deflate);
+    std::string_view decompressed_str{reinterpret_cast<const char*>(decompressed.data()), decompressed.size()};
+    EXPECT_EQ(decompressed_str, text);
+  }
+}
+
+TEST(zlib_compress, flush_gzip) {
+  {
+    constexpr std::string_view text = "Flush test data for compressor gzip";
+    const auto text_span = std::as_bytes(std::span{text});
+
+    zlib_compress compressor(zlib::compression_method::gzip);
+    ASSERT_TRUE(compressor.is_valid());
+
+    std::array<std::byte, 32> buffer{};
+    std::vector<std::byte> output;
+
+    std::span<const std::byte> input_span(text_span.begin(), text_span.end());
+
+    {
+      std::span<std::byte> buf_span(buffer);
+      (void)compressor.update_stream(input_span, buf_span);
+      auto produced = std::span{buffer.data(), buf_span.data()};
+      output.insert(output.end(), produced.begin(), produced.end());
+    }
+
+    while (true) {
+      std::span<std::byte> buf_span(buffer);
+      const bool more = compressor.flush(input_span, buf_span);
+      auto produced = std::span{buffer.data(), buf_span.data()};
+      output.insert(output.end(), produced.begin(), produced.end());
+      if (!more) {
+        break;
+      }
+    }
+    EXPECT_EQ(input_span.size(), 0);
+
+    auto decompressed = decompress_data(output, zlib::compression_method::gzip);
+    std::string_view decompressed_str{reinterpret_cast<const char*>(decompressed.data()), decompressed.size()};
+    EXPECT_EQ(decompressed_str, text);
+  }
+}
+
+// Test flush behavior for decompressor
+TEST(zlib_compress, decompress_flush_deflate) {
+  {
+    // Prepare compressed data using helper
+    constexpr std::string_view text = "Data to test decompressor flush";
+    auto text_span = std::as_bytes(std::span{text});
+    std::vector<std::byte> input(text_span.begin(), text_span.end());
+    auto compressed = compress_data(input, zlib::compression_method::deflate, zlib::compression_level{});
+
+    zlib_decompress decompressor(zlib::compression_method::deflate);
+    ASSERT_TRUE(decompressor.is_valid());
+
+    std::array<std::byte, 32> buffer{};
+    std::vector<std::byte> output;
+
+    std::span<const std::byte> compressed_span(compressed);
+
+    {
+      std::span<std::byte> buf_span(buffer);
+      // produce some output
+      decompressor.update_stream(compressed_span, buf_span);
+      auto produced = std::span{buffer.data(), buf_span.data()};
+      output.insert(output.end(), produced.begin(), produced.end());
+    }
+
+    // Call flush to force any buffered decompressed bytes out
+    while (true) {
+      std::span<std::byte> buf_span(buffer);
+      const bool more = decompressor.flush(compressed_span, buf_span);
+      auto produced = std::span{buffer.data(), buf_span.data()};
+      output.insert(output.end(), produced.begin(), produced.end());
+      if (!more) {
+        break;
+      }
+    }
+    EXPECT_EQ(compressed_span.size(), 0);
+
+    EXPECT_EQ(output, input);
+  }
+}
+
+TEST(zlib_compress, decompress_flush_gzip) {
+  {
+    constexpr std::string_view text = "Data to test decompressor flush gzip";
+    auto text_span = std::as_bytes(std::span{text});
+    std::vector<std::byte> input(text_span.begin(), text_span.end());
+    auto compressed = compress_data(input, zlib::compression_method::gzip, zlib::compression_level{});
+
+    zlib_decompress decompressor(zlib::compression_method::gzip);
+    ASSERT_TRUE(decompressor.is_valid());
+
+    std::array<std::byte, 32> buffer{};
+    std::vector<std::byte> output;
+
+    std::span<const std::byte> compressed_span(compressed);
+
+    {
+      std::span<std::byte> buf_span(buffer);
+      decompressor.update_stream(compressed_span, buf_span);
+      auto produced = std::span{buffer.data(), buf_span.data()};
+      output.insert(output.end(), produced.begin(), produced.end());
+    }
+
+    while (true) {
+      std::span<std::byte> buf_span(buffer);
+      const bool more = decompressor.flush(compressed_span, buf_span);
+      auto produced = std::span{buffer.data(), buf_span.data()};
+      output.insert(output.end(), produced.begin(), produced.end());
+      if (!more) {
+        break;
+      }
+    }
+    EXPECT_EQ(compressed_span.size(), 0);
+
+    EXPECT_EQ(output, input);
   }
 }
 
