@@ -49,19 +49,19 @@ static expected<void, std::string> decompress_frame_payload(std::vector<std::byt
   }
 
   if (no_context_takeover) {
-    while (!decompressor.end_stream(compressed_data, data_out)) {
+    bool has_data = true;
+    while (has_data) {
+      has_data = decompressor.end_stream(compressed_data, data_out);
       std::span data_to_copy{tmp_buffer.data(), data_out.data()};
       output_buffer.insert(output_buffer.end(), data_to_copy.begin(), data_to_copy.end());
     }
   } else {
     std::array<std::byte, 4> flush_trailer{std::byte(0x00U), std::byte(0x00U), std::byte(0xFFU), std::byte(0xFFU)};  // NOLINT(*magic*)
     std::span<const std::byte> data{flush_trailer};
-    if (!decompressor.update_stream(data, data_out)) {
-      ASYNC_CORO_ASSERT(false && "Z_SYNC_FLUSH trailer add failed");  // NOLINT(*static-assert*)
-    }
-    ASYNC_CORO_ASSERT(data.empty());
 
-    while (!decompressor.flush(compressed_data, data_out)) {
+    bool has_data = true;
+    while (has_data) {
+      has_data = decompressor.flush(data, data_out);
       std::span data_to_copy{tmp_buffer.data(), data_out.data()};
       output_buffer.insert(output_buffer.end(), data_to_copy.begin(), data_to_copy.end());
     }
@@ -92,14 +92,18 @@ static expected<void, std::string> compress_frame_payload(std::vector<std::byte>
     // If this is the last frame, end the stream and append the suffix
     if (last_frame) {
       std::span<std::byte> data_out = tmp_buffer;
-      while (!compressor.end_stream(raw_data, data_out)) {
+      bool has_data = true;
+      while (has_data) {
+        has_data = compressor.end_stream(raw_data, data_out);
         std::span data_to_copy{tmp_buffer.data(), data_out.data()};
         output_buffer.insert(output_buffer.end(), data_to_copy.begin(), data_to_copy.end());
       }
     }
   } else {
     std::span<std::byte> data_out = tmp_buffer;
-    while (!compressor.flush(raw_data, data_out)) {
+    bool has_data = true;
+    while (has_data) {
+      has_data = compressor.flush(raw_data, data_out);
       std::span data_to_copy{tmp_buffer.data(), data_out.data()};
       output_buffer.insert(output_buffer.end(), data_to_copy.begin(), data_to_copy.end());
     }
@@ -263,7 +267,7 @@ async_coro::task<void> ws_session::run(const server::http1::request& handshake_r
       });
 
       if (_used_config) {
-        _compressor = zlib_compress{zlib::compression_method::deflate, zlib::compression_level{}, zlib::window_bits{_used_config->server_max_window_bits}};
+        _compressor = zlib_compress{zlib::compression_method::deflate, zlib::window_bits{_used_config->server_max_window_bits}};
         _decompressor = zlib_decompress{zlib::compression_method::deflate, zlib::window_bits{_used_config->client_max_window_bits}};
       }
     }

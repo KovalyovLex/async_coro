@@ -8,16 +8,18 @@
 namespace server::web_socket {
 
 // Default window bits for permessage-deflate (maximum compression window)
-constexpr uint8_t k_default_window_bits = 15U;  // NOLINT(*magic-numbers*)
+constexpr uint8_t k_default_window_bits = 15U;
+// Minimum supported windows bits value
+constexpr uint8_t k_min_window_bits = 9U;
 
 // Represents the configuration for permessage-deflate compression extension
 struct permessage_deflate_config {
   // Server's maximum window bits (for decompressing client messages)
-  // Valid range: 8-15, default: 15
+  // Valid range: 9-15, default: 15
   uint8_t server_max_window_bits = k_default_window_bits;
 
   // Client's maximum window bits (for compressing server messages)
-  // Valid range: 8-15, default: 15
+  // Valid range: 9-15, default: 15
   uint8_t client_max_window_bits = k_default_window_bits;
 
   // Whether server context takeover is negotiated (server reuses compression state across messages)

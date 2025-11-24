@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <server/utils/zlib_compress.h>
+#include <server/utils/zlib_compression_constants.h>
 #include <server/utils/zlib_decompress.h>
 
 #if SERVER_HAS_ZLIB
@@ -16,7 +17,7 @@ namespace server {
 std::vector<std::byte> compress_data(const std::vector<std::byte>& input,
                                      zlib::compression_method method,
                                      zlib::compression_level level) {
-  zlib_compress compressor(method, level);
+  zlib_compress compressor(method, zlib::window_bits{}, level);
   EXPECT_TRUE(compressor.is_valid());
 
   std::vector<std::byte> output;

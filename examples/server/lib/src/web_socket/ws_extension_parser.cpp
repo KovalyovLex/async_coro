@@ -154,7 +154,7 @@ std::optional<permessage_deflate_config> permessage_deflate_config::get_negotiat
   }
   permessage_deflate_config conf = client;
 
-  conf.server_max_window_bits = std::min(server.server_max_window_bits, client.server_max_window_bits);
+  conf.server_max_window_bits = std::max(std::min(server.server_max_window_bits, client.server_max_window_bits), k_min_window_bits);  // window bits 8 not supported
 
   if (server.server_no_context_takeover) {
     conf.server_no_context_takeover = true;
