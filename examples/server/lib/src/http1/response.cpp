@@ -171,7 +171,7 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
   // write headers
   for (auto &header : _headers) {
     PUSH_TO_BUF(header.first);
-    PUSH_TO_BUF(":");
+    PUSH_TO_BUF(": ");
     PUSH_TO_BUF(header.second);
     PUSH_TO_BUF("\r\n");
   }
