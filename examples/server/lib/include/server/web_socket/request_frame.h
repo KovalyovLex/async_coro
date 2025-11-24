@@ -22,12 +22,12 @@ namespace server::web_socket {
 // User friendly class for data frame. Stores payload - may be partitioned on frames
 class request_frame {
   constexpr explicit request_frame(const frame_begin& frame) noexcept
-      : is_final(frame.frame.is_final()),
+      : payload_length(frame.frame.get_payload_len()),
+        opcode_dec(frame.frame.get_opcode()),
+        is_final(frame.frame.is_final()),
         rsv1(frame.frame.is_rsv1()),
         rsv2(frame.frame.is_rsv2()),
-        rsv3(frame.frame.is_rsv3()),
-        opcode_dec(frame.frame.get_opcode()),
-        payload_length(frame.frame.get_payload_len()) {
+        rsv3(frame.frame.is_rsv3()) {
   }
 
  public:
@@ -66,7 +66,7 @@ auto request_frame::make_frame(const frame_begin& frame_beg, size_t buffer_len) 
 
   using result_t = expected<frame_result, web_socket::ws_error>;
 
-  frame_result res{.frame{frame_beg}};
+  frame_result res{.frame{frame_beg}, .rest_data_in_buffer = {}};
 
   if (buffer_len < 2) {
     return result_t{unexpect, ws_error{ws_status_code::policy_violation, "Too small buffer were read"}};
