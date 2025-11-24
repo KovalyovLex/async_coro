@@ -1,0 +1,339 @@
+#include "ws_test_client.h"
+
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <gtest/gtest.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include <cstring>
+#include <string_view>
+
+namespace {
+
+bool set_socket_timeouts(int sock, int timeout_ms) {  // NOLINT(*swappable*)
+  timeval tv{};
+  tv.tv_sec = timeout_ms / 1000;
+  tv.tv_usec = long(timeout_ms % 1000) * 1000;
+  if (::setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) != 0) {
+    return false;
+  }
+  if (::setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) != 0) {
+    return false;
+  }
+  return true;
+}
+
+ssize_t recv_all_timeout(server::socket_layer::connection_id sock, void* buf, size_t len) {
+  ssize_t total = 0;
+  while (total < static_cast<ssize_t>(len)) {
+    ssize_t r = ::recv(sock.get_platform_id(), reinterpret_cast<char*>(buf) + total, len - total, 0);
+    if (r <= 0) {
+      return r;
+    }
+    total += r;
+  }
+  return total;
+}
+
+void on_error(const std::string& error_str) {
+  GTEST_FAIL() << error_str;
+#if ASYNC_CORO_WITH_EXCEPTIONS
+  throw std::runtime_error(error_str);
+#endif
+}
+
+void add_length_and_mask(std::vector<std::byte>& frame, size_t payload_len, std::array<std::byte, 4>& mask) {
+  // Second byte: mask bit + payload length
+  if (payload_len <= 125) {
+    frame.push_back(std::byte(static_cast<unsigned char>(0x80U | (payload_len & 0x7FU))));  // Mask bit + length
+  } else if (payload_len <= 0xFFFF) {
+    frame.push_back(std::byte(0xFE));  // Mask bit + 126 (2-byte length follows)
+    frame.push_back(std::byte(static_cast<unsigned char>((payload_len >> 8U) & 0xFFU)));
+    frame.push_back(std::byte(static_cast<unsigned char>(payload_len & 0xFFU)));
+  } else {
+    frame.push_back(std::byte(0xFF));  // Mask bit + 127 (8-byte length follows)
+    for (int i = 7; i >= 0; --i) {
+      frame.push_back(std::byte(static_cast<unsigned char>((payload_len >> (i * 8U)) & 0xFFU)));
+    }
+  }
+
+  // Generate 4-byte random mask
+  for (auto& b : mask) {
+    b = std::byte(static_cast<unsigned char>(std::rand() & 0xFFU));  // NOLINT(*array-index*, *signed*)
+  }
+
+  // Add 4-byte random mask
+  for (auto b : mask) {
+    frame.push_back(b);
+  }
+}
+
+std::vector<std::byte> generate_frame_impl(std::vector<std::byte>& frame, uint8_t opcode, std::span<const std::byte> payload,
+                                           bool final) {
+  // First byte: FIN + RSV + opcode
+  auto byte1 = static_cast<unsigned char>(opcode & 0x0FU);
+  if (final) {
+    byte1 = static_cast<unsigned char>(byte1 | 0x80U);  // Set FIN bit
+  }
+  frame.push_back(std::byte(byte1));
+
+  // Add length and mask
+  std::array<std::byte, 4> mask{};
+  add_length_and_mask(frame, payload.size(), mask);
+
+  for (size_t i = 0; i < payload.size(); ++i) {
+    frame.push_back(payload[i] ^ mask[i % 4]);  // NOLINT(*array-index*)
+  }
+
+  return frame;
+}
+
+}  // namespace
+
+server::socket_layer::connection_id ws_test_client::connect_blocking(const std::string& host, uint16_t port, int timeout_ms) {  // NOLINT(*swappable*)
+
+  // we use blocking connect and rely on connect retry from caller
+  auto sock = ::socket(AF_INET, SOCK_STREAM, 0);
+  if (sock < 0) {
+    return server::socket_layer::invalid_connection;
+  }
+
+  sockaddr_in sa{};
+  sa.sin_family = AF_INET;
+  sa.sin_port = ::htons(port);
+  if (::inet_pton(AF_INET, host.c_str(), &sa.sin_addr) != 1) {
+    ::close(sock);
+    return server::socket_layer::invalid_connection;
+  }
+
+  if (::connect(sock, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) != 0) {
+    ::close(sock);
+    return server::socket_layer::invalid_connection;
+  }
+
+  // set recv/send timeouts
+  set_socket_timeouts(sock, timeout_ms > 0 ? timeout_ms : 2000);
+
+  return server::socket_layer::connection_id{sock};
+}
+
+ssize_t ws_test_client::send_all(server::socket_layer::connection_id sock, const void* data, size_t len) {
+  size_t sent = 0;
+  while (sent < len) {
+    ssize_t s = ::send(sock.get_platform_id(), reinterpret_cast<const char*>(data) + sent, len - sent, 0);
+    if (s <= 0) {
+      return -1;
+    }
+    sent += static_cast<size_t>(s);
+  }
+  return static_cast<ssize_t>(sent);
+}
+
+std::string ws_test_client::recv_http_response(server::socket_layer::connection_id sock) {
+  // simple read until CRLFCRLF
+  std::string out;
+  std::array<char, 1024> buf;  // NOLINT(*init)
+  while (true) {
+    ssize_t r = ::recv(sock.get_platform_id(), buf.data(), buf.size(), 0);
+    if (r <= 0) {
+      break;
+    }
+    out.append(buf.data(), buf.data() + r);
+    if (out.find("\r\n\r\n") != std::string::npos) {
+      break;
+    }
+  }
+  return out;
+}
+
+std::string ws_test_client::generate_handshake_request(const std::string& path, const std::string& host, const std::string& key, const std::string& protocol) {  // NOLINT(*swappable*)
+  std::string sec_key = key;
+  if (sec_key.empty()) {
+    sec_key = "dGhlIHNhbXBsZSBub25jZQ==";  // default sample
+  }
+
+  std::string req = "GET ";
+  req += path;
+  req += " HTTP/1.1\r\n";
+  req += "Host: ";
+  req += host;
+  req += "\r\n";
+  req += "Upgrade: websocket\r\n";
+  req += "Connection: Upgrade\r\n";
+  req += "Sec-WebSocket-Key: ";
+  req += sec_key;
+  req += "\r\n";
+  req += "Sec-WebSocket-Version: 13\r\n";
+  if (!protocol.empty()) {
+    req += "Sec-WebSocket-Protocol: ";
+    req += protocol;
+    req += "\r\n";
+  }
+  req += "\r\n";
+  return req;
+}
+
+ws_parsed_frame ws_test_client::recv_frame(server::socket_layer::connection_id sock) {
+  ws_parsed_frame res{};
+  std::array<uint8_t, 2> header{};
+  ssize_t r = ::recv(sock.get_platform_id(), header.data(), header.size(), 0);
+  if (r <= 0) {
+    on_error("recv failed or connection closed");
+  }
+
+  res.fin = (header[0] & 0x80U) != 0;
+  res.opcode = header[0] & 0x0FU;
+
+  bool mask = (header[1] & 0x80U) != 0;
+  uint64_t len = static_cast<uint8_t>(header[1] & 0x7FU);
+
+  if (len == 126) {
+    std::array<uint8_t, 2> ext{};
+    r = recv_all_timeout(sock, ext.data(), ext.size());
+    if (r <= 0) {
+      on_error("recv failed");
+    }
+    len = (static_cast<uint64_t>(ext[0]) << 8U) | static_cast<uint64_t>(ext[1]);
+  } else if (len == 127) {
+    std::array<uint8_t, 8> ext{};
+    r = recv_all_timeout(sock, ext.data(), ext.size());
+    if (r <= 0) {
+      on_error("recv failed");
+    }
+    len = 0;
+    for (int i = 0; i < 8; ++i) {
+      len = (len << 8U) | ext[i];  // NOLINT(*array-index*)
+    }
+  }
+
+  std::array<uint8_t, 4> mask_key = {};
+  if (mask) {
+    r = recv_all_timeout(sock, mask_key.data(), mask_key.size());
+    if (r <= 0) {
+      on_error("recv failed");
+    }
+  }
+
+  res.payload.resize(len);
+  if (len > 0) {
+    r = recv_all_timeout(sock, res.payload.data(), len);
+    if (r <= 0) {
+      on_error("recv failed");
+    }
+  }
+
+  if (mask) {
+    for (size_t i = 0; i < len; ++i) {
+      reinterpret_cast<uint8_t*>(res.payload.data())[i] ^= mask_key[i % 4];  // NOLINT(*array-index*)
+    }
+  }
+
+  return res;
+}
+std::vector<std::byte> ws_test_client::generate_close_frame(uint16_t code, std::string_view reason) {
+  std::vector<std::byte> frame;
+
+  // FIN + opcode (close = 0x8)
+  frame.push_back(std::byte(0x88));
+
+  // Payload length + mask
+  size_t payload_len = 2 + reason.size();  // 2 bytes for code
+  std::array<std::byte, 4> mask{};
+  add_length_and_mask(frame, payload_len, mask);
+
+  // Add code (big endian)
+  frame.push_back(std::byte(static_cast<unsigned char>((code >> 8U) & 0xFFU)));  // NOLINT(*signed-bitwise)
+  frame.push_back(std::byte(static_cast<unsigned char>(code & 0xFFU)));          // NOLINT(*signed-bitwise)
+
+  // Add reason
+  for (size_t i = 0; i < reason.size(); ++i) {
+    frame.push_back(std::byte(reason[i]) ^ mask[i % 4]);  // NOLINT(*array-index*)
+  }
+
+  return frame;
+}
+
+std::vector<std::byte> ws_test_client::generate_unmasked_frame(std::string_view text) {
+  std::vector<std::byte> frame;
+
+  // FIN + opcode (text = 0x1)
+  frame.push_back(std::byte(0x81));
+
+  // Add length without mask
+  size_t len = text.size();
+  if (len <= 125) {
+    frame.push_back(std::byte(static_cast<unsigned char>(len & 0x7FU)));  // No mask bit  // NOLINT(*signed-bitwise)
+  } else if (len <= 0xFFFF) {
+    frame.push_back(std::byte(0x7E));                                             // 2-byte length, no mask
+    frame.push_back(std::byte(static_cast<unsigned char>((len >> 8U) & 0xFFU)));  // NOLINT(*signed-bitwise)
+    frame.push_back(std::byte(static_cast<unsigned char>(len & 0xFFU)));          // NOLINT(*signed-bitwise)
+  }
+
+  // Add text without masking
+  for (char c : text) {
+    frame.push_back(std::byte(c));
+  }
+
+  return frame;
+}
+std::vector<std::byte> ws_test_client::generate_wrong_size_frame(std::string_view text, uint16_t declared_size) {
+  std::vector<std::byte> frame;
+
+  // FIN + opcode (text = 0x1)
+  frame.push_back(std::byte(0x81));
+
+  // Add declared length with mask
+  frame.push_back(std::byte(0xFE));                                                       // 2-byte length, with mask
+  frame.push_back(std::byte(static_cast<unsigned char>((declared_size >> 8U) & 0xFFU)));  // NOLINT(*signed-bitwise)
+  frame.push_back(std::byte(static_cast<unsigned char>(declared_size & 0xFFU)));          // NOLINT(*signed-bitwise)
+
+  // Add mask
+  std::array<std::byte, 4> mask{std::byte(0), std::byte(0), std::byte(0), std::byte(0)};
+  frame.insert(frame.end(), mask.begin(), mask.end());
+
+  // Add actual text (which is shorter/longer than declared)
+  for (char c : text) {
+    frame.push_back(std::byte(c));
+  }
+
+  return frame;
+}
+
+uint16_t ws_test_client::pick_free_port() {
+  int sock = ::socket(AF_INET, SOCK_STREAM, 0);
+  if (sock < 0) {
+    return 0;
+  }
+  sockaddr_in addr{};
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  addr.sin_port = 0;  // ephemeral
+  if (::bind(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+    ::close(sock);
+    return 0;
+  }
+  sockaddr_in sa{};
+  socklen_t len = sizeof(sa);
+  if (::getsockname(sock, reinterpret_cast<sockaddr*>(&sa), &len) != 0) {
+    ::close(sock);
+    return 0;
+  }
+  uint16_t port = ntohs(sa.sin_port);
+  ::close(sock);
+  return port;
+}
+
+std::vector<std::byte> ws_test_client::generate_frame(uint8_t opcode, std::string_view text, bool final) {
+  std::vector<std::byte> frame_bytes;
+  return generate_frame_impl(frame_bytes, opcode, std::span<const std::byte>{reinterpret_cast<const std::byte*>(text.data()),  // NOLINT(*reinterpret-cast)
+                                                                             text.size()},
+                             final);
+}
+
+std::vector<std::byte> ws_test_client::generate_frame(uint8_t opcode, std::span<const std::byte> data, bool final) {
+  std::vector<std::byte> frame_bytes;
+  return generate_frame_impl(frame_bytes, opcode, data, final);
+}
