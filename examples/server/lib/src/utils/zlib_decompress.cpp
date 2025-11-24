@@ -78,40 +78,7 @@ bool zlib_decompress::update_stream(std::span<const std::byte>& data_in, std::sp
   return true;
 }
 
-bool zlib_decompress::end_stream(std::span<const std::byte>& data_in, std::span<std::byte>& data_out) noexcept {
-  if (!_impl) {
-    return false;
-  }
-  ASYNC_CORO_ASSERT(!_is_finished);
-
-  auto& stream = _impl->stream;
-
-  stream.next_in = const_cast<Bytef*>(reinterpret_cast<const Bytef*>(data_in.data()));  // NOLINT(*cast*)
-  stream.avail_in = static_cast<uInt>(data_in.size());
-  stream.next_out = reinterpret_cast<Bytef*>(data_out.data());  // NOLINT(*cast*)
-  stream.avail_out = static_cast<uInt>(data_out.size());
-
-  const auto ret = ::inflate(&stream, Z_FINISH);
-  if (ret == Z_STREAM_ERROR) {
-    return false;
-  }
-
-  data_in = data_in.subspan(data_in.size() - stream.avail_in);
-  data_out = data_out.subspan(data_out.size() - stream.avail_out);
-
-  if (ret == Z_BUF_ERROR && stream.total_in == 0) {
-    // empty stream
-    _is_finished = true;
-  }
-
-  if (ret == Z_STREAM_END) {
-    _is_finished = true;
-  }
-
-  return !_is_finished;
-}
-
-bool zlib_decompress::flush(std::span<const std::byte>& data_in, std::span<std::byte>& data_out) noexcept {
+bool zlib_decompress::flush_impl(std::span<const std::byte>& data_in, std::span<std::byte>& data_out, bool& finished) noexcept {
   if (!_impl) {
     return false;
   }
@@ -129,10 +96,25 @@ bool zlib_decompress::flush(std::span<const std::byte>& data_in, std::span<std::
     return false;
   }
 
+  if ((ret == Z_STREAM_END) ||
+      ((ret == Z_BUF_ERROR || ret == Z_OK) && stream.avail_in == 0 && stream.avail_out == data_out.size() && stream.avail_out > 0)) {
+    // stream finished
+    finished = true;
+  }
+
   data_in = data_in.subspan(data_in.size() - stream.avail_in);
   data_out = data_out.subspan(data_out.size() - stream.avail_out);
 
-  return stream.avail_out == 0;
+  return !finished;
+}
+
+bool zlib_decompress::end_stream(std::span<const std::byte>& data_in, std::span<std::byte>& data_out) noexcept {
+  return flush_impl(data_in, data_out, _is_finished);
+}
+
+bool zlib_decompress::flush(std::span<const std::byte>& data_in, std::span<std::byte>& data_out) noexcept {
+  bool finished = false;
+  return flush_impl(data_in, data_out, finished);
 }
 
 zlib_decompress::~zlib_decompress() noexcept = default;

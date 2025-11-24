@@ -43,6 +43,9 @@ class zlib_decompress {
   explicit operator bool() const noexcept { return _impl != nullptr; }
 
  private:
+  bool flush_impl(std::span<const std::byte>& data_in, std::span<std::byte>& data_out, bool& finished) noexcept;
+
+ private:
   class impl;
   std::unique_ptr<impl> _impl;
   bool _is_finished = false;

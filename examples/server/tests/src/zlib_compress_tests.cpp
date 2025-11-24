@@ -74,7 +74,7 @@ std::vector<std::byte> decompress_data(const std::vector<std::byte>& input,
     const bool cnt = decompressor.end_stream(input_data, buffer_span);
     const auto produced = std::span{buffer.data(), buffer_span.data()};
     output.insert(output.end(), produced.begin(), produced.end());
-    if (!cnt || produced.empty()) {
+    if (!cnt) {
       break;
     }
   }
