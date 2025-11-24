@@ -32,7 +32,7 @@ extern "C" void tcp_server_signal_handler(int signal) {
   } else if (signal == SIGTERM) {
     prev_handler = server::prev_handler_term.load(std::memory_order::acquire);
   } else {
-    ASYNC_CORO_ASSERT(false && "Unsupported signal");
+    ASYNC_CORO_ASSERT(false && "Unsupported signal");  // NOLINT(*static-assert)
   }
 
   if (auto* serv = server::global_server.load(std::memory_order::acquire)) {

@@ -1,14 +1,13 @@
 #pragma once
 
+#include <server/socket_layer/connection_id.h>
+
 #include <cstdint>
 #include <span>
 #include <string>
-
-#include "connection_id.h"
+#include <string_view>
 
 namespace server::socket_layer {
-
-class reactor;
 
 // Creates wrapper on TCP socket for listening connections
 class listener {

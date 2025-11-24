@@ -1,9 +1,14 @@
+#include <async_coro/execution_system.h>
 #include <server/http1/http_server.h>
 #include <server/http1/session.h>
 
 namespace server::http1 {
 
-http_server::http_server() = default;
+http_server::http_server()
+    : _scheduler(std::make_unique<async_coro::execution_system>(
+          async_coro::execution_system_config{
+              .worker_configs = {{"worker1"}},
+              .main_thread_allowed_tasks = async_coro::execution_thread_mask{}})) {}
 
 http_server::http_server(async_coro::i_execution_system::ptr execution_system) noexcept
     : _scheduler(std::move(execution_system)) {}
