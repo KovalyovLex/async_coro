@@ -2,9 +2,15 @@ cmake_minimum_required(VERSION 3.16)
 
 option(SERVER_ENABLE_TLS "Enable TLS support via OpenSSL" ON)
 option(SERVER_ENABLE_DEFLATE_GZIP "Enable deflate/gzip compression for content" ON)
+option(SERVER_ENABLE_BROTLI "Enable brotli compression for content" OFF)
+option(SERVER_ENABLE_ZSTD "Enable zstd compression for content" OFF)
 option(SERVER_ENABLE_HTTP2 "Enable HTTP/2 support" OFF)
 
 include(FetchContent)
+
+if (NOT DEFINED TRACY_ENABLE)
+    set(TRACY_ENABLE OFF CACHE BOOL "Disable tracy by default")
+endif()
 
 # setup tracy
 FetchContent_Declare(
@@ -37,7 +43,10 @@ endif()
 
 if(SERVER_ENABLE_TLS)
     find_package(OpenSSL REQUIRED)
-    target_link_libraries(server_lib PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+    target_link_libraries(server_lib PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+    target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_OPENSSL=1)
+else()
+    target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_OPENSSL=0)
 endif()
 
 if(SERVER_ENABLE_DEFLATE_GZIP)
@@ -47,4 +56,62 @@ if(SERVER_ENABLE_DEFLATE_GZIP)
     target_link_libraries(server_lib PUBLIC ZLIB::ZLIB)
 else()
     target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_DEFLATE_GZIP=0)
+endif()
+
+if(SERVER_ENABLE_BROTLI)
+    target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_BROTLI=1)
+
+    find_package(brotli OPTIONAL)
+    set(brotli_targets brotli::brotlienc brotli::brotlidec)
+
+    if (NOT TARGET brotli::brotlienc)
+        if (NOT DEFINED BROTLI_BUILD_TOOLS)
+            set(BROTLI_BUILD_TOOLS OFF CACHE BOOL "Disable brotli tools build")
+        endif()
+
+        FetchContent_Declare(
+            brotli
+            GIT_REPOSITORY git@github.com:google/brotli.git
+            GIT_TAG v1.2.0
+            GIT_SHALLOW TRUE
+            GIT_PROGRESS TRUE
+        )
+
+        set(OLD_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+        set(BUILD_SHARED_LIBS OFF)
+        
+        FetchContent_MakeAvailable(brotli)
+        
+        set(BUILD_SHARED_LIBS ${OLD_BUILD_SHARED_LIBS})
+
+        set(brotli_targets brotlienc brotlidec)
+    endif()
+
+    target_link_libraries(server_lib PUBLIC ${brotli_targets})
+else()
+    target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_BROTLI=0)
+endif()
+
+if(SERVER_ENABLE_ZSTD)
+    target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_ZSTD=1)
+
+    find_package(zstd OPTIONAL)
+    set(zlib_targets zstd::libzstd)
+
+    if (NOT TARGET zstd::libzstd)
+        FetchContent_Declare(
+            zstd
+            GIT_REPOSITORY git@github.com:facebook/zstd.git
+            GIT_TAG v1.5.7
+            GIT_SHALLOW TRUE
+            GIT_PROGRESS TRUE
+        )
+        FetchContent_MakeAvailable(zstd)
+
+        set(zlib_targets zstd)
+    endif()
+
+    target_link_libraries(server_lib PUBLIC ${zlib_targets})
+else()
+    target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_ZSTD=0)
 endif()

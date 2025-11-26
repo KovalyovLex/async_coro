@@ -1,7 +1,10 @@
 #include <async_coro/warnings.h>
 #include <gtest/gtest.h>
-#include <openssl/sha.h>
 #include <server/utils/sha1.h>
+
+#if SERVER_ENABLE_OPENSSL
+#include <openssl/sha.h>
+#endif
 
 #include <cstring>
 #include <string_view>
@@ -109,6 +112,7 @@ TEST(sha1_hash, test_slow) {
   EXPECT_EQ(checksum.get_value_str(), "7789f0c9ef7bfc40d93311143dfbe69e2017f592") << "test 16,777,216 repititions of abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno";
 }
 
+#if SERVER_ENABLE_OPENSSL
 ASYNC_CORO_WARNINGS_PUSH
 ASYNC_CORO_WARNINGS_CLANG_IGNORE("deprecated-declarations")
 
@@ -134,6 +138,7 @@ TEST(sha1_hash, test_slow_open_ssl) {
 }
 
 ASYNC_CORO_WARNINGS_POP
+#endif
 
 /*
  * Other tests
