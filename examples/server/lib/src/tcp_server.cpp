@@ -54,7 +54,7 @@ struct tcp_server::reactor_storage {
 
 tcp_server::tcp_server() = default;
 
-void tcp_server::serve(const tcp_server_config& conf, std::optional<ssl_config> ssl_conf, connection_callback_t on_connected) {
+void tcp_server::serve(const tcp_server_config& conf, std::optional<ssl_config> ssl_conf, connection_callback_t on_connected, listener_connection_opened_t on_listener_open) {
   ASYNC_CORO_ASSERT(_is_serving.load(std::memory_order::relaxed) == false);
   ASYNC_CORO_ASSERT(_reactors == nullptr);
 
@@ -102,6 +102,11 @@ void tcp_server::serve(const tcp_server_config& conf, std::optional<ssl_config> 
 
     auto listener_connection = socket_layer::connection{listener.get_connection(), listener_reactor, {}};
     listener_connection.check_subscribed();
+
+    if (on_listener_open) {
+      auto addr = listener.get_address();
+      on_listener_open(std::move(addr.first), addr.second);
+    }
 
     while (!_is_terminating.load(std::memory_order::relaxed)) {
       const auto result = listener.process_loop(nullptr, nullptr);

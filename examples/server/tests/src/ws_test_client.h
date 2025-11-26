@@ -66,8 +66,6 @@ class ws_test_client {
 
   static ws_parsed_frame recv_frame(server::socket_layer::connection_id sock);
 
-  static uint16_t pick_free_port();
-
  private:
   static std::vector<std::byte> generate_frame(uint8_t opcode, std::string_view text, bool final);
 

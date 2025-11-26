@@ -45,6 +45,8 @@ class listener {
 
   void reset_opened_connection() { _opened_connection = invalid_connection; }
 
+  std::pair<std::string, uint16_t> get_address();
+
  private:
   connection_id _opened_connection = invalid_connection;
 };

@@ -315,6 +315,25 @@ listener::connection_result listener::process_loop(std::span<char>* host_name_bu
   }
 }
 
+std::pair<std::string, uint16_t> listener::get_address() {
+  if (_opened_connection == invalid_connection) {
+    return {};
+  }
+
+  sockaddr_in sock_addr{};
+  socklen_t len = sizeof(sock_addr);
+  if (::getsockname(_opened_connection.get_platform_id(), reinterpret_cast<sockaddr*>(&sock_addr), &len) != 0) {  // NOLINT(*reinterpret-cast*)
+    return {};
+  }
+  uint16_t port = ::ntohs(sock_addr.sin_port);
+
+  std::array<char, INET_ADDRSTRLEN> str{};
+
+  ::inet_ntop(AF_INET, &(sock_addr.sin_addr), str.data(), str.size());
+
+  return {std::string{str.data()}, port};
+}
+
 listener::~listener() {
   if (_opened_connection != invalid_connection) {
     close_socket(_opened_connection.get_platform_id());

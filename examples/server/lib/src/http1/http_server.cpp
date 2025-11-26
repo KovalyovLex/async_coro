@@ -13,14 +13,16 @@ http_server::http_server()
 http_server::http_server(async_coro::i_execution_system::ptr execution_system) noexcept
     : _scheduler(std::move(execution_system)) {}
 
-void http_server::serve(const tcp_server_config& conf, std::optional<ssl_config> ssl_conf) {
-  _server.serve(conf, std::move(ssl_conf), [this](auto conn) {
-    _scheduler.start_task(
-        [ses = session{std::move(conn), _router}]() mutable {
-          return ses.run();
-        },
-        async_coro::execution_queues::worker);
-  });
+void http_server::serve(const tcp_server_config& conf, std::optional<ssl_config> ssl_conf, listener_connection_opened_t on_listener_open) {
+  _server.serve(
+      conf,
+      std::move(ssl_conf),
+      [this](auto conn) { _scheduler.start_task(
+                              [ses = session{std::move(conn), _router}]() mutable {
+                                return ses.run();
+                              },
+                              async_coro::execution_queues::worker); },
+      on_listener_open);
 }
 
 }  // namespace server::http1

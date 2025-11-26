@@ -14,6 +14,7 @@
 #include <server/web_socket/ws_session.h>
 
 #include <functional>
+#include <semaphore>
 #include <string>
 #include <thread>
 
@@ -22,9 +23,6 @@
 class web_socket_integration_tests : public ::testing::Test {
  protected:
   void SetUp() override {
-    // pick ephemeral port by binding to 0
-    port = ws_test_client::pick_free_port();
-
     // register route that mirrors example server behavior
     server.get_router().add_advanced_route(server::http1::http_method::GET, "/chat", [this](const auto& request, server::http1::session& http_session) -> async_coro::task<> {  // NOLINT(*reference*)
       using namespace server::web_socket;
@@ -60,28 +58,22 @@ class web_socket_integration_tests : public ::testing::Test {
       });
     });
 
-    server_thread = std::thread([this] {
+    std::binary_semaphore sem{0};
+
+    server_thread = std::thread([this, &sem] {
       server::tcp_server_config conf;
       conf.ip_address = "127.0.0.1";
-      conf.port = port;
+      conf.port = 0;
       conf.num_reactors = 1;
-      server.serve(conf, {});
+
+      server.serve(conf, {}, [this, &sem](const auto&, auto port) {
+        this->port = port;
+        sem.release();
+      });
     });
 
     // wait for server to listen (retry connect)
-    auto start = std::chrono::steady_clock::now();
-    const auto deadline = start + std::chrono::seconds(3);
-    bool ok = false;
-    while (std::chrono::steady_clock::now() < deadline) {
-      auto s = ws_test_client::connect_blocking("127.0.0.1", port, 200);
-      if (s != server::socket_layer::invalid_connection) {
-        server::socket_layer::close_socket(s.get_platform_id());
-        ok = true;
-        break;
-      }
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
-    ASSERT_TRUE(ok) << "Server did not start listening in time";
+    ASSERT_TRUE(sem.try_acquire_for(std::chrono::seconds(3))) << "Server did not start listening in time";
   }
 
   void TearDown() override {
@@ -107,6 +99,7 @@ class web_socket_integration_tests : public ::testing::Test {
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
+    ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
   }
 
  protected:

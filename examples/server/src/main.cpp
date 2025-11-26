@@ -10,15 +10,14 @@
 #include <server/tcp_server_config.h>
 #include <server/web_socket/request_frame.h>
 #include <server/web_socket/response_frame.h>
+#include <server/web_socket/ws_op_code.h>
 #include <server/web_socket/ws_session.h>
 
 #include <csignal>
-#include <cstddef>
+#include <iostream>
 #include <memory>
 #include <span>
 #include <tracy/Tracy.hpp>
-
-#include "server/web_socket/ws_op_code.h"
 
 int main(int argc, char** argv) {
   TracySetProgramName("Simple server");
@@ -99,7 +98,9 @@ int main(int argc, char** argv) {
 
   server.get_router().add_advanced_route(server::http1::http_method::GET, "/chat", web_socket_communication);
 
-  server.serve(conf, {});
+  server.serve(conf, {}, [](const auto& addr, auto port) {
+    std::cout << "Server started listening on: " << addr << ":" << port;
+  });
 
   return 0;
 }

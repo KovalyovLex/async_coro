@@ -302,30 +302,6 @@ std::vector<std::byte> ws_test_client::generate_wrong_size_frame(std::string_vie
   return frame;
 }
 
-uint16_t ws_test_client::pick_free_port() {
-  int sock = ::socket(AF_INET, SOCK_STREAM, 0);
-  if (sock < 0) {
-    return 0;
-  }
-  sockaddr_in addr{};
-  addr.sin_family = AF_INET;
-  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-  addr.sin_port = 0;  // ephemeral
-  if (::bind(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
-    ::close(sock);
-    return 0;
-  }
-  sockaddr_in sa{};
-  socklen_t len = sizeof(sa);
-  if (::getsockname(sock, reinterpret_cast<sockaddr*>(&sa), &len) != 0) {
-    ::close(sock);
-    return 0;
-  }
-  uint16_t port = ntohs(sa.sin_port);
-  ::close(sock);
-  return port;
-}
-
 std::vector<std::byte> ws_test_client::generate_frame(uint8_t opcode, std::string_view text, bool final) {
   std::vector<std::byte> frame_bytes;
   return generate_frame_impl(frame_bytes, opcode, std::span<const std::byte>{reinterpret_cast<const std::byte*>(text.data()),  // NOLINT(*reinterpret-cast)

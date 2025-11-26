@@ -1,8 +1,20 @@
+#include <gtest/gtest.h>
+
+#include <string_view>
+
 #include "web_socket_integration_fixture.h"
 
 // Test fixture for permessage-deflate compression tests
 class web_socket_deflate_tests : public web_socket_integration_tests {
  protected:
+  struct compressor_config {
+    server::zlib::window_bits server_window{};
+    server::zlib::window_bits client_window{};
+
+    bool server_no_takeover = false;
+    bool client_no_takeover = false;
+  };
+
   void SetUp() override {
     using namespace server::web_socket;
     server.get_router().add_advanced_route(server::http1::http_method::GET, "/chat-deflate",
@@ -35,7 +47,7 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
   }
 
   // Helper: perform handshake with extension string
-  static std::string do_handshake(server::socket_layer::connection_id conn, const std::string& ext) {
+  static std::string do_handshake(server::socket_layer::connection_id conn, std::string_view ext) {
     std::string handshake =
         "GET /chat-deflate HTTP/1.1\r\n"
         "Host: 127.0.0.1\r\n"
@@ -44,7 +56,9 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
         "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
         "Sec-WebSocket-Version: 13\r\n";
     if (!ext.empty()) {
-      handshake += "Sec-WebSocket-Extensions: " + ext + "\r\n";
+      handshake += "Sec-WebSocket-Extensions: ";
+      handshake += ext;
+      handshake += "\r\n";
     }
     handshake += "\r\n";
     ws_test_client::send_all(conn, handshake.data(), handshake.size());
@@ -52,10 +66,11 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
   }
 
   // Helper: compress payload using zlib (permessage-deflate)
-  std::vector<std::byte> compress_payload(std::string_view payload, bool with_takeover) {
+  std::vector<std::byte> compress_payload(std::string_view payload, const compressor_config& conf) {
     if (!compressor) {
-      compressor = server::zlib_compress{server::zlib::compression_method::deflate};
+      compressor = server::zlib_compress{server::zlib::compression_method::deflate, conf.client_window};
     }
+
     std::vector<std::byte> compressed_payload;
     compressed_payload.reserve(payload.size() * 2);
     std::span<const std::byte> data_in{reinterpret_cast<const std::byte*>(payload.data()), payload.size()};
@@ -68,7 +83,7 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
       compressed_payload.insert(compressed_payload.end(), data_to_copy.begin(), data_to_copy.end());
     }
 
-    if (with_takeover) {
+    if (!conf.client_no_takeover) {
       while (true) {
         std::span<std::byte> data_out = tmp_buffer;
         bool has_more = compressor.flush(data_in, data_out);
@@ -80,6 +95,16 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
       }
 
       EXPECT_GT(compressed_payload.size(), 4);
+      if (compressed_payload.size() < 4) {
+        return compressed_payload;
+      }
+
+      // check flush tail
+      EXPECT_EQ(compressed_payload[compressed_payload.size() - 4], std::byte(0x00U));
+      EXPECT_EQ(compressed_payload[compressed_payload.size() - 3], std::byte(0x00U));
+      EXPECT_EQ(compressed_payload[compressed_payload.size() - 2], std::byte(0xFFU));
+      EXPECT_EQ(compressed_payload[compressed_payload.size() - 1], std::byte(0xFFU));
+
       for (int i = 0; i < 4; i++) {
         compressed_payload.pop_back();
       }
@@ -123,9 +148,9 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
   }
 
   // Helper: decompress payload using zlib (permessage-deflate)
-  std::string decompress_payload(const std::vector<std::byte>& payload, bool with_takeover) {
+  std::string decompress_payload(const std::vector<std::byte>& payload, const compressor_config& conf) {
     if (!decompressor) {
-      decompressor = server::zlib_decompress{server::zlib::compression_method::deflate};
+      decompressor = server::zlib_decompress{server::zlib::compression_method::deflate, conf.server_window};
     }
 
     std::vector<std::byte> decompressed_response;
@@ -134,7 +159,7 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
     std::array<std::byte, 256> tmp_buffer{};
 
     std::vector<std::byte> compressed_with_trailer;
-    if (with_takeover) {
+    if (!conf.server_no_takeover) {
       std::array<std::byte, 4> flush_trailer{std::byte(0x00), std::byte(0x00), std::byte(0xFF), std::byte(0xFF)};
       compressed_with_trailer.insert(compressed_with_trailer.end(), compressed_in.begin(), compressed_in.end());
       compressed_with_trailer.insert(compressed_with_trailer.end(), flush_trailer.begin(), flush_trailer.end());
@@ -144,14 +169,14 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
     while (!compressed_in.empty()) {
       std::span<std::byte> data_out = tmp_buffer;
       if (!decompressor.update_stream(compressed_in, data_out)) {
-        EXPECT_TRUE(false) << "Cant update stream";
+        EXPECT_TRUE(false) << "Can't update stream";
         break;
       }
       std::span data_to_copy{tmp_buffer.data(), data_out.data()};
       decompressed_response.insert(decompressed_response.end(), data_to_copy.begin(), data_to_copy.end());
     }
 
-    if (!with_takeover) {
+    if (conf.server_no_takeover) {
       std::span<const std::byte> empty_data;
       while (true) {
         std::span<std::byte> data_out = tmp_buffer;
@@ -171,14 +196,25 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
   }
 
   // Test: permessage-deflate text message echo with default settings
-  void run_deflate_echo_test(server::socket_layer::connection_id conn, const std::string& ext, const std::vector<std::byte>& compressed_payload, const std::string& expected_response, bool with_server_takeover) {  // NOLINT(*swappable*)
+  void run_deflate_echo_test(server::socket_layer::connection_id conn, std::string_view ext, std::string_view payload_msg, std::string_view expected_response, const compressor_config& conf) {  // NOLINT(*swappable*)
     auto resp = web_socket_deflate_tests::do_handshake(conn, ext);
     ASSERT_TRUE(resp.find("101") != std::string::npos);
 
+    auto compressed_payload = compress_payload(payload_msg, conf);
     auto frame = web_socket_deflate_tests::make_compressed_frame(compressed_payload);
     ASSERT_EQ(ws_test_client::send_all(conn, frame.data(), frame.size()), frame.size());
+
     auto pframe = ws_test_client::recv_frame(conn);
-    auto response = decompress_payload(pframe.payload, with_server_takeover);
+    auto response = decompress_payload(pframe.payload, conf);
+    EXPECT_EQ(response, expected_response);
+
+    // 2nd turn to check takeover
+    compressed_payload = compress_payload(payload_msg, conf);
+    frame = web_socket_deflate_tests::make_compressed_frame(compressed_payload);
+    ASSERT_EQ(ws_test_client::send_all(conn, frame.data(), frame.size()), frame.size());
+
+    pframe = ws_test_client::recv_frame(conn);
+    response = decompress_payload(pframe.payload, conf);
     EXPECT_EQ(response, expected_response);
   }
 
@@ -442,96 +478,109 @@ TEST_F(web_socket_deflate_tests, deflate_all_parameters_combined) {
 
 TEST_F(web_socket_deflate_tests, deflate_text_echo_with_compression) {
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
+
+  compressor_config conf{};
+
   run_deflate_echo_test(client_connection,
                         "permessage-deflate",
-                        compress_payload("Hello compressed world - this is a test message that should compress well", true),
+                        "Hello compressed world - this is a test message that should compress well",
                         "Deflate: Hello compressed world - this is a test message that should compress well",
-                        true);
+                        conf);
 }
 
 TEST_F(web_socket_deflate_tests, deflate_server_no_context_takeover_echo) {
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
+
+  compressor_config conf{.server_no_takeover = true};
+
   run_deflate_echo_test(client_connection,
                         "permessage-deflate; server_no_context_takeover",
-                        compress_payload("context takeover test", true),
+                        "context takeover test",
                         "Deflate: context takeover test",
-                        false);
+                        conf);
 }
 
 TEST_F(web_socket_deflate_tests, deflate_client_no_context_takeover_echo) {
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
+
+  compressor_config conf{.client_no_takeover = true};
+
   run_deflate_echo_test(client_connection,
                         "permessage-deflate; client_no_context_takeover",
-                        compress_payload("client context test", false),
+                        "client context test",
                         "Deflate: client context test",
-                        true);
+                        conf);
 }
 
 TEST_F(web_socket_deflate_tests, deflate_both_no_context_takeover_echo) {
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
+
+  compressor_config conf{.server_no_takeover = true, .client_no_takeover = true};
+
   run_deflate_echo_test(client_connection,
                         "permessage-deflate; server_no_context_takeover; client_no_context_takeover",
-                        compress_payload("both context test", false),
+                        "both context test",
                         "Deflate: both context test",
-                        false);
+                        conf);
 }
 
 TEST_F(web_socket_deflate_tests, deflate_server_window_bits_8_echo) {
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
-  decompressor = server::zlib_decompress{server::zlib::compression_method::deflate, server::zlib::window_bits{8}};
+
+  compressor_config conf{.server_window = server::zlib::window_bits{8}};
+
   run_deflate_echo_test(client_connection,
                         "permessage-deflate; server_max_window_bits=8",
-                        compress_payload("window bits 8 test", true),
+                        "window bits 8 test",
                         "Deflate: window bits 8 test",
-                        true);
+                        conf);
 }
 
 TEST_F(web_socket_deflate_tests, deflate_server_window_bits_15_echo) {
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
-  decompressor = server::zlib_decompress{server::zlib::compression_method::deflate, server::zlib::window_bits{15}};
+
+  compressor_config conf{.server_window = server::zlib::window_bits{15}};
+
   run_deflate_echo_test(client_connection,
                         "permessage-deflate; server_max_window_bits=15",
-                        compress_payload("window bits 15 test", true),
+                        "window bits 15 test",
                         "Deflate: window bits 15 test",
-                        true);
+                        conf);
 }
 
-TEST_F(web_socket_deflate_tests, deflate_client_window_bits_8_echo) {
+// Current version of zlib has no support for 8 window bits size
+TEST_F(web_socket_deflate_tests, deflate_client_window_bits_9_echo) {
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
-  compressor = server::zlib_compress{server::zlib::compression_method::deflate, server::zlib::window_bits{8}};
+
+  compressor_config conf{.client_window = server::zlib::window_bits{9}};
+
   run_deflate_echo_test(client_connection,
-                        "permessage-deflate; client_max_window_bits=8",
-                        compress_payload("client window bits 8", true),
-                        "Deflate: client window bits 8",
-                        true);
+                        "permessage-deflate; client_max_window_bits=9",
+                        "client window bits 9",
+                        "Deflate: client window bits 9",
+                        conf);
 }
 
 TEST_F(web_socket_deflate_tests, deflate_client_window_bits_15_echo) {
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
-  compressor = server::zlib_compress{server::zlib::compression_method::deflate, server::zlib::window_bits{15}};
+
+  compressor_config conf{.client_window = server::zlib::window_bits{15}};
+
   run_deflate_echo_test(client_connection,
                         "permessage-deflate; client_max_window_bits=15",
-                        compress_payload("client window bits 15", true),
+                        "client window bits 15",
                         "Deflate: client window bits 15",
-                        true);
+                        conf);
 }
 
 TEST_F(web_socket_deflate_tests, deflate_all_parameters_combined_echo) {
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
-  decompressor = server::zlib_decompress{server::zlib::compression_method::deflate, server::zlib::window_bits{10}};
-  compressor = server::zlib_compress{server::zlib::compression_method::deflate, server::zlib::window_bits{12}};
+
+  compressor_config conf{.server_window = server::zlib::window_bits{10}, .client_window = server::zlib::window_bits{12}, .server_no_takeover = true, .client_no_takeover = true};
+
   run_deflate_echo_test(client_connection,
                         "permessage-deflate; server_max_window_bits=10; client_max_window_bits=12; server_no_context_takeover; client_no_context_takeover",
-                        compress_payload("all params test", false),
+                        "all params test",
                         "Deflate: all params test",
-                        false);
+                        conf);
 }

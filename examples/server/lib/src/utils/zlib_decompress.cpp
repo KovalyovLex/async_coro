@@ -68,7 +68,7 @@ bool zlib_decompress::update_stream(std::span<const std::byte>& data_in, std::sp
   stream.avail_out = static_cast<uInt>(data_out.size());
 
   const auto ret = ::inflate(&stream, Z_NO_FLUSH);
-  if (ret == Z_STREAM_ERROR) {
+  if (ret == Z_STREAM_ERROR || ret == Z_DATA_ERROR) {
     return false;
   }
 

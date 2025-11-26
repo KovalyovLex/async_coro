@@ -100,16 +100,26 @@ static expected<void, std::string> compress_frame_payload(std::vector<std::byte>
       }
     }
   } else {
-    std::span<std::byte> data_out = tmp_buffer;
+    std::span<std::byte> data_to_copy;
+
     bool has_data = true;
     while (has_data) {
+      if (!data_to_copy.empty()) {
+        output_buffer.insert(output_buffer.end(), data_to_copy.begin(), data_to_copy.end());
+      }
+
+      std::span<std::byte> data_out = tmp_buffer;
       has_data = compressor.flush(raw_data, data_out);
-      std::span data_to_copy{tmp_buffer.data(), data_out.data()};
-      output_buffer.insert(output_buffer.end(), data_to_copy.begin(), data_to_copy.end());
+      data_to_copy = std::span{tmp_buffer.data(), data_out.data()};
     }
 
+    // avoid adding flush tail in the end of response
     if (last_frame) {
-      data_out = data_out.subspan(0, data_out.size() - 4);
+      data_to_copy = data_to_copy.subspan(0, data_to_copy.size() - 4);
+    }
+
+    if (!data_to_copy.empty()) {
+      output_buffer.insert(output_buffer.end(), data_to_copy.begin(), data_to_copy.end());
     }
   }
 
