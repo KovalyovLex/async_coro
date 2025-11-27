@@ -8,7 +8,6 @@
 
 #include <cstring>
 #include <memory>
-#include <vector>
 
 namespace server {
 
@@ -19,54 +18,56 @@ class zstd_compress::impl {
   impl(impl&&) = delete;
   impl& operator=(const impl&) = delete;
   impl& operator=(impl&&) = delete;
-
-  ~impl() noexcept {
-    ZSTD_freeCCtx(as_context());
-  }
+  ~impl() = delete;
 
   ZSTD_CCtx* as_context() noexcept {
     return reinterpret_cast<ZSTD_CCtx*>(this);  // NOLINT(*reinterpret-cast)
   }
 
-  static std::unique_ptr<impl> make_impl(zstd::compression_level compression_level, zstd::window_log window_log) {
-    auto* cctx = ZSTD_createCCtx();
+  static std::unique_ptr<impl, deleter> make_impl(zstd::compression_level compression_level, zstd::window_log window_log) {
+    ZSTD_CCtx* cctx = ZSTD_createCCtx();
     if (cctx == nullptr) {
       return {};
     }
 
+    auto ptr = std::unique_ptr<impl, deleter>(reinterpret_cast<impl*>(cctx));  // NOLINT(*reinterpret-cast)
+
     size_t err = ZSTD_CCtx_setParameter(cctx, ZSTD_c_compressionLevel, compression_level.value);
     if (ZSTD_isError(err) != 0U) {
-      ZSTD_freeCCtx(cctx);
       return {};
     }
 
     if (window_log.value != 0) {
       err = ZSTD_CCtx_setParameter(cctx, ZSTD_c_windowLog, window_log.value);
       if (ZSTD_isError(err) != 0U) {
-        ZSTD_freeCCtx(cctx);
         return {};
       }
     }
 
-    return std::unique_ptr<impl>(reinterpret_cast<impl*>(cctx));  // NOLINT(*reinterpret-cast)
+    return ptr;
   }
 
-  static std::unique_ptr<impl> make_impl_with_dict(std::span<const std::byte> dictionary, zstd::compression_level compression_level, zstd::window_log window_log) {
+  static std::unique_ptr<impl, deleter> make_impl_with_dict(std::span<const std::byte> dictionary, zstd::compression_level compression_level, zstd::window_log window_log) {
     auto impl_ptr = make_impl(compression_level, window_log);
     if (!impl_ptr) {
-      return impl_ptr;
+      return {};
     }
 
     // Load dictionary
     size_t err = ZSTD_CCtx_loadDictionary(impl_ptr->as_context(), dictionary.data(), dictionary.size());
     if (ZSTD_isError(err) != 0U) {
-      impl_ptr.reset();
-      return impl_ptr;
+      return {};
     }
 
     return impl_ptr;
   }
 };
+
+void zstd_compress::deleter::operator()(zstd_compress::impl* ptr) const noexcept {
+  if (ptr != nullptr) {
+    ZSTD_freeCCtx(ptr->as_context());
+  }
+}
 
 zstd_compress::zstd_compress() noexcept = default;
 

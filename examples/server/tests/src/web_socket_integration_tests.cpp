@@ -1,7 +1,7 @@
 // This file was split out from web_socket_tests.cpp
 #include <gtest/gtest.h>
 
-#include "web_socket_integration_fixture.h"
+#include "fixtures/web_socket_integration_fixture.h"
 
 using namespace server;
 

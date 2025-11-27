@@ -51,8 +51,12 @@ class zstd_decompress {
 
  private:
   class impl;
-  std::unique_ptr<impl> _impl;
+  struct deleter {
+    void operator()(impl*) const noexcept;
+  };
+  std::unique_ptr<impl, deleter> _impl;
   bool _is_finished = false;
+  bool _depleted = false;
 };
 
 }  // namespace server

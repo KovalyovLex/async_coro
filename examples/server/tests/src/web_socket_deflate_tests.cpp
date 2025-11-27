@@ -2,7 +2,7 @@
 
 #include <string_view>
 
-#include "web_socket_integration_fixture.h"
+#include "fixtures/web_socket_integration_fixture.h"
 
 // Test fixture for permessage-deflate compression tests
 class web_socket_deflate_tests : public web_socket_integration_tests {

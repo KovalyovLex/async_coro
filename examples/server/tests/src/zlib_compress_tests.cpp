@@ -14,14 +14,13 @@
 namespace server {
 
 // Helper function to compress data
-std::vector<std::byte> compress_data(const std::vector<std::byte>& input,
+std::vector<std::byte> compress_data(std::span<const std::byte> input_data,
                                      zlib::compression_method method,
                                      zlib::compression_level level) {
   zlib_compress compressor(method, zlib::window_bits{}, level);
   EXPECT_TRUE(compressor.is_valid());
 
   std::vector<std::byte> output;
-  std::span<const std::byte> input_data(input);
   std::array<std::byte, 2048> buffer;  // NOLINT(*init)
 
   // Process input data in one go
@@ -51,13 +50,12 @@ std::vector<std::byte> compress_data(const std::vector<std::byte>& input,
 }
 
 // Helper function to decompress data
-std::vector<std::byte> decompress_data(const std::vector<std::byte>& input,
+std::vector<std::byte> decompress_data(std::span<const std::byte> input_data,
                                        zlib::compression_method method) {
   zlib_decompress decompressor(method);
   EXPECT_TRUE(decompressor.is_valid());
 
   std::vector<std::byte> output;
-  std::span<const std::byte> input_data(input);
   std::array<std::byte, 2048> buffer;  // NOLINT(*init)
 
   // Process input data in one go

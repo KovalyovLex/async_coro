@@ -47,7 +47,10 @@ class zstd_compress {
 
  private:
   class impl;
-  std::unique_ptr<impl> _impl;
+  struct deleter {
+    void operator()(impl*) const noexcept;
+  };
+  std::unique_ptr<impl, deleter> _impl;
   bool _is_finished = false;
 };
 

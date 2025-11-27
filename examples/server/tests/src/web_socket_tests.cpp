@@ -11,7 +11,7 @@
 #include <string_view>
 #include <vector>
 
-#include "ws_test_client.h"
+#include "fixtures/ws_test_client.h"
 
 // Test: valid websocket key conversion
 TEST(web_socket, test_ws_key) {
