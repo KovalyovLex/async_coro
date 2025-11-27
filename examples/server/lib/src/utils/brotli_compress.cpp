@@ -18,35 +18,40 @@ class brotli_compress::impl {
   impl(impl&&) = delete;
   impl& operator=(const impl&) = delete;
   impl& operator=(impl&&) = delete;
-
-  ~impl() noexcept {
-    ::BrotliEncoderDestroyInstance(as_encoder_state());
-  }
+  ~impl() = delete;
 
   BrotliEncoderState* as_encoder_state() noexcept {
     return reinterpret_cast<BrotliEncoderState*>(this);  // NOLINT(*reinterpret-cast)
   }
 
-  static std::unique_ptr<impl> make_impl(brotli::compression_level compression_level, brotli::window_bits window_bits, brotli::lgblock lgblock) {
+  static std::unique_ptr<impl, deleter> make_impl(brotli::compression_level compression_level, brotli::window_bits window_bits, brotli::lgblock lgblock) {
     auto* state = ::BrotliEncoderCreateInstance(nullptr, nullptr, nullptr);
     if (state == nullptr) {
       return {};
     }
 
-    BrotliEncoderSetParameter(state, BROTLI_PARAM_QUALITY, static_cast<uint32_t>(compression_level.value));
-    BrotliEncoderSetParameter(state, BROTLI_PARAM_LGWIN, static_cast<uint32_t>(window_bits.value));
+    auto ptr = std::unique_ptr<impl, deleter>{reinterpret_cast<impl*>(state)};  // NOLINT(*reinterpret-cast)
+
+    ::BrotliEncoderSetParameter(state, BROTLI_PARAM_QUALITY, static_cast<uint32_t>(compression_level.value));
+    ::BrotliEncoderSetParameter(state, BROTLI_PARAM_LGWIN, static_cast<uint32_t>(window_bits.value));
 
     if (lgblock.value != 0) {
-      BrotliEncoderSetParameter(state, BROTLI_PARAM_LGBLOCK, static_cast<uint32_t>(lgblock.value));
+      ::BrotliEncoderSetParameter(state, BROTLI_PARAM_LGBLOCK, static_cast<uint32_t>(lgblock.value));
     }
 
-    return std::unique_ptr<impl>{reinterpret_cast<impl*>(state)};  // NOLINT(*reinterpret-cast)
+    return ptr;
   }
 };
 
+void brotli_compress::deleter::operator()(brotli_compress::impl* ptr) const noexcept {
+  if (ptr != nullptr) {
+    ::BrotliEncoderDestroyInstance(ptr->as_encoder_state());
+  }
+}
+
 brotli_compress::brotli_compress() noexcept = default;
 
-brotli_compress::brotli_compress(brotli::compression_level compression_level, brotli::window_bits window_bits, brotli::lgblock lgblock)
+brotli_compress::brotli_compress(brotli::window_bits window_bits, brotli::compression_level compression_level, brotli::lgblock lgblock)
     : _impl(impl::make_impl(compression_level, window_bits, lgblock)) {
 }
 

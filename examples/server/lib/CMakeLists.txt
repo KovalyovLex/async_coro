@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.16)
 
 option(SERVER_ENABLE_TLS "Enable TLS support via OpenSSL" ON)
 option(SERVER_ENABLE_DEFLATE_GZIP "Enable deflate/gzip compression for content" ON)
-option(SERVER_ENABLE_BROTLI "Enable brotli compression for content" OFF)
-option(SERVER_ENABLE_ZSTD "Enable zstd compression for content" OFF)
+option(SERVER_ENABLE_BROTLI "Enable brotli compression for content" ON)
+option(SERVER_ENABLE_ZSTD "Enable zstd compression for content" ON)
 option(SERVER_ENABLE_HTTP2 "Enable HTTP/2 support" OFF)
 
 include(FetchContent)

@@ -18,29 +18,32 @@ class brotli_decompress::impl {
   impl(impl&&) = delete;
   impl& operator=(const impl&) = delete;
   impl& operator=(impl&&) = delete;
-
-  ~impl() noexcept {
-    ::BrotliDecoderDestroyInstance(as_decoder_state());
-  }
+  ~impl() = delete;
 
   BrotliDecoderState* as_decoder_state() noexcept {
     return reinterpret_cast<BrotliDecoderState*>(this);  // NOLINT(*reinterpret-cast)
   }
 
-  static std::unique_ptr<impl> make_impl(brotli::window_bits window_bits) {
+  static std::unique_ptr<impl, deleter> make_impl() {
     auto* state = ::BrotliDecoderCreateInstance(nullptr, nullptr, nullptr);
     if (state == nullptr) {
       return {};
     }
 
-    return std::unique_ptr<impl>{reinterpret_cast<impl*>(state)};  // NOLINT(*reinterpret-cast)
+    return std::unique_ptr<impl, deleter>{reinterpret_cast<impl*>(state)};  // NOLINT(*reinterpret-cast)
   }
 };
 
+void brotli_decompress::deleter::operator()(brotli_decompress::impl* ptr) const noexcept {
+  if (ptr != nullptr) {
+    ::BrotliDecoderDestroyInstance(ptr->as_decoder_state());
+  }
+}
+
 brotli_decompress::brotli_decompress() noexcept = default;
 
-brotli_decompress::brotli_decompress(brotli::window_bits window_bits)
-    : _impl(impl::make_impl(window_bits)) {
+brotli_decompress::brotli_decompress(bool init_decompressor)
+    : _impl(init_decompressor ? impl::make_impl() : std::unique_ptr<impl, deleter>{}) {
 }
 
 brotli_decompress::brotli_decompress(brotli_decompress&&) noexcept = default;

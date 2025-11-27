@@ -14,7 +14,7 @@ namespace server {
 class brotli_decompress {
  public:
   brotli_decompress() noexcept;
-  explicit brotli_decompress(brotli::window_bits window_bits = {});
+  explicit brotli_decompress(bool init_decompressor);
   brotli_decompress(const brotli_decompress&) = delete;
   brotli_decompress(brotli_decompress&&) noexcept;
 
@@ -47,7 +47,10 @@ class brotli_decompress {
 
  private:
   class impl;
-  std::unique_ptr<impl> _impl;
+  struct deleter {
+    void operator()(impl*) const noexcept;
+  };
+  std::unique_ptr<impl, deleter> _impl;
   bool _is_finished = false;
 };
 
