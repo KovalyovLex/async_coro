@@ -277,8 +277,8 @@ async_coro::task<void> ws_session::run(const server::http1::request& handshake_r
       });
 
       if (_used_config) {
-        _compressor = zlib_compress{zlib::compression_method::deflate, zlib::window_bits{_used_config->server_max_window_bits}};
-        _decompressor = zlib_decompress{zlib::compression_method::deflate, zlib::window_bits{_used_config->client_max_window_bits}};
+        _compressor = zlib_compress{zlib::compression_config{.method = zlib::compression_method::deflate, .window_bits = zlib::window_bits{_used_config->server_max_window_bits}}};
+        _decompressor = zlib_decompress{zlib::decompression_config{.method = zlib::compression_method::deflate, .window_bits = zlib::window_bits{_used_config->client_max_window_bits}}};
       }
     }
 #endif

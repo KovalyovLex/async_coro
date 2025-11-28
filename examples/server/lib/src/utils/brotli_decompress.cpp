@@ -42,8 +42,8 @@ void brotli_decompress::deleter::operator()(brotli_decompress::impl* ptr) const 
 
 brotli_decompress::brotli_decompress() noexcept = default;
 
-brotli_decompress::brotli_decompress(bool init_decompressor)
-    : _impl(init_decompressor ? impl::make_impl() : std::unique_ptr<impl, deleter>{}) {
+brotli_decompress::brotli_decompress(brotli::decompression_config /*conf*/)
+    : _impl(impl::make_impl()) {
 }
 
 brotli_decompress::brotli_decompress(brotli_decompress&&) noexcept = default;

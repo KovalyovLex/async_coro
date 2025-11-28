@@ -4,6 +4,7 @@
 #include <server/http1/http_status_code.h>
 #include <server/http1/http_version.h>
 #include <server/socket_layer/connection.h>
+#include <server/utils/compression_pool.h>
 #include <server/utils/expected.h>
 #include <server/utils/static_string.h>
 #include <server/utils/string_storage.h>
@@ -20,6 +21,7 @@ inline constexpr static_string html{"text/html; charset=utf-8"};
 inline constexpr static_string json{"application/json"};
 }  // namespace content_types
 
+using response_encoder = pooled_compressor<compressor_variant>;
 class response {
  public:
   // Constructs default response with 200 Ok status
@@ -62,6 +64,12 @@ class response {
 
   [[nodiscard]] async_coro::task<expected<void, std::string>> send(server::socket_layer::connection& conn);
 
+  // Set response encoder for compression support
+  void set_encoder(response_encoder&& encoder) noexcept;
+
+  // Check if response has compression encoder
+  [[nodiscard]] bool has_encoder() const noexcept;
+
   // clears status (sets 200 ok), string storage and headers
   void clear();
 
@@ -75,6 +83,7 @@ class response {
   header_list_t _headers;
   std::string_view _body;
   string_storage::ptr _string_storage;
+  response_encoder _encoder;
 };
 
 }  // namespace server::http1

@@ -71,12 +71,12 @@ void zstd_compress::deleter::operator()(zstd_compress::impl* ptr) const noexcept
 
 zstd_compress::zstd_compress() noexcept = default;
 
-zstd_compress::zstd_compress(zstd::compression_level compression_level, zstd::window_log window_log)
-    : _impl(impl::make_impl(compression_level, window_log)) {
+zstd_compress::zstd_compress(zstd::compression_config conf)
+    : _impl(impl::make_impl(conf.compression_level, conf.window_log)) {
 }
 
-zstd_compress::zstd_compress(std::span<const std::byte> dictionary, zstd::compression_level compression_level, zstd::window_log window_log)
-    : _impl(impl::make_impl_with_dict(dictionary, compression_level, window_log)) {
+zstd_compress::zstd_compress(std::span<const std::byte> dictionary, zstd::compression_config conf)
+    : _impl(impl::make_impl_with_dict(dictionary, conf.compression_level, conf.window_log)) {
 }
 
 zstd_compress::zstd_compress(zstd_compress&&) noexcept = default;

@@ -47,8 +47,8 @@ class zlib_compress::impl {
 
 zlib_compress::zlib_compress() noexcept = default;
 
-zlib_compress::zlib_compress(zlib::compression_method method, zlib::window_bits window_bits, zlib::compression_level compression_level, zlib::memory_level memory_level)
-    : _impl(impl::make_impl(method, compression_level, window_bits, memory_level)) {
+zlib_compress::zlib_compress(zlib::compression_config conf)
+    : _impl(impl::make_impl(conf.method, conf.compression_level, conf.window_bits, conf.memory_level)) {
 }
 
 zlib_compress::zlib_compress(zlib_compress&&) noexcept = default;

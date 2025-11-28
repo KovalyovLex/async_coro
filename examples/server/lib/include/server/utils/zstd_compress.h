@@ -13,10 +13,10 @@ namespace server {
 class zstd_compress {
  public:
   zstd_compress() noexcept;
-  explicit zstd_compress(zstd::compression_level compression_level = {}, zstd::window_log window_log = {});
+  explicit zstd_compress(zstd::compression_config conf);
 
   // Constructor with optional dictionary
-  explicit zstd_compress(std::span<const std::byte> dictionary, zstd::compression_level compression_level = {}, zstd::window_log window_log = {});
+  explicit zstd_compress(std::span<const std::byte> dictionary, zstd::compression_config conf = {});
 
   zstd_compress(const zstd_compress&) = delete;
   zstd_compress(zstd_compress&&) noexcept;

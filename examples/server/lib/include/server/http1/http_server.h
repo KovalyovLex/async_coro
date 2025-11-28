@@ -4,6 +4,9 @@
 #include <async_coro/utils/function_view.h>
 #include <server/http1/router.h>
 #include <server/tcp_server.h>
+#include <server/utils/compression_pool.h>
+
+#include <optional>
 
 namespace server::http1 {
 
@@ -24,6 +27,9 @@ class http_server {
   auto& get_router() { return _router; }
   auto& get_scheduler() { return _scheduler; }
 
+  // Set compression pool configuration
+  void set_compression_config(compression_pool::ptr pool) noexcept { _compression_pool = std::move(pool); }
+
   void serve(const tcp_server_config& conf, std::optional<ssl_config> ssl_conf, listener_connection_opened_t on_listener_open = {});
 
   void terminate() { _server.terminate(); }
@@ -32,6 +38,7 @@ class http_server {
   tcp_server _server;
   async_coro::scheduler _scheduler;
   router _router;
+  compression_pool::ptr _compression_pool;
 };
 
 }  // namespace server::http1

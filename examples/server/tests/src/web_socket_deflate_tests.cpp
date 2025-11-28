@@ -1,8 +1,14 @@
+#include <async_coro/thread_safety/unique_lock.h>
 #include <gtest/gtest.h>
+#include <server/http1/session.h>
+#include <server/web_socket/response_frame.h>
 
 #include <string_view>
 
 #include "fixtures/web_socket_integration_fixture.h"
+#include "fixtures/ws_test_client.h"
+#include "server/utils/zlib_compress.h"
+#include "server/utils/zlib_compression_constants.h"
 
 // Test fixture for permessage-deflate compression tests
 class web_socket_deflate_tests : public web_socket_integration_tests {
@@ -17,6 +23,7 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
 
   void SetUp() override {
     using namespace server::web_socket;
+
     server.get_router().add_advanced_route(server::http1::http_method::GET, "/chat-deflate",
                                            [this](const server::http1::request& request, server::http1::session& http_session) -> async_coro::task<> {  // NOLINT(*reference*)
                                              ws_session session{std::move(http_session.get_connection())};
@@ -68,7 +75,7 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
   // Helper: compress payload using zlib (permessage-deflate)
   std::vector<std::byte> compress_payload(std::string_view payload, const compressor_config& conf) {
     if (!compressor) {
-      compressor = server::zlib_compress{server::zlib::compression_method::deflate, conf.client_window};
+      compressor = server::zlib_compress{server::zlib::compression_config{.method = server::zlib::compression_method::deflate, .window_bits = conf.client_window}};
     }
 
     std::vector<std::byte> compressed_payload;
@@ -150,7 +157,7 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
   // Helper: decompress payload using zlib (permessage-deflate)
   std::string decompress_payload(const std::vector<std::byte>& payload, const compressor_config& conf) {
     if (!decompressor) {
-      decompressor = server::zlib_decompress{server::zlib::compression_method::deflate, conf.server_window};
+      decompressor = server::zlib_decompress{server::zlib::decompression_config{.method = server::zlib::compression_method::deflate, .window_bits = conf.server_window}};
     }
 
     std::vector<std::byte> decompressed_response;

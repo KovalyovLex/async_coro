@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include "fixtures/web_socket_integration_fixture.h"
+#include "fixtures/ws_test_client.h"
 
 using namespace server;
 

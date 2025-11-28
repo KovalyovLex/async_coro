@@ -41,8 +41,8 @@ class zlib_decompress::impl {
 
 zlib_decompress::zlib_decompress() noexcept = default;
 
-zlib_decompress::zlib_decompress(zlib::compression_method method, zlib::window_bits window_bits)
-    : _impl(impl::make_impl(method, window_bits)) {  // NOLINT(*init)
+zlib_decompress::zlib_decompress(zlib::decompression_config conf)
+    : _impl(impl::make_impl(conf.method, conf.window_bits)) {
 }
 
 zlib_decompress::zlib_decompress(zlib_decompress&&) noexcept = default;

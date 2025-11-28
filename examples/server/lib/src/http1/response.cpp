@@ -13,6 +13,7 @@
 #include <type_traits>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace server::http1 {
 
@@ -107,6 +108,15 @@ void response::clear() {
   if (_string_storage) {
     _string_storage->clear(_string_storage);
   }
+  _encoder = response_encoder{};
+}
+
+void response::set_encoder(response_encoder &&encoder) noexcept {
+  _encoder = std::move(encoder);
+}
+
+bool response::has_encoder() const noexcept {
+  return _encoder.operator bool();
 }
 
 // NOLINTBEGIN(*pointer*,*array-index*,*macro*)
@@ -119,7 +129,7 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
 
 #define PUSH_TO_BUF(STR)                                                                                \
   {                                                                                                     \
-    const std::string_view str{STR};                                                                    \
+    const std::span str{STR};                                                                           \
     if (buff_i + str.size() >= buffer.size()) {                                                         \
       const auto *ptr = str.data();                                                                     \
       const auto *ptr_end = str.data() + str.size();                                                    \
@@ -176,10 +186,52 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
     PUSH_TO_BUF("\r\n");
   }
 
-  // write body
+  // Handle body and compression
   if (!_body.empty()) {
     PUSH_TO_BUF("\r\n");
-    PUSH_TO_BUF(_body);
+
+    if (_encoder) {
+      // Compress body
+      std::vector<std::byte> body_bytes(_body.size());
+      std::memcpy(body_bytes.data(), _body.data(), _body.size());
+      std::span<const std::byte> body_in{body_bytes.data(), body_bytes.size()};
+
+      std::array<std::byte, 4 * 1024> compress_buf;  // NOLINT(*)
+      std::span<std::byte> compress_out{compress_buf.data(), compress_buf.size()};
+
+      // Update compression with body data
+      while (!body_in.empty()) {
+        if (!_encoder.update_stream(body_in, compress_out)) {
+          co_return res_t{unexpect, "Compression update failed"};
+        }
+
+        auto data_to_copy = std::span{compress_buf.data(), compress_out.data()};
+        if (!data_to_copy.empty()) {
+          PUSH_TO_BUF(data_to_copy);
+        }
+
+        compress_out = {compress_buf.data(), compress_buf.size()};
+      }
+
+      // End stream
+      while (true) {
+        auto has_more_data = _encoder.end_stream(body_in, compress_out);
+
+        auto data_to_copy = std::span{compress_buf.data(), compress_out.data()};
+        if (!data_to_copy.empty()) {
+          PUSH_TO_BUF(data_to_copy);
+        }
+
+        compress_out = {compress_buf.data(), compress_buf.size()};
+
+        if (!has_more_data) {
+          break;
+        }
+      }
+    } else {
+      // No compression - send body as is
+      PUSH_TO_BUF(_body);
+    }
   } else {
     PUSH_TO_BUF("\r\n");
   }

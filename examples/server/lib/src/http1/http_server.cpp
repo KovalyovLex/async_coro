@@ -18,7 +18,7 @@ void http_server::serve(const tcp_server_config& conf, std::optional<ssl_config>
       conf,
       std::move(ssl_conf),
       [this](auto conn) { _scheduler.start_task(
-                              [ses = session{std::move(conn), _router}]() mutable {
+                              [ses = session{std::move(conn), _router, _compression_pool}]() mutable {
                                 return ses.run();
                               },
                               async_coro::execution_queues::worker); },

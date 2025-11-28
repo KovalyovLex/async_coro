@@ -13,7 +13,7 @@ namespace server {
 class zlib_compress {
  public:
   zlib_compress() noexcept;
-  explicit zlib_compress(zlib::compression_method method, zlib::window_bits window_bits = {}, zlib::compression_level compression_level = {}, zlib::memory_level memory_level = {});
+  explicit zlib_compress(zlib::compression_config conf);
   zlib_compress(const zlib_compress&) = delete;
   zlib_compress(zlib_compress&&) noexcept;
 

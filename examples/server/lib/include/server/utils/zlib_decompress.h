@@ -14,7 +14,7 @@ namespace server {
 class zlib_decompress {
  public:
   zlib_decompress() noexcept;
-  explicit zlib_decompress(zlib::compression_method method, zlib::window_bits window_bits = {});
+  explicit zlib_decompress(zlib::decompression_config conf);
   zlib_decompress(const zlib_decompress&) = delete;
   zlib_decompress(zlib_decompress&&) noexcept;
 

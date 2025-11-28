@@ -1,4 +1,5 @@
 #include <async_coro/await/await_callback.h>
+#include <server/http1/compression_negotiation.h>
 #include <server/http1/request.h>
 #include <server/http1/response.h>
 #include <server/http1/router.h>
@@ -6,14 +7,17 @@
 #include <server/socket_layer/connection.h>
 
 #include <memory>
+#include <memory_resource>
 #include <type_traits>
 #include <variant>
 
 namespace server::http1 {
 
-session::session(server::socket_layer::connection conn, const router& router) noexcept
+session::session(server::socket_layer::connection conn, const router& router, compression_pool::ptr pool) noexcept
     : _conn(std::move(conn)),
-      _router(std::addressof(router)) {}
+      _router(std::addressof(router)),
+      _compression_pool(std::move(pool)),
+      _negotiator(_compression_pool) {}
 
 [[nodiscard]] async_coro::task<void> session::run() {  // NOLINT(*complexity)
   request req;
@@ -43,6 +47,32 @@ session::session(server::socket_layer::connection conn, const router& router) no
       }
     }
 
+    // Negotiate compression based on Accept-Encoding header
+    compression_encoding negotiated_encoding = compression_encoding::none;
+    if (_compression_pool != nullptr) {
+      constexpr size_t k_preallocated_size = 16;
+
+      std::array<std::byte, sizeof(encoding_preference) * k_preallocated_size> tmp_buffer;  // NOLINT(*init)
+      std::pmr::monotonic_buffer_resource res{tmp_buffer.data(), tmp_buffer.size()};
+      std::pmr::vector<encoding_preference> preferences{std::pmr::polymorphic_allocator<encoding_preference>{&res}};
+      preferences.reserve(k_preallocated_size);
+
+      req.foreach_header_with_name("Accept-Encoding", [&preferences](const auto& pair) {
+        server::compression_negotiator::parse_accept_encoding(pair.second, preferences);
+      });
+
+      negotiated_encoding = _negotiator.negotiate(std::span{preferences});
+    }
+
+    // Set up encoder if compression is negotiated
+    if (negotiated_encoding != compression_encoding::none) {
+      auto compressor = _compression_pool->acquire_compressor(negotiated_encoding);
+      if (compressor) {
+        res.set_encoder(std::move(compressor));
+        res.add_header(static_string{"Content-Encoding"}, static_string{compression_negotiator::encoding_to_string(negotiated_encoding)});
+      }
+    }
+
     if (const auto* handler = _router->find_handler(req)) {
       if (const auto* advanced_f = std::get_if<router::advanced_handler_t>(handler)) {
         co_await (*advanced_f)(req, *this);
@@ -60,6 +90,7 @@ session::session(server::socket_layer::connection conn, const router& router) no
     }
     res.set_status(status_code::not_found);
     co_await res.send(_conn);
+    res.clear();
   }
 }
 

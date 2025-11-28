@@ -17,7 +17,7 @@ namespace server {
 std::vector<std::byte> compress_data_brotli(std::span<const std::byte> input_data,
                                             brotli::compression_level level,
                                             brotli::window_bits window = {}) {
-  brotli_compress compressor(window, level);
+  brotli_compress compressor(brotli::compression_config{.window_bits = window, .compression_level = level});
   EXPECT_TRUE(compressor.is_valid());
 
   std::vector<std::byte> output;
@@ -51,7 +51,7 @@ std::vector<std::byte> compress_data_brotli(std::span<const std::byte> input_dat
 
 // Helper function to decompress data
 std::vector<std::byte> decompress_data_brotli(std::span<const std::byte> input_data) {
-  brotli_decompress decompressor(true);
+  brotli_decompress decompressor(brotli::decompression_config{});
   EXPECT_TRUE(decompressor.is_valid());
 
   std::vector<std::byte> output;
@@ -325,7 +325,7 @@ TEST(brotli_compress, move_semantics) {
   std::vector<std::byte> output;
 
   {
-    brotli_compress compressor1(brotli::window_bits{});
+    brotli_compress compressor1(brotli::compression_config{});
     EXPECT_TRUE(compressor1.is_valid());
 
     // Move construct
@@ -375,8 +375,8 @@ TEST(brotli_compress, move_assignment) {
   std::vector<std::byte> output;
 
   {
-    brotli_compress compressor1(brotli::window_bits{});
-    brotli_compress compressor2(brotli::window_bits{});
+    brotli_compress compressor1(brotli::compression_config{});
+    brotli_compress compressor2(brotli::compression_config{});
 
     EXPECT_TRUE(compressor1.is_valid());
     EXPECT_TRUE(compressor2.is_valid());
@@ -467,7 +467,7 @@ TEST(brotli_compress, flush_during_compression) {
   auto text_span = std::as_bytes(std::span{text});
   std::vector<std::byte> input(text_span.begin(), text_span.end());
 
-  brotli_compress compressor(brotli::window_bits{});
+  brotli_compress compressor(brotli::compression_config{});
   EXPECT_TRUE(compressor.is_valid());
 
   std::vector<std::byte> output;
@@ -524,7 +524,7 @@ TEST(brotli_compress, different_window_bits) {
 
   // Test different window sizes (brotli supports 10-24)
   for (uint8_t window_bits : {10, 16, 22}) {
-    brotli_compress compressor(brotli::window_bits{window_bits}, brotli::compression_level{});
+    brotli_compress compressor(brotli::compression_config{.window_bits = brotli::window_bits{window_bits}});
     EXPECT_TRUE(compressor.is_valid()) << "Failed at window_bits=" << static_cast<int>(window_bits);
 
     std::vector<std::byte> output;
@@ -551,7 +551,7 @@ TEST(brotli_compress, different_window_bits) {
 
     EXPECT_EQ(input_data.size(), 0);
 
-    brotli_decompress decompressor(true);
+    brotli_decompress decompressor(brotli::decompression_config{});
     EXPECT_TRUE(decompressor.is_valid());
 
     std::vector<std::byte> decompressed;
@@ -591,8 +591,7 @@ TEST(brotli_compress, large_block_size) {
   std::vector<std::byte> input(text_span.begin(), text_span.end());
 
   // Test with larger block size (lgblock values typically 16-24, 0 = automatic)
-  brotli_compress compressor(brotli::window_bits{}, brotli::compression_level{},
-                             brotli::lgblock{18});
+  brotli_compress compressor(brotli::compression_config{.lgblock = brotli::lgblock{18}});
   EXPECT_TRUE(compressor.is_valid());
 
   std::vector<std::byte> output;
@@ -636,7 +635,7 @@ TEST(brotli_decompress, move_semantics) {
   std::vector<std::byte> output;
 
   {
-    brotli_decompress decompressor1(true);
+    brotli_decompress decompressor1(brotli::decompression_config{});
     EXPECT_TRUE(decompressor1.is_valid());
 
     // Move construct
@@ -687,8 +686,8 @@ TEST(brotli_decompress, move_assignment) {
   std::vector<std::byte> output;
 
   {
-    brotli_decompress decompressor1(true);
-    brotli_decompress decompressor2(true);
+    brotli_decompress decompressor1(brotli::decompression_config{});
+    brotli_decompress decompressor2(brotli::decompression_config{});
 
     EXPECT_TRUE(decompressor1.is_valid());
     EXPECT_TRUE(decompressor2.is_valid());
@@ -742,7 +741,7 @@ TEST(brotli_decompress, flush_during_decompression) {
   auto compressed = compress_data_brotli(input, brotli::compression_level{});
 
   // Then decompress with flush
-  brotli_decompress decompressor(true);
+  brotli_decompress decompressor(brotli::decompression_config{});
   EXPECT_TRUE(decompressor.is_valid());
 
   std::vector<std::byte> output;
@@ -823,7 +822,7 @@ TEST(brotli_compress, streaming_small_output_buffer) {
   auto text_span = std::as_bytes(std::span{text});
   std::vector<std::byte> input(text_span.begin(), text_span.end());
 
-  brotli_compress compressor(brotli::window_bits{});
+  brotli_compress compressor(brotli::compression_config{});
   EXPECT_TRUE(compressor.is_valid());
 
   std::vector<std::byte> output;
@@ -857,14 +856,14 @@ TEST(brotli_compress, streaming_small_output_buffer) {
 }
 
 // Test decompressor creation and assignment
-TEST(brotli_decompress, create_without_state) {
-  brotli_decompress decompress(false);
+TEST(brotli_decompress, assign_validate) {
+  brotli_decompress decompress;
   EXPECT_FALSE(decompress.is_valid());
 
-  decompress = brotli_decompress(false);
+  decompress = brotli_decompress{};
   EXPECT_FALSE(decompress.is_valid());
 
-  decompress = brotli_decompress(true);
+  decompress = brotli_decompress(brotli::decompression_config{});
   EXPECT_TRUE(decompress.is_valid());
 
   decompress = brotli_decompress();

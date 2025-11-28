@@ -14,10 +14,10 @@ namespace server {
 class zstd_decompress {
  public:
   zstd_decompress() noexcept;
-  explicit zstd_decompress(zstd::window_log window_log);
+  explicit zstd_decompress(zstd::decompression_config conf);
 
   // Constructor with optional dictionary
-  explicit zstd_decompress(std::span<const std::byte> dictionary, zstd::window_log window_log = {});
+  explicit zstd_decompress(std::span<const std::byte> dictionary, zstd::decompression_config conf = {});
 
   zstd_decompress(const zstd_decompress&) = delete;
   zstd_decompress(zstd_decompress&&) noexcept;

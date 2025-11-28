@@ -14,7 +14,7 @@ namespace server {
 class brotli_decompress {
  public:
   brotli_decompress() noexcept;
-  explicit brotli_decompress(bool init_decompressor);
+  explicit brotli_decompress(brotli::decompression_config conf);
   brotli_decompress(const brotli_decompress&) = delete;
   brotli_decompress(brotli_decompress&&) noexcept;
 

@@ -13,7 +13,7 @@ namespace server {
 class brotli_compress {
  public:
   brotli_compress() noexcept;
-  explicit brotli_compress(brotli::window_bits window_bits, brotli::compression_level compression_level = {}, brotli::lgblock lgblock = {});
+  explicit brotli_compress(brotli::compression_config conf);
   brotli_compress(const brotli_compress&) = delete;
   brotli_compress(brotli_compress&&) noexcept;
 

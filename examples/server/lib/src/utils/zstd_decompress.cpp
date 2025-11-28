@@ -66,12 +66,12 @@ void zstd_decompress::deleter::operator()(zstd_decompress::impl* ptr) const noex
 
 zstd_decompress::zstd_decompress() noexcept = default;
 
-zstd_decompress::zstd_decompress(zstd::window_log window_log)
-    : _impl(impl::make_impl(window_log)) {
+zstd_decompress::zstd_decompress(zstd::decompression_config conf)
+    : _impl(impl::make_impl(conf.window_log)) {
 }
 
-zstd_decompress::zstd_decompress(std::span<const std::byte> dictionary, zstd::window_log window_log)
-    : _impl(impl::make_impl_with_dict(dictionary, window_log)) {
+zstd_decompress::zstd_decompress(std::span<const std::byte> dictionary, zstd::decompression_config conf)
+    : _impl(impl::make_impl_with_dict(dictionary, conf.window_log)) {
 }
 
 zstd_decompress::zstd_decompress(zstd_decompress&&) noexcept = default;

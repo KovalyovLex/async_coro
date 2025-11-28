@@ -17,7 +17,7 @@ namespace server {
 std::vector<std::byte> compress_data(std::span<const std::byte> input_data,
                                      zlib::compression_method method,
                                      zlib::compression_level level) {
-  zlib_compress compressor(method, zlib::window_bits{}, level);
+  zlib_compress compressor(zlib::compression_config{.method = method, .compression_level = level});
   EXPECT_TRUE(compressor.is_valid());
 
   std::vector<std::byte> output;
@@ -52,7 +52,7 @@ std::vector<std::byte> compress_data(std::span<const std::byte> input_data,
 // Helper function to decompress data
 std::vector<std::byte> decompress_data(std::span<const std::byte> input_data,
                                        zlib::compression_method method) {
-  zlib_decompress decompressor(method);
+  zlib_decompress decompressor(zlib::decompression_config{.method = method});
   EXPECT_TRUE(decompressor.is_valid());
 
   std::vector<std::byte> output;
@@ -433,7 +433,7 @@ TEST(zlib_compress, move_semantics_deflate) {
   std::vector<std::byte> output;
 
   {
-    zlib_compress compressor1(zlib::compression_method::deflate);
+    zlib_compress compressor1(zlib::k_default_deflate_compression);
     EXPECT_TRUE(compressor1.is_valid());
 
     // Move construct
@@ -484,7 +484,7 @@ TEST(zlib_compress, multiple_compression_cycles_deflate) {
   text_span = std::as_bytes(std::span{message2});
   std::vector<std::byte> data2(text_span.begin(), text_span.end());
 
-  zlib_compress compressor(zlib::compression_method::deflate);
+  zlib_compress compressor(zlib::k_default_deflate_compression);
 
   // Compress first data
   auto compressed1 = compress_data(data1, zlib::compression_method::deflate, zlib::compression_level{});
@@ -579,7 +579,7 @@ TEST(zlib_compress, incompatible_compression_method) {
 
   // Try to decompress with gzip (should fail or produce invalid output)
   {
-    zlib_decompress decompressor(zlib::compression_method::gzip);
+    zlib_decompress decompressor(zlib::k_default_gzip_decompression);
     std::vector<std::byte> buffer(4096);
     std::vector<std::byte> compressed_copy = compressed_deflate;
 
@@ -600,7 +600,7 @@ TEST(zlib_compress, flush_deflate) {
     constexpr std::string_view text = "Flush test data for compressor";
     const auto text_span = std::as_bytes(std::span{text});
 
-    zlib_compress compressor(zlib::compression_method::deflate);
+    zlib_compress compressor(zlib::k_default_deflate_compression);
     ASSERT_TRUE(compressor.is_valid());
 
     std::array<std::byte, 32> buffer{};  // intentionally small to force intermediate buffering
@@ -639,7 +639,7 @@ TEST(zlib_compress, flush_gzip) {
     constexpr std::string_view text = "Flush test data for compressor gzip";
     const auto text_span = std::as_bytes(std::span{text});
 
-    zlib_compress compressor(zlib::compression_method::gzip);
+    zlib_compress compressor(zlib::k_default_gzip_compression);
     ASSERT_TRUE(compressor.is_valid());
 
     std::array<std::byte, 32> buffer{};
@@ -680,7 +680,7 @@ TEST(zlib_compress, decompress_flush_deflate) {
     std::vector<std::byte> input(text_span.begin(), text_span.end());
     auto compressed = compress_data(input, zlib::compression_method::deflate, zlib::compression_level{});
 
-    zlib_decompress decompressor(zlib::compression_method::deflate);
+    zlib_decompress decompressor(zlib::k_default_deflate_decompression);
     ASSERT_TRUE(decompressor.is_valid());
 
     std::array<std::byte, 32> buffer{};
@@ -719,7 +719,7 @@ TEST(zlib_compress, decompress_flush_gzip) {
     std::vector<std::byte> input(text_span.begin(), text_span.end());
     auto compressed = compress_data(input, zlib::compression_method::gzip, zlib::compression_level{});
 
-    zlib_decompress decompressor(zlib::compression_method::gzip);
+    zlib_decompress decompressor(zlib::k_default_gzip_decompression);
     ASSERT_TRUE(decompressor.is_valid());
 
     std::array<std::byte, 32> buffer{};
