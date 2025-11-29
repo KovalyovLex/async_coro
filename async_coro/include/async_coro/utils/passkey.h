@@ -2,7 +2,7 @@
 
 #include <concepts>
 
-namespace async_coro::internal {
+namespace async_coro {
 
 template <typename T>
 class passkey {
@@ -38,4 +38,4 @@ struct passkey_successors {
   passkey_successors(const passkey<U>& /*passkey*/) {}  // NOLINT(*-explicit-*)
 };
 
-}  // namespace async_coro::internal
+}  // namespace async_coro

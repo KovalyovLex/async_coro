@@ -1,7 +1,7 @@
 #pragma once
 
 #include <async_coro/execution_queue_mark.h>
-#include <async_coro/unique_function.h>
+#include <async_coro/utils/unique_function.h>
 
 #include <chrono>
 #include <memory>

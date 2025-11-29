@@ -1,11 +1,11 @@
 #pragma once
 
 #include <async_coro/config.h>
-#include <async_coro/internal/always_false.h>
 #include <async_coro/internal/deduce_function_signature.h>
 #include <async_coro/internal/is_invocable_by_signature.h>
-#include <async_coro/internal/passkey.h>
-#include <async_coro/internal/unique_function_storage.h>
+#include <async_coro/utils/always_false.h>
+#include <async_coro/utils/passkey.h>
+#include <async_coro/utils/unique_function_storage.h>
 
 #include <cstdlib>
 #include <memory>
@@ -19,11 +19,11 @@ template <std::size_t SFOSize, typename TFunc, typename T>
 class function_impl_call {
   static_assert(always_false<T>::value,
                 "unique_function only accepts function types as template arguments, "
-                "with possibly noexcept qualifiers.");
+                "with possibly const noexcept qualifiers.");
 };
 
 template <std::size_t SFOSize, typename TFunc, typename R, typename... TArgs>
-class function_impl_call<SFOSize, TFunc, R(TArgs...)> {
+class function_impl_call<SFOSize, TFunc, R(TArgs...) const> {
  protected:
   using t_small_buffer = small_buffer<SFOSize>;
 
@@ -53,7 +53,45 @@ class function_impl_call<SFOSize, TFunc, R(TArgs...)> {
 
     store = std::move(*static_cast<TFunc*>(this));
 
-    return invoke(store.get_buffer(internal::passkey{this}), std::forward<TArgs>(args)...);
+    return invoke(store.get_buffer(passkey{this}), std::forward<TArgs>(args)...);
+  }
+
+ protected:
+  t_invoke_f _invoke;  // NOLINT(*-non-private-member-*)
+};
+
+template <std::size_t SFOSize, typename TFunc, typename R, typename... TArgs>
+class function_impl_call<SFOSize, TFunc, R(TArgs...)> {
+ protected:
+  using t_small_buffer = small_buffer<SFOSize>;
+
+  using t_invoke_f = R (*)(t_small_buffer&, TArgs&&...);
+
+  static constexpr bool is_noexcept_invoke = false;
+
+  function_impl_call() noexcept = default;
+
+  explicit function_impl_call(std::nullptr_t) noexcept
+      : _invoke(nullptr) {
+  }
+
+  explicit function_impl_call(t_invoke_f invoke) noexcept : _invoke(invoke) {}
+
+ public:
+  R operator()(TArgs... args) {
+    ASYNC_CORO_ASSERT(_invoke);
+
+    return _invoke(static_cast<TFunc*>(this)->_buffer, std::forward<TArgs>(args)...);
+  }
+
+  R move_to_storage_and_call(unique_function_storage<SFOSize>& store, TArgs... args) {
+    ASYNC_CORO_ASSERT(_invoke);
+
+    const auto invoke = std::exchange(this->_invoke, nullptr);
+
+    store = std::move(*static_cast<TFunc*>(this));
+
+    return invoke(store.get_buffer(passkey{this}), std::forward<TArgs>(args)...);
   }
 
  protected:
@@ -93,7 +131,47 @@ class function_impl_call<SFOSize, TFunc, R(TArgs...) noexcept> {
 
     store = std::move(*funcPtr);
 
-    return invoke(store.get_buffer(internal::passkey{this}), std::forward<TArgs>(args)...);
+    return invoke(store.get_buffer(passkey{this}), std::forward<TArgs>(args)...);
+  }
+
+ protected:
+  t_invoke_f _invoke;  // NOLINT(*-non-private-member-*)
+};
+
+template <std::size_t SFOSize, typename TFunc, typename R, typename... TArgs>
+class function_impl_call<SFOSize, TFunc, R(TArgs...) const noexcept> {
+ protected:
+  using t_small_buffer = small_buffer<SFOSize>;
+
+  using t_invoke_f = R (*)(t_small_buffer&, TArgs&&...) noexcept;
+
+  static constexpr bool is_noexcept_invoke = true;
+
+  function_impl_call() noexcept = default;
+
+  explicit function_impl_call(std::nullptr_t) noexcept
+      : _invoke(nullptr) {
+  }
+
+  explicit function_impl_call(t_invoke_f invoke) noexcept : _invoke(invoke) {}
+
+ public:
+  R operator()(TArgs... args) const noexcept {
+    ASYNC_CORO_ASSERT(_invoke);
+
+    return _invoke(static_cast<const TFunc*>(this)->_buffer, std::forward<TArgs>(args)...);
+  }
+
+  R move_to_storage_and_call(unique_function_storage<SFOSize>& store, TArgs... args) noexcept {
+    ASYNC_CORO_ASSERT(_invoke);
+
+    const auto invoke = std::exchange(this->_invoke, nullptr);
+    const auto funcPtr = static_cast<TFunc*>(this);
+    const auto moveOrDestroy = funcPtr->_move_or_destroy;
+
+    store = std::move(*funcPtr);
+
+    return invoke(store.get_buffer(passkey{this}), std::forward<TArgs>(args)...);
   }
 
  protected:
@@ -157,7 +235,7 @@ class unique_function : private internal::function_impl_call<SFOSize, unique_fun
   }
 
   template <typename Fx>
-    requires is_invocable<Fx>::value
+    requires(is_invocable<Fx>::value && !std::is_same_v<std::remove_cvref_t<Fx>, unique_function>)
   unique_function(Fx&& func) noexcept(is_noexcept_init<Fx>)  // NOLINT(*-explicit*)
       : unique_function(no_init{}) {
     init(std::forward<Fx>(func));
@@ -233,7 +311,7 @@ class unique_function : private internal::function_impl_call<SFOSize, unique_fun
         this->_move_or_destroy = nullptr;
       }
 
-      new (&this->_buffer.mem[0]) Fx(std::forward<Fx>(func));
+      new (&this->_buffer.mem[0]) TFunc(std::forward<Fx>(func));
     } else {
       // large function
       this->_move_or_destroy = static_cast<t_move_or_destroy_f>(

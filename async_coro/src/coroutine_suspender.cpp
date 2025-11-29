@@ -1,9 +1,9 @@
 #include <async_coro/base_handle.h>
 #include <async_coro/config.h>
 #include <async_coro/internal/coroutine_suspender.h>
-#include <async_coro/internal/passkey.h>
 #include <async_coro/internal/scheduled_run_data.h>
 #include <async_coro/scheduler.h>
+#include <async_coro/utils/passkey.h>
 
 #include <atomic>
 
@@ -43,7 +43,7 @@ void coroutine_suspender::try_to_continue_from_any_thread(bool cancel) {
       return;
     }
 
-    _handle->get_scheduler().continue_execution(*_handle, internal::passkey{this});
+    _handle->get_scheduler().continue_execution(*_handle, passkey{this});
   }
 }
 
@@ -86,7 +86,7 @@ void coroutine_suspender::try_to_continue_immediately() {
       return;
     }
 
-    _handle->get_scheduler().continue_execution(*_handle, internal::passkey{this});
+    _handle->get_scheduler().continue_execution(*_handle, passkey{this});
   }
 }
 
