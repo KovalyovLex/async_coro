@@ -5,6 +5,7 @@
 #include <async_coro/internal/is_invocable_by_signature.h>
 
 #include <cstdlib>
+#include <memory>
 #include <type_traits>
 #include <utility>
 

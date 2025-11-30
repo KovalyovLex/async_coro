@@ -8,6 +8,7 @@
 #include <atomic>
 #include <coroutine>
 #include <cstdint>
+#include <memory>
 #include <thread>
 
 namespace async_coro {
