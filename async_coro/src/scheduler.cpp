@@ -83,16 +83,23 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
           parent->_current_child = nullptr;
         }
 
+        ASYNC_CORO_ASSERT(run_data.coroutine_to_run_next == nullptr);
+
         if (cancelled_without_finish) {
+          // cancel current coro and parent
           if (auto* on_cancel = handle_to_run->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
             on_cancel->execute_and_destroy();
           }
 
           parent->request_cancel();
+
+          handle_to_run->_run_data.store(nullptr, std::memory_order::relaxed);
         } else if (parent->get_coroutine_state() == coroutine_state::suspended) {
-          // wake up parent coroutine
+          // wake up parent coroutine as child coro finished normally
+
+          handle_to_run->_run_data.store(nullptr, std::memory_order::relaxed);
+
           if (parent->is_current_thread_same()) {
-            ASYNC_CORO_ASSERT(run_data.coroutine_to_run_next == nullptr);
             run_data.coroutine_to_run_next = parent;
           } else {
             plan_continue_on_thread(*parent, parent->_execution_queue);
@@ -113,14 +120,14 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
           cont_handle->request_cancel();
         }
 
-        handle_to_run->_run_data.store(nullptr, std::memory_order::release);
+        handle_to_run->_run_data.store(nullptr, std::memory_order::relaxed);
 
         cleanup_coroutine(*handle_to_run, cancelled_without_finish);
         break;
       }
+    } else {
+      handle_to_run->_run_data.store(nullptr, std::memory_order::release);
     }
-
-    handle_to_run->_run_data.store(nullptr, std::memory_order::release);
 
     if (state == coroutine_state::waiting_switch) {
       change_execution_queue(*handle_to_run, handle_to_run->_execution_queue);
