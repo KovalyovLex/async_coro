@@ -71,7 +71,7 @@ if(SERVER_ENABLE_BROTLI)
 
         FetchContent_Declare(
             brotli
-            GIT_REPOSITORY git@github.com:google/brotli.git
+            GIT_REPOSITORY https://github.com/google/brotli.git
             GIT_TAG v1.2.0
             GIT_SHALLOW TRUE
             GIT_PROGRESS TRUE
@@ -101,7 +101,7 @@ if(SERVER_ENABLE_ZSTD)
     if (NOT TARGET zstd::libzstd)
         FetchContent_Declare(
             zstd
-            GIT_REPOSITORY git@github.com:facebook/zstd.git
+            GIT_REPOSITORY https://github.com/facebook/zstd.git
             GIT_TAG v1.5.7
             GIT_SHALLOW TRUE
             GIT_PROGRESS TRUE
