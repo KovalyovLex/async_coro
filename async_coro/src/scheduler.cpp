@@ -113,6 +113,8 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
           cont_handle->request_cancel();
         }
 
+        handle_to_run->_run_data.store(nullptr, std::memory_order::release);
+
         cleanup_coroutine(*handle_to_run, cancelled_without_finish);
         break;
       }

@@ -52,6 +52,10 @@ void base_handle::destroy_impl() {
 
   _is_inside_cancel.wait(true, std::memory_order::acquire);
 
+  while (_run_data.load(std::memory_order::relaxed) != nullptr) {
+    // wait for continuation finish
+  }
+
   get_handle().destroy();
 }
 
