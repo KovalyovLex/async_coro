@@ -1472,3 +1472,21 @@ TEST(task, deep_recursion) {
   auto res = scheduler.start_task(parent_task);
   ASSERT_TRUE(res.done());
 }
+
+TEST(task, lifetime) {
+  async_coro::scheduler scheduler;
+
+  const auto child_task = [](bool cond) -> async_coro::task<> {
+    EXPECT_TRUE(cond);
+    co_return;
+  };
+
+  const auto parent_task = [child_task]() -> async_coro::task<> {
+    for (int i = 0; i < 3000000; i++) {
+      co_await child_task(true);
+    }
+  };
+
+  auto res = scheduler.start_task(parent_task);
+  ASSERT_TRUE(res.done());
+}

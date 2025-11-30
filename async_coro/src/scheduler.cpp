@@ -107,7 +107,14 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
           }
         }
 
+        auto* cont_handle = run_data.coroutine_to_run_next;
+        if (cont_handle != nullptr) {
+          // cancel execution of next coroutine as it depends on currently cancelled or finished
+          cont_handle->request_cancel();
+        }
+
         cleanup_coroutine(*handle_to_run, cancelled_without_finish);
+        break;
       }
     }
 
@@ -118,12 +125,6 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
     }
 
     handle_to_run = run_data.coroutine_to_run_next;
-
-    if (handle_to_run != nullptr && was_cancelled) {
-      // cancel execution of next coroutine as it depends on currently cancelled
-      handle_to_run->request_cancel();
-      break;
-    }
   }
 }
 
