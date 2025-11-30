@@ -6,6 +6,7 @@
 #include <async_coro/scheduler.h>
 #include <async_coro/task.h>
 #include <async_coro/task_launcher.h>
+#include <async_coro/utils/unique_function.h>
 #include <gtest/gtest.h>
 
 #include <chrono>
@@ -15,8 +16,6 @@
 #include <thread>
 #include <type_traits>
 #include <variant>
-
-#include "async_coro/utils/unique_function.h"
 
 namespace task_tests {
 struct coro_runner {
@@ -93,7 +92,7 @@ TEST(task, async_execution) {
                                                              {"worker2"}}})};
 
   ASSERT_FALSE(routine.done());
-  auto handle = scheduler.start_task(std::move(routine));
+  auto handle = scheduler.start_task(std::move(routine), async_coro::execution_queues::main);
   ASSERT_FALSE(handle.done());
 
   std::this_thread::sleep_for(std::chrono::milliseconds{30});

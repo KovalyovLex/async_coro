@@ -27,7 +27,7 @@ TEST_P(light_mutex_mt, perf_simple_lock) {
     workers.emplace_back([&]() {
       while (running.load(std::memory_order_relaxed)) {
         m1.lock();
-        a += 1;
+        a = a + 1;
         m1.unlock();
       }
     });
@@ -37,7 +37,7 @@ TEST_P(light_mutex_mt, perf_simple_lock) {
 
   for (size_t i = 0; i < kTests; i++) {
     m1.lock();
-    a += 1;
+    a = a + 1;
     m1.unlock();
   }
 
@@ -57,7 +57,7 @@ TEST_P(light_mutex_mt, perf_simple_lock) {
     workers.emplace_back([&]() {
       while (running.load(std::memory_order_relaxed)) {
         m2.lock();
-        a += 1;
+        a = a + 1;
         m2.unlock();
       }
     });
@@ -67,7 +67,7 @@ TEST_P(light_mutex_mt, perf_simple_lock) {
 
   for (size_t i = 0; i < kTests; i++) {
     m2.lock();
-    a += 1;
+    a = a + 1;
     m2.unlock();
   }
 
@@ -100,7 +100,7 @@ TEST_P(light_mutex_mt, perf_try_lock) {
     workers.emplace_back([&]() {
       while (running.load(std::memory_order_relaxed)) {
         m1.lock();
-        a += 1;
+        a = a + 1;
         m1.unlock();
       }
     });
@@ -110,7 +110,7 @@ TEST_P(light_mutex_mt, perf_try_lock) {
 
   for (size_t i = 0; i < kTests; i++) {
     if (m1.try_lock()) {
-      a += 1;
+      a = a + 1;
       m1.unlock();
     }
   }
@@ -131,7 +131,7 @@ TEST_P(light_mutex_mt, perf_try_lock) {
     workers.emplace_back([&]() {
       while (running.load(std::memory_order_relaxed)) {
         m2.lock();
-        a += 1;
+        a = a + 1;
         m2.unlock();
       }
     });
@@ -141,7 +141,7 @@ TEST_P(light_mutex_mt, perf_try_lock) {
 
   for (size_t i = 0; i < kTests; i++) {
     if (m2.try_lock()) {
-      a += 1;
+      a = a + 1;
       m2.unlock();
     }
   }
