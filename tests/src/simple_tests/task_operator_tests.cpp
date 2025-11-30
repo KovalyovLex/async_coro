@@ -350,7 +350,7 @@ TEST(task_op, mixed_result_with_parenthesis) {
     auto& scheduler = co_await async_coro::get_scheduler();
 
     ASYNC_CORO_WARNINGS_GCC_PUSH
-    ASYNC_CORO_WARNINGS_GCC_IGNORE(parentheses)
+    ASYNC_CORO_WARNINGS_GCC_IGNORE("parentheses")
 
     {
       auto results = co_await (scheduler.start_task(routine1) && (scheduler.start_task(routine2) || scheduler.start_task(routine3)) || scheduler.start_task(routine_void));
