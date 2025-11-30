@@ -93,7 +93,7 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
 
           parent->request_cancel();
 
-          handle_to_run->_run_data.store(nullptr, std::memory_order::relaxed);
+          handle_to_run->_run_data.store(nullptr, std::memory_order::release);
         } else if (parent->get_coroutine_state() == coroutine_state::suspended) {
           // wake up parent coroutine as child coro finished normally
 
@@ -120,7 +120,7 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
           cont_handle->request_cancel();
         }
 
-        handle_to_run->_run_data.store(nullptr, std::memory_order::relaxed);
+        handle_to_run->_run_data.store(nullptr, std::memory_order::release);
 
         cleanup_coroutine(*handle_to_run, cancelled_without_finish);
         break;
