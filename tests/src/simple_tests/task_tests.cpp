@@ -1449,7 +1449,7 @@ TEST(task, multiple_immediate_children_with_continue) {
   EXPECT_FALSE(res.done());
   EXPECT_TRUE(continuation);
 
-  while (continuation) {
+  while (continuation) {  // NOLINT(*use-after-move)
     auto func = std::move(continuation);
     func();
   }
