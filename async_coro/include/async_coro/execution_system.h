@@ -7,7 +7,7 @@
 #include <async_coro/thread_safety/analysis.h>
 #include <async_coro/thread_safety/condition_variable.h>
 #include <async_coro/thread_safety/mutex.h>
-#include <async_coro/unique_function.h>
+#include <async_coro/utils/unique_function.h>
 #include <async_coro/warnings.h>
 
 #include <atomic>
@@ -242,19 +242,6 @@ class execution_system : public i_execution_system {
    * @brief loop for delayed tasks
    */
   void timer_loop();
-
-  /**
-   * @brief Sets the name of a thread for debugging purposes
-   *
-   * Attempts to set the thread name using platform-specific APIs.
-   * This is useful for debugging and profiling tools.
-   *
-   * @param thread Reference to the thread whose name should be set
-   * @param name The name to assign to the thread
-   *
-   * @note This is a platform-dependent operation and may not work on all systems
-   */
-  static void set_thread_name(std::thread &thread, const std::string &name);
 
  private:
   using t_task_id = decltype(std::declval<delayed_task_id>().task_id);

@@ -1,5 +1,7 @@
 #pragma once
 
+// NOLINTBEGIN(*macro-usage)
+
 #if defined _MSC_VER
 
 #define ASYNC_CORO_WARNINGS_MSVC_PUSH __pragma(warning(push))
@@ -27,7 +29,7 @@
 #define ASYNC_CORO_WARNINGS_POP ASYNC_CORO_WARNINGS_CLANG_POP
 
 #define ASYNC_CORO_WARNINGS_CLANG_IGNORE_0(mac_name) #mac_name
-#define ASYNC_CORO_WARNINGS_CLANG_IGNORE_1(mac_name) ASYNC_CORO_WARNINGS_CLANG_IGNORE_0(clang diagnostic ignored "-W" #mac_name)
+#define ASYNC_CORO_WARNINGS_CLANG_IGNORE_1(mac_name) ASYNC_CORO_WARNINGS_CLANG_IGNORE_0(clang diagnostic ignored "-W" mac_name)
 #define ASYNC_CORO_WARNINGS_CLANG_IGNORE(mac_name) _Pragma(ASYNC_CORO_WARNINGS_CLANG_IGNORE_1(mac_name))
 
 #define ASYNC_CORO_WARNINGS_MSVC_IGNORE(warn_num)
@@ -47,7 +49,7 @@
 #define ASYNC_CORO_WARNINGS_POP ASYNC_CORO_WARNINGS_GCC_POP
 
 #define ASYNC_CORO_WARNINGS_GCC_IGNORE_0(mac_name) #mac_name
-#define ASYNC_CORO_WARNINGS_GCC_IGNORE_1(mac_name) ASYNC_CORO_WARNINGS_GCC_IGNORE_0(GCC diagnostic ignored "-W" #mac_name)
+#define ASYNC_CORO_WARNINGS_GCC_IGNORE_1(mac_name) ASYNC_CORO_WARNINGS_GCC_IGNORE_0(GCC diagnostic ignored "-W" mac_name)
 #define ASYNC_CORO_WARNINGS_GCC_IGNORE(mac_name) _Pragma(ASYNC_CORO_WARNINGS_GCC_IGNORE_1(mac_name))
 
 #define ASYNC_CORO_WARNINGS_MSVC_IGNORE(warn_num)
@@ -59,3 +61,5 @@
 #define ASYNC_CORO_WARNINGS_CLANG_POP
 
 #endif
+
+// NOLINTEND(*macro-usage)

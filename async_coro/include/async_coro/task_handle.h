@@ -5,9 +5,9 @@
 #include <async_coro/config.h>
 #include <async_coro/internal/all_awaiter.h>
 #include <async_coro/internal/any_awaiter.h>
-#include <async_coro/internal/passkey.h>
 #include <async_coro/internal/promise_type.h>
 #include <async_coro/internal/task_handle_awaiter.h>
+#include <async_coro/utils/passkey.h>
 
 #include <atomic>
 #include <coroutine>
@@ -42,7 +42,7 @@ class task_handle final {
       : _handle(std::move(handle)) {
     ASYNC_CORO_ASSERT(_handle);
     if (_handle) [[likely]] {
-      _handle.promise().set_owning_by_task_handle(true, internal::passkey{this});
+      _handle.promise().set_owning_by_task_handle(true, passkey{this});
     }
   }
 
@@ -58,7 +58,7 @@ class task_handle final {
     }
 
     if (_handle) {
-      _handle.promise().set_owning_by_task_handle(false, internal::passkey{this});
+      _handle.promise().set_owning_by_task_handle(false, passkey{this});
     }
 
     _handle = std::exchange(other._handle, {});
@@ -67,7 +67,7 @@ class task_handle final {
 
   ~task_handle() noexcept {
     if (_handle) {
-      _handle.promise().set_owning_by_task_handle(false, internal::passkey{this});
+      _handle.promise().set_owning_by_task_handle(false, passkey{this});
     }
   }
 
@@ -177,10 +177,10 @@ class task_handle final {
       func(promise, false);
     } else {
       const auto continue_f = callback_type::allocate(std::forward<Fx>(func)).release();
-      promise.set_continuation_functor(continue_f, internal::passkey{this});
+      promise.set_continuation_functor(continue_f, passkey{this});
       auto [state, cancelled] = promise.get_coroutine_state_and_cancelled(std::memory_order::acquire);
       if (state == async_coro::coroutine_state::finished || cancelled) {
-        if (auto* f_base = promise.get_continuation_functor(internal::passkey{this})) {
+        if (auto* f_base = promise.get_continuation_functor(passkey{this})) {
           ASYNC_CORO_ASSERT(f_base == continue_f);
           (void)f_base;
           continue_f->execute_and_destroy(promise, cancelled);
@@ -204,10 +204,10 @@ class task_handle final {
       func.execute_and_destroy(promise, false);
     } else {
       const auto ptr = &func;
-      promise.set_continuation_functor(ptr, internal::passkey{this});
+      promise.set_continuation_functor(ptr, passkey{this});
       const auto [state, cancelled] = promise.get_coroutine_state_and_cancelled(std::memory_order::acquire);
       if (state == async_coro::coroutine_state::finished || cancelled) {
-        if (auto* f_base = promise.get_continuation_functor(internal::passkey{this})) {
+        if (auto* f_base = promise.get_continuation_functor(passkey{this})) {
           ASYNC_CORO_ASSERT(f_base == ptr);
           ptr->execute_and_destroy(promise, cancelled);
         }
@@ -224,7 +224,7 @@ class task_handle final {
     }
 
     auto& promise = _handle.promise();
-    promise.set_continuation_functor(nullptr, internal::passkey{this});
+    promise.set_continuation_functor(nullptr, passkey{this});
   }
 
   /**

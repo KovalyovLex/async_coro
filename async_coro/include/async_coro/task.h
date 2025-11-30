@@ -2,9 +2,9 @@
 
 #include <async_coro/callback.h>
 #include <async_coro/config.h>
-#include <async_coro/internal/passkey.h>
 #include <async_coro/internal/promise_type.h>
-#include <async_coro/unique_function.h>
+#include <async_coro/utils/passkey.h>
+#include <async_coro/utils/unique_function.h>
 
 #include <concepts>
 #include <coroutine>
@@ -17,7 +17,7 @@ class base_handle;
 
 class task_base {
  public:
-  bool on_child_coro_added(base_handle& parent, base_handle& child);
+  void on_child_coro_added(base_handle& parent, base_handle& child);
 };
 
 /**
@@ -52,13 +52,13 @@ class task final : private task_base {
 
   ~task() noexcept {
     if (_handle) {
-      _handle.promise().try_free_task(internal::passkey{this});
+      _handle.promise().try_free_task(passkey{this});
     }
   }
 
   class awaiter {
    public:
-    awaiter(task& tas, bool done) noexcept : _t(tas), _was_done(done) {}
+    explicit awaiter(task& tas) noexcept : _t(tas) {}
     awaiter(const awaiter&) = delete;
     awaiter(awaiter&&) = delete;
     ~awaiter() noexcept = default;
@@ -66,7 +66,7 @@ class task final : private task_base {
     awaiter& operator=(const awaiter&) = delete;
     awaiter& operator=(awaiter&&) = delete;
 
-    [[nodiscard]] bool await_ready() const noexcept { return _was_done; }
+    [[nodiscard]] bool await_ready() const noexcept { return false; }
 
     template <typename T>
       requires(std::derived_from<T, base_handle>)
@@ -79,7 +79,6 @@ class task final : private task_base {
 
    private:
     task& _t;
-    bool _was_done;
   };
 
   [[nodiscard]] bool done() const noexcept { return _handle.done(); }
@@ -94,10 +93,11 @@ class task final : private task_base {
   void await_ready() = delete;
 
   awaiter coro_await_transform(base_handle& parent) && {
-    return {*this, on_child_coro_added(parent, _handle.promise()) && !parent.is_cancelled()};
+    on_child_coro_added(parent, _handle.promise());
+    return awaiter{*this};
   }
 
-  handle_type release_handle(internal::passkey_successors<scheduler> /*unused*/) noexcept {
+  handle_type release_handle(passkey_successors<scheduler> /*unused*/) noexcept {
     return std::exchange(_handle, {});
   }
 

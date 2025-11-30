@@ -1,6 +1,6 @@
 #pragma once
 
-#include <async_coro/internal/always_false.h>
+#include <async_coro/utils/always_false.h>
 
 #include <type_traits>
 #include <utility>
@@ -44,6 +44,24 @@ struct function_signature<R(TArgs...)> {
 
   template <class Fx>
   using is_invocable = typename is_invocable_impl<is_noexcept, R, TArgs...>::template test<Fx>;
+};
+
+template <typename R, typename... TArgs>
+struct function_signature<R(TArgs...) const> {
+  using return_type = R;
+  static constexpr bool is_noexcept = false;
+
+  template <class Fx>
+  using is_invocable = typename is_invocable_impl<is_noexcept, R, TArgs...>::template test<const Fx>;
+};
+
+template <typename R, typename... TArgs>
+struct function_signature<R(TArgs...) const noexcept> {
+  using return_type = R;
+  static constexpr bool is_noexcept = true;
+
+  template <class Fx>
+  using is_invocable = typename is_invocable_impl<is_noexcept, R, TArgs...>::template test<const Fx>;
 };
 
 template <class FxSig, class Fx>

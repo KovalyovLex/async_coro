@@ -3,6 +3,7 @@
 #include <async_coro/config.h>
 #include <async_coro/internal/deduce_function_signature.h>
 #include <async_coro/internal/type_traits.h>
+#include <async_coro/utils/always_false.h>
 
 #include <memory>
 #include <type_traits>
@@ -79,7 +80,7 @@ class callback_base {
 
 template <typename TFunc>
 class callback {
-  static_assert(internal::always_false<TFunc>::value,
+  static_assert(always_false<TFunc>::value,
                 "callback only accepts function types as template arguments, "
                 "with possibly noexcept qualifiers.");
 };
@@ -274,7 +275,7 @@ class callback_impl<Fx, Noexcept, R(TArgs...)> final : public std::conditional_t
 
 template <typename Fx, typename TFunc>
 class callback_on_stack {
-  static_assert(internal::always_false<TFunc>::value,
+  static_assert(always_false<TFunc>::value,
                 "callback_on_stack only accepts function types as template arguments, "
                 "with possibly noexcept qualifiers.");
 };

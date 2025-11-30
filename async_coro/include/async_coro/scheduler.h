@@ -2,11 +2,11 @@
 
 #include <async_coro/config.h>
 #include <async_coro/i_execution_system.h>
-#include <async_coro/internal/passkey.h>
 #include <async_coro/task_handle.h>
 #include <async_coro/task_launcher.h>
 #include <async_coro/thread_safety/analysis.h>
 #include <async_coro/thread_safety/mutex.h>
+#include <async_coro/utils/passkey.h>
 
 #if ASYNC_CORO_WITH_EXCEPTIONS
 #include <exception>
@@ -66,7 +66,7 @@ class scheduler {
   template <typename R>
   task_handle<R> start_task(task_launcher<R> launcher) {
     auto coro = launcher.launch();
-    auto handle = coro.release_handle(internal::passkey{this});
+    auto handle = coro.release_handle(passkey{this});
     task_handle<R> result{handle};
     if (!handle.done()) [[likely]] {
       add_coroutine(handle.promise(), launcher.get_start_function(), launcher.get_execution_queue());
@@ -124,19 +124,19 @@ class scheduler {
    * thread is suitable, or schedule it for later execution.
    * @param handle_impl The handle of the coroutine to continue.
    */
-  void continue_execution(base_handle& handle_impl, internal::passkey_any<internal::coroutine_suspender, base_handle, scheduler>);
+  void continue_execution(base_handle& handle_impl, passkey_any<internal::coroutine_suspender, base_handle>);
 
   /**
-   * @brief Embed coroutine. Returns true if coroutine was finished
+   * @brief Embed coroutine. Parent and child coroutines switch to suspended state, child will be continued after parent suspension point
    * @param parent The handle of the owning coroutine.
    * @param parent The handle of the coroutine to embed into parent.
    */
-  bool on_child_coro_added(base_handle& parent, base_handle& child, internal::passkey<task_base>);
+  void on_child_coro_added(base_handle& parent, base_handle& child, passkey<task_base>);
 
  private:
   bool is_current_thread_fits(execution_queue_mark execution_queue) noexcept;
   void add_coroutine(base_handle& handle_impl, callback_base::ptr start_function, execution_queue_mark execution_queue);
-  bool continue_execution_impl(base_handle& handle_impl, bool continue_parent_on_finish = true);
+  void continue_execution_impl(base_handle& handle_impl);
   void plan_continue_on_thread(base_handle& handle_impl, execution_queue_mark execution_queue);
   void change_execution_queue(base_handle& handle_impl, execution_queue_mark execution_queue);
   void cleanup_coroutine(base_handle& handle_impl, bool cancelled);
