@@ -8,6 +8,7 @@
 #include <atomic>
 #include <coroutine>
 #include <cstdint>
+#include <memory>
 #include <thread>
 
 namespace async_coro {
@@ -409,7 +410,7 @@ class base_handle {
   std::coroutine_handle<> _handle;
   scheduler* _scheduler = nullptr;
   callback_base::ptr _start_function;
-  std::atomic<callback<void()>*> _on_cancel = nullptr;  // callback for our coroutine (not continuation of others) to be cancelled
+  std::atomic<callback<void()>*> _on_cancel = nullptr;  // callback for our coroutine. It can be modified only inside our coroutine
   base_handle* _current_child = nullptr;
   std::thread::id _execution_thread;
   execution_queue_mark _execution_queue = execution_queues::main;

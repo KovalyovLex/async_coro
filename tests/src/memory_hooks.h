@@ -5,10 +5,9 @@ namespace mem_hook {
 inline std::atomic_size_t num_allocated = 0;  // NOLINT(*-global-*)
 }
 
-// NOLINTBEGIN(readability-*)
-// NOLINTBEGIN(*-macro-*)
+// NOLINTBEGIN(readability-*, *-macro-*)
 
-#if defined(__clang__) && defined(__has_feature)
+#if (defined(__clang__) || defined(__GNUC__)) && defined(__has_feature)
 #if __has_feature(thread_sanitizer)
 #define MEM_HOOKS_ENABLED 0
 #else
@@ -32,5 +31,4 @@ void operator delete(void* ptr, std::size_t size) noexcept;
 
 #endif
 
-// NOLINTEND(*-macro-*)
-// NOLINTEND(readability-*)
+// NOLINTEND(readability-*, *-macro-*)

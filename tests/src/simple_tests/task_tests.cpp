@@ -6,8 +6,10 @@
 #include <async_coro/scheduler.h>
 #include <async_coro/task.h>
 #include <async_coro/task_launcher.h>
+#include <async_coro/utils/unique_function.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <numbers>
@@ -16,7 +18,7 @@
 #include <type_traits>
 #include <variant>
 
-#include "async_coro/utils/unique_function.h"
+#include "memory_hooks.h"
 
 namespace task_tests {
 struct coro_runner {
@@ -93,7 +95,7 @@ TEST(task, async_execution) {
                                                              {"worker2"}}})};
 
   ASSERT_FALSE(routine.done());
-  auto handle = scheduler.start_task(std::move(routine));
+  auto handle = scheduler.start_task(std::move(routine), async_coro::execution_queues::main);
   ASSERT_FALSE(handle.done());
 
   std::this_thread::sleep_for(std::chrono::milliseconds{30});
@@ -1449,9 +1451,53 @@ TEST(task, multiple_immediate_children_with_continue) {
   EXPECT_FALSE(res.done());
   EXPECT_TRUE(continuation);
 
-  while (continuation) {
+  while (continuation) {  // NOLINT(*use-after-move, *access-moved)
     auto func = std::move(continuation);
     func();
   }
   EXPECT_TRUE(res.done());
 }
+
+TEST(task, deep_recursion) {
+  async_coro::scheduler scheduler;
+
+  const auto child_task = [](bool cond) -> async_coro::task<> {
+    EXPECT_TRUE(cond);
+    co_return;
+  };
+
+  const auto parent_task = [child_task]() -> async_coro::task<> {
+    for (int i = 0; i < 3000000; i++) {
+      co_await child_task(true);
+    }
+  };
+
+  auto res = scheduler.start_task(parent_task);
+  ASSERT_TRUE(res.done());
+}
+
+#if MEM_HOOKS_ENABLED
+
+TEST(task, mem_free_child) {
+  async_coro::scheduler scheduler;
+
+  const auto child_task = [](size_t mem_before) -> async_coro::task<> {
+    EXPECT_GT(mem_hook::num_allocated.load(std::memory_order::relaxed), mem_before);
+    co_return;
+  };
+
+  const auto parent_task = [child_task]() -> async_coro::task<> {
+    const auto mem_before = mem_hook::num_allocated.load(std::memory_order::relaxed);
+    for (int i = 0; i < 1000; i++) {
+      const auto val = mem_hook::num_allocated.load(std::memory_order::relaxed);
+      co_await child_task(val);
+      EXPECT_EQ(val, mem_hook::num_allocated.load(std::memory_order::relaxed));
+    }
+    EXPECT_EQ(mem_before, mem_hook::num_allocated.load(std::memory_order::relaxed));
+  };
+
+  auto res = scheduler.start_task(parent_task);
+  ASSERT_TRUE(res.done());
+}
+
+#endif

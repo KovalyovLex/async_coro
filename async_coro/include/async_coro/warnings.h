@@ -1,5 +1,7 @@
 #pragma once
 
+// NOLINTBEGIN(*macro-usage)
+
 #if defined _MSC_VER
 
 #define ASYNC_CORO_WARNINGS_MSVC_PUSH __pragma(warning(push))
@@ -59,3 +61,5 @@
 #define ASYNC_CORO_WARNINGS_CLANG_POP
 
 #endif
+
+// NOLINTEND(*macro-usage)

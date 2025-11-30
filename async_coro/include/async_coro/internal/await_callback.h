@@ -12,6 +12,7 @@
 #include <atomic>
 #include <concepts>
 #include <coroutine>
+#include <memory>
 #include <type_traits>
 #include <utility>
 
