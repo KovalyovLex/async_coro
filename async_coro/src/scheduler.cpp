@@ -41,91 +41,91 @@ bool scheduler::is_current_thread_fits(execution_queue_mark execution_queue) noe
   return _execution_system->is_current_thread_fits(execution_queue);
 }
 
-bool scheduler::continue_execution_impl(base_handle& handle_impl, bool continue_parent_on_finish) {  // NOLINT(*complexity*)
-  internal::scheduled_run_data local_run_data{.continue_parent_on_finish = continue_parent_on_finish};
+void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*complexity*)
+  base_handle* handle_to_run = std::addressof(handle);
 
-  internal::scheduled_run_data* curren_data{nullptr};
-  bool run_data_was_set = false;
+  while (handle_to_run != nullptr) {
+    internal::scheduled_run_data run_data{};
 
-  if (handle_impl._run_data.compare_exchange_strong(curren_data, &local_run_data, std::memory_order::relaxed)) {
-    run_data_was_set = true;
-    curren_data = &local_run_data;
-  }
+    {
+      internal::scheduled_run_data* curren_data{nullptr};
 
-  bool was_cancelled = handle_impl.set_coroutine_state_and_get_cancelled(coroutine_state::running);
-
-  continue_parent_on_finish &= curren_data->continue_parent_on_finish;
-  ASYNC_CORO_ASSERT(!curren_data->external_continuation_request);
-
-  coroutine_state state = coroutine_state::created;
-  if (!was_cancelled) {
-    handle_impl.get_handle().resume();
-
-    if (curren_data->external_continuation_request) {
-      // this coroutine could be managed by another thread and it could be even destroyed so return immediately
-      return false;
-    }
-
-    std::tie(state, was_cancelled) = handle_impl.get_coroutine_state_and_cancelled();
-  } else {
-    state = coroutine_state::suspended;
-    handle_impl.set_coroutine_state(state);
-
-    if (curren_data->external_continuation_request) {
-      // this coroutine could be managed by another thread and it could be even destroyed so return immediately
-      return false;
-    }
-  }
-
-  if (run_data_was_set) {
-    handle_impl._run_data.store(nullptr, std::memory_order::relaxed);
-  }
-
-  ASYNC_CORO_ASSERT(state != coroutine_state::running);
-
-  if (was_cancelled || state == coroutine_state::finished) {
-    const auto cancelled_without_finish = state != coroutine_state::finished && was_cancelled;
-
-    if (auto* parent = handle_impl.get_parent()) {
-      if (parent->_current_child == &handle_impl) {
-        parent->_current_child = nullptr;
-      }
-
-      if (cancelled_without_finish) {
-        if (auto* on_cancel = handle_impl._on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
-          on_cancel->execute_and_destroy();
+      while (!handle_to_run->_run_data.compare_exchange_strong(curren_data, std::addressof(run_data), std::memory_order::acquire, std::memory_order::relaxed)) {
+        if (curren_data != nullptr && handle_to_run->is_current_thread_same()) {
+          // push this coro to q on run next
+          ASYNC_CORO_ASSERT(curren_data->coroutine_to_run_next == nullptr);
+          curren_data->coroutine_to_run_next = handle_to_run;
+          return;
         }
-
-        parent->request_cancel();
-
-        // current coroutine should not be processed further in recursive call
-        curren_data->external_continuation_request = true;
+        curren_data = nullptr;
       }
+    }
 
-      if (continue_parent_on_finish && parent->get_coroutine_state() == coroutine_state::suspended) {
-        // wake up parent coroutine
-        continue_execution(*parent, passkey{this});
-      }
+    bool was_cancelled = handle_to_run->set_coroutine_state_and_get_cancelled(coroutine_state::running);
+
+    coroutine_state state = coroutine_state::created;
+    if (!was_cancelled) {
+      handle_to_run->get_handle().resume();
+
+      std::tie(state, was_cancelled) = handle_to_run->get_coroutine_state_and_cancelled();
     } else {
-      // cleanup coroutine
-      curren_data->external_continuation_request = true;
+      state = coroutine_state::suspended;
+      handle_to_run->set_coroutine_state(state);
+    }
 
-      if (cancelled_without_finish) {
-        if (auto* on_cancel = handle_impl._on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
-          on_cancel->execute_and_destroy();
+    ASYNC_CORO_ASSERT(state != coroutine_state::running);
+
+    if (was_cancelled || state == coroutine_state::finished) {
+      const auto cancelled_without_finish = state != coroutine_state::finished && was_cancelled;
+
+      if (auto* parent = handle_to_run->get_parent()) {
+        if (parent->_current_child == handle_to_run) {
+          parent->_current_child = nullptr;
         }
+
+        if (cancelled_without_finish) {
+          if (auto* on_cancel = handle_to_run->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
+            on_cancel->execute_and_destroy();
+          }
+
+          parent->request_cancel();
+        }
+
+        if (parent->get_coroutine_state() == coroutine_state::suspended) {
+          // wake up parent coroutine
+          if (parent->is_current_thread_same()) {
+            ASYNC_CORO_ASSERT(run_data.coroutine_to_run_next == nullptr);
+            run_data.coroutine_to_run_next = parent;
+          } else {
+            plan_continue_on_thread(*parent, parent->_execution_queue);
+          }
+        }
+      } else {
+        // cleanup coroutine
+
+        if (cancelled_without_finish) {
+          if (auto* on_cancel = handle_to_run->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
+            on_cancel->execute_and_destroy();
+          }
+        }
+
+        cleanup_coroutine(*handle_to_run, cancelled_without_finish);
       }
 
-      cleanup_coroutine(handle_impl, cancelled_without_finish);
+    } else if (state == coroutine_state::waiting_switch) {
+      change_execution_queue(*handle_to_run, handle_to_run->_execution_queue);
     }
-    return true;
-  }
 
-  if (state == coroutine_state::waiting_switch) {
-    change_execution_queue(handle_impl, handle_impl._execution_queue);
-  }
+    handle_to_run->_run_data.store(nullptr, std::memory_order::release);
 
-  return false;
+    handle_to_run = run_data.coroutine_to_run_next;
+
+    if (handle_to_run != nullptr && was_cancelled) {
+      // cancel execution of next coroutine as it depends on currently cancelled
+      handle_to_run->request_cancel();
+      break;
+    }
+  }
 }
 
 void scheduler::cleanup_coroutine(base_handle& handle_impl, bool cancelled) {
@@ -224,7 +224,7 @@ void scheduler::set_unhandled_exception_handler(unique_function<void(std::except
 }
 #endif
 
-void scheduler::continue_execution(base_handle& handle_impl, passkey_any<internal::coroutine_suspender, base_handle, scheduler> /*key*/) {
+void scheduler::continue_execution(base_handle& handle_impl, passkey_any<internal::coroutine_suspender, base_handle> /*key*/) {
   ASYNC_CORO_ASSERT(handle_impl._execution_thread != std::thread::id{});
   ASYNC_CORO_ASSERT(handle_impl.get_coroutine_state() == coroutine_state::suspended);
 
@@ -243,7 +243,7 @@ void scheduler::change_execution_queue(base_handle& handle_impl,
   plan_continue_on_thread(handle_impl, execution_queue);
 }
 
-bool scheduler::on_child_coro_added(base_handle& parent, base_handle& child, passkey<task_base> /*key*/) {
+void scheduler::on_child_coro_added(base_handle& parent, base_handle& child, passkey<task_base> /*key*/) {
   ASYNC_CORO_ASSERT(parent.get_coroutine_state() == coroutine_state::running);
   ASYNC_CORO_ASSERT(parent._scheduler == this);
   ASYNC_CORO_ASSERT(child._execution_thread == std::thread::id{});
@@ -258,14 +258,11 @@ bool scheduler::on_child_coro_added(base_handle& parent, base_handle& child, pas
   child.set_parent(parent);
   child.set_coroutine_state(coroutine_state::suspended);
 
-  // start execution of internal coroutine
-  bool was_done = continue_execution_impl(child, false);
+  auto* run_data = parent._run_data.load(std::memory_order::relaxed);
+  ASYNC_CORO_ASSERT(run_data != nullptr);
+  ASYNC_CORO_ASSERT(run_data->coroutine_to_run_next == nullptr);
 
-  if (was_done) {
-    parent.set_coroutine_state(coroutine_state::running);
-  }
-
-  return was_done;
+  run_data->coroutine_to_run_next = std::addressof(child);
 }
 
 }  // namespace async_coro

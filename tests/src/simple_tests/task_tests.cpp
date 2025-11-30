@@ -1455,3 +1455,21 @@ TEST(task, multiple_immediate_children_with_continue) {
   }
   EXPECT_TRUE(res.done());
 }
+
+TEST(task, deep_recursion) {
+  async_coro::scheduler scheduler;
+
+  const auto child_task = [](bool cond) -> async_coro::task<> {
+    EXPECT_TRUE(cond);
+    co_return;
+  };
+
+  const auto parent_task = [child_task]() -> async_coro::task<> {
+    for (int i = 0; i < 1000000; i++) {
+      co_await child_task(true);
+    }
+  };
+
+  auto res = scheduler.start_task(parent_task);
+  ASSERT_TRUE(res.done());
+}

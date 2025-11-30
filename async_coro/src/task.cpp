@@ -4,8 +4,8 @@
 
 namespace async_coro {
 
-bool task_base::on_child_coro_added(base_handle& parent, base_handle& child) {  // NOLINT(*-static)
-  return parent.get_scheduler().on_child_coro_added(parent, child, {});
+void task_base::on_child_coro_added(base_handle& parent, base_handle& child) {  // NOLINT(*-static)
+  parent.get_scheduler().on_child_coro_added(parent, child, {});
 }
 
 }  // namespace async_coro
