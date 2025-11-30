@@ -89,9 +89,7 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
           }
 
           parent->request_cancel();
-        }
-
-        if (parent->get_coroutine_state() == coroutine_state::suspended) {
+        } else if (parent->get_coroutine_state() == coroutine_state::suspended) {
           // wake up parent coroutine
           if (parent->is_current_thread_same()) {
             ASYNC_CORO_ASSERT(run_data.coroutine_to_run_next == nullptr);
@@ -111,12 +109,13 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
 
         cleanup_coroutine(*handle_to_run, cancelled_without_finish);
       }
-
-    } else if (state == coroutine_state::waiting_switch) {
-      change_execution_queue(*handle_to_run, handle_to_run->_execution_queue);
     }
 
     handle_to_run->_run_data.store(nullptr, std::memory_order::release);
+
+    if (state == coroutine_state::waiting_switch) {
+      change_execution_queue(*handle_to_run, handle_to_run->_execution_queue);
+    }
 
     handle_to_run = run_data.coroutine_to_run_next;
 
