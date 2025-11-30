@@ -61,30 +61,32 @@ endif()
 if(SERVER_ENABLE_BROTLI)
     target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_BROTLI=1)
 
-    find_package(brotli OPTIONAL)
-    set(brotli_targets brotli::brotlienc brotli::brotlidec)
-
-    if (NOT TARGET brotli::brotlienc)
-        if (NOT DEFINED BROTLI_BUILD_TOOLS)
-            set(BROTLI_BUILD_TOOLS OFF CACHE BOOL "Disable brotli tools build")
-        endif()
-
-        FetchContent_Declare(
-            brotli
-            GIT_REPOSITORY https://github.com/google/brotli.git
-            GIT_TAG v1.2.0
-            GIT_SHALLOW TRUE
-            GIT_PROGRESS TRUE
-        )
-
-        set(OLD_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
-        set(BUILD_SHARED_LIBS OFF)
-        
-        FetchContent_MakeAvailable(brotli)
-        
-        set(BUILD_SHARED_LIBS ${OLD_BUILD_SHARED_LIBS})
-
+    if (TARGET brotli::brotlienc)
+        set(brotli_targets brotli::brotlienc brotli::brotlidec)
+    else()
         set(brotli_targets brotlienc brotlidec)
+
+        if(NOT TARGET brotlienc)
+            if (NOT DEFINED BROTLI_BUILD_TOOLS)
+                set(BROTLI_BUILD_TOOLS OFF CACHE BOOL "Disable brotli tools build")
+            endif()
+
+            FetchContent_Declare(
+                brotli
+                GIT_REPOSITORY https://github.com/google/brotli.git
+                GIT_TAG v1.2.0
+                GIT_SHALLOW TRUE
+                GIT_PROGRESS TRUE
+            )
+
+            # using static lib for brotli
+            set(OLD_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+            set(BUILD_SHARED_LIBS OFF)
+            
+            FetchContent_MakeAvailable(brotli)
+            
+            set(BUILD_SHARED_LIBS ${OLD_BUILD_SHARED_LIBS})
+        endif()
     endif()
 
     target_link_libraries(server_lib PUBLIC ${brotli_targets})
@@ -95,20 +97,21 @@ endif()
 if(SERVER_ENABLE_ZSTD)
     target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_ZSTD=1)
 
-    find_package(zstd OPTIONAL)
-    set(zlib_targets zstd::libzstd)
-
-    if (NOT TARGET zstd::libzstd)
-        FetchContent_Declare(
-            zstd
-            GIT_REPOSITORY https://github.com/facebook/zstd.git
-            GIT_TAG v1.5.7
-            GIT_SHALLOW TRUE
-            GIT_PROGRESS TRUE
-        )
-        FetchContent_MakeAvailable(zstd)
-
+    if (TARGET zstd::libzstd)
+        set(zlib_targets zstd::libzstd)
+    else()
         set(zlib_targets zstd)
+
+        if(NOT TARGET zstd)
+            FetchContent_Declare(
+                zstd
+                GIT_REPOSITORY https://github.com/facebook/zstd.git
+                GIT_TAG v1.5.7
+                GIT_SHALLOW TRUE
+                GIT_PROGRESS TRUE
+            )
+            FetchContent_MakeAvailable(zstd)
+        endif()
     endif()
 
     target_link_libraries(server_lib PUBLIC ${zlib_targets})
