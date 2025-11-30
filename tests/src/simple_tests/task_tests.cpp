@@ -1448,7 +1448,7 @@ TEST(task, multiple_immediate_children_with_continue) {
   EXPECT_FALSE(res.done());
   EXPECT_TRUE(continuation);
 
-  while (continuation) {  // NOLINT(*use-after-move)
+  while (continuation) {  // NOLINT(*use-after-move, *access-moved)
     auto func = std::move(continuation);
     func();
   }
@@ -1464,7 +1464,7 @@ TEST(task, deep_recursion) {
   };
 
   const auto parent_task = [child_task]() -> async_coro::task<> {
-    for (int i = 0; i < 1000000; i++) {
+    for (int i = 0; i < 3000000; i++) {
       co_await child_task(true);
     }
   };
