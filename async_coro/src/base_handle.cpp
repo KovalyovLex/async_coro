@@ -89,7 +89,7 @@ bool base_handle::request_cancel() {
     (void)get_coroutine_state(std::memory_order::acquire);
 
     if ((state == coroutine_state::suspended || state == coroutine_state::waiting_switch)) {
-      // It should be unsafe to use this fields if state prior cancel request was suspended
+      // It is safe to use this fields if state prior cancel request was suspended
       // as any continue after our request leaves this fields untouched
       if (_current_child != nullptr) {
         _current_child->request_cancel();
