@@ -27,9 +27,6 @@ class compression_negotiator {
   // Get the priority of an encoding (higher = more preferred by server). Zero means no support
   [[nodiscard]] size_t get_encoding_priority(compression_encoding enc) const noexcept;
 
-  // Get string representation of encoding
-  [[nodiscard]] static std::string_view encoding_to_string(compression_encoding enc) noexcept;
-
   // Get client preferences from Accept-Encoding header
   // Parses and add encoding preference to vector
   static void parse_accept_encoding(std::string_view header, std::pmr::vector<encoding_preference>& preferences) noexcept;

@@ -49,28 +49,6 @@ std::optional<compression_encoding> compression_negotiator::string_to_encoding(s
   return std::nullopt;
 }
 
-std::string_view compression_negotiator::encoding_to_string(compression_encoding enc) noexcept {
-  switch (enc) {
-#if SERVER_HAS_ZLIB
-    case compression_encoding::deflate:
-      return "deflate";
-    case compression_encoding::gzip:
-      return "gzip";
-#endif
-#if SERVER_HAS_ZSTD
-    case compression_encoding::zstd:
-      return "zstd";
-#endif
-#if SERVER_HAS_BROTLI
-    case compression_encoding::br:
-      return "br";
-#endif
-    case compression_encoding::none:
-    default:
-      return "identity";
-  }
-}
-
 std::optional<encoding_preference> compression_negotiator::parse_token(std::string_view token) noexcept {
   encoding_preference pref{.encoding = compression_encoding::none, .quality = 1.0F};
 

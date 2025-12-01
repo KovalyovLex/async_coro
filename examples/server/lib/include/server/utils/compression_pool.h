@@ -45,6 +45,9 @@ enum class compression_encoding : std::uint8_t {
   none
 };
 
+// Get string representation of encoding
+std::string_view as_string(compression_encoding enc) noexcept;
+
 // Configuration for a single compression encoding
 struct compression_config {
   static constexpr uint32_t default_max_pool_size = 16;

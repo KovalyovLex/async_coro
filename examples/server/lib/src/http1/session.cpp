@@ -66,11 +66,8 @@ session::session(server::socket_layer::connection conn, const router& router, co
 
     // Set up encoder if compression is negotiated
     if (negotiated_encoding != compression_encoding::none) {
-      auto compressor = _compression_pool->acquire_compressor(negotiated_encoding);
-      if (compressor) {
-        res.set_encoder(std::move(compressor));
-        res.add_header(static_string{"Content-Encoding"}, static_string{compression_negotiator::encoding_to_string(negotiated_encoding)});
-      }
+      res.set_compression_pool(_compression_pool);
+      res.set_encoding(negotiated_encoding);
     }
 
     if (const auto* handler = _router->find_handler(req)) {

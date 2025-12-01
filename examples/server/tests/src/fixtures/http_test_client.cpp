@@ -6,9 +6,11 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <charconv>
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 
 namespace {
@@ -108,9 +110,12 @@ std::string http_test_client::read_response() {
   // simple read until CRLFCRLF
   std::string out;
   std::array<char, 1024> buf;  // NOLINT(*init)
-  constexpr std::string_view split_str = "\r\n\r\n";
+  constexpr std::string_view k_split_str = "\r\n\r\n";
+  constexpr std::string_view k_content_len = "Content-Length:";
 
   size_t offset = 0;
+  std::optional<size_t> cnt_len = {};
+  size_t body_start = 0;
   while (true) {
     auto bytes = std::as_writable_bytes(std::span<char>{buf});
     if (!recv_bytes(bytes)) {
@@ -118,19 +123,41 @@ std::string http_test_client::read_response() {
     }
     out.append(buf.data(), buf.data() + buf.size() - bytes.size());
 
-    auto it = out.find(split_str, offset);
+    auto it = body_start == 0 ? out.find(k_split_str, offset) : std::string::npos;
     if (it != std::string::npos) {
-      if (out.size() > it + split_str.size()) {
-        offset = it + split_str.size();
-      } else {
-        // end
-        break;
+      offset = body_start = it + k_split_str.size();
+      if (out.size() >= body_start) {
+        const auto headers = std::string_view{out.data(), body_start};
+        const auto cnt_start_i = headers.find(k_content_len);
+        std::string_view cnt_len_str;
+        if (cnt_start_i != std::string_view::npos) {
+          cnt_len_str = headers.substr(cnt_start_i + k_content_len.size());
+          cnt_len_str.substr(0, cnt_len_str.find('\n'));
+          while (!cnt_len_str.empty() && cnt_len_str.front() == ' ') {
+            cnt_len_str.remove_prefix(1);
+          }
+          while (!cnt_len_str.empty() && (cnt_len_str.back() == '\r' || cnt_len_str.front() == ' ')) {
+            cnt_len_str.remove_suffix(1);
+          }
+        }
+        if (!cnt_len_str.empty()) {
+          size_t len = 0;
+          auto res = std::from_chars(cnt_len_str.data(), cnt_len_str.data() + cnt_len_str.size(), len);
+          if (res.ec == std::errc{}) {
+            cnt_len = len;
+          }
+        }
       }
     } else {
       offset = out.size();
       while (offset > 0 && (out[offset - 1] == '\r' || out[offset - 1] == '\n')) {
         offset--;
       }
+    }
+
+    if (body_start > 0 && (!cnt_len || out.size() >= body_start + *cnt_len)) {
+      // end
+      break;
     }
   }
   return out;

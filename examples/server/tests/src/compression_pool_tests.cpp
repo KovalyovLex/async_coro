@@ -25,30 +25,35 @@ class compression_pool_tests : public ::testing::Test, public compression_helper
 
 // Tests for encoding_to_string conversion
 TEST_F(compression_pool_tests, encoding_to_string_gzip) {
-  auto str = server::compression_negotiator::encoding_to_string(server::compression_encoding::gzip);
+  auto str = as_string(server::compression_encoding::gzip);
   EXPECT_EQ(str, "gzip");
 }
 
 TEST_F(compression_pool_tests, encoding_to_string_deflate) {
-  auto str = server::compression_negotiator::encoding_to_string(server::compression_encoding::deflate);
+  auto str = as_string(server::compression_encoding::deflate);
   EXPECT_EQ(str, "deflate");
 }
 
 TEST_F(compression_pool_tests, encoding_to_string_none) {
-  auto str = server::compression_negotiator::encoding_to_string(server::compression_encoding::none);
+  auto str = as_string(server::compression_encoding::none);
+  EXPECT_EQ(str, "identity");
+}
+
+TEST_F(compression_pool_tests, encoding_to_string_any) {
+  auto str = as_string(server::compression_encoding::any);
   EXPECT_EQ(str, "identity");
 }
 
 #if SERVER_HAS_BROTLI
 TEST_F(compression_pool_tests, encoding_to_string_brotli) {
-  auto str = server::compression_negotiator::encoding_to_string(server::compression_encoding::br);
+  auto str = as_string(server::compression_encoding::br);
   EXPECT_EQ(str, "br");
 }
 #endif
 
 #if SERVER_HAS_ZSTD
 TEST_F(compression_pool_tests, encoding_to_string_zstd) {
-  auto str = server::compression_negotiator::encoding_to_string(server::compression_encoding::zstd);
+  auto str = as_string(server::compression_encoding::zstd);
   EXPECT_EQ(str, "zstd");
 }
 #endif

@@ -10,6 +10,28 @@
 
 namespace server {
 
+std::string_view as_string(compression_encoding enc) noexcept {
+  switch (enc) {
+#if SERVER_HAS_ZLIB
+    case compression_encoding::deflate:
+      return "deflate";
+    case compression_encoding::gzip:
+      return "gzip";
+#endif
+#if SERVER_HAS_ZSTD
+    case compression_encoding::zstd:
+      return "zstd";
+#endif
+#if SERVER_HAS_BROTLI
+    case compression_encoding::br:
+      return "br";
+#endif
+    case compression_encoding::none:
+    default:
+      return "identity";
+  }
+}
+
 compression_pool::compression_pool(compression_pool_config config, async_coro::passkey_successors<compression_pool> /*key*/) noexcept
     : _config(std::move(config)) {}
 
