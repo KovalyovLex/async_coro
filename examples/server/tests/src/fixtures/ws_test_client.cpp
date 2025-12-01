@@ -1,42 +1,15 @@
 #include "ws_test_client.h"
 
-#include <arpa/inet.h>
-#include <fcntl.h>
 #include <gtest/gtest.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <unistd.h>
 
+#include <cstdint>
 #include <cstring>
+#include <span>
 #include <string_view>
 
+#include "fixtures/http_test_client.h"
+
 namespace {
-
-bool set_socket_timeouts(int sock, int timeout_ms) {  // NOLINT(*swappable*)
-  timeval tv{};
-  tv.tv_sec = timeout_ms / 1000;
-  tv.tv_usec = long(timeout_ms % 1000) * 1000;
-  if (::setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) != 0) {
-    return false;
-  }
-  if (::setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) != 0) {
-    return false;
-  }
-  return true;
-}
-
-ssize_t recv_all_timeout(server::socket_layer::connection_id sock, void* buf, size_t len) {
-  ssize_t total = 0;
-  while (total < static_cast<ssize_t>(len)) {
-    ssize_t r = ::recv(sock.get_platform_id(), reinterpret_cast<char*>(buf) + total, len - total, 0);
-    if (r <= 0) {
-      return r;
-    }
-    total += r;
-  }
-  return total;
-}
 
 void on_error(const std::string& error_str) {
   GTEST_FAIL() << error_str;
@@ -93,74 +66,13 @@ std::vector<std::byte> generate_frame_impl(std::vector<std::byte>& frame, uint8_
 
 }  // namespace
 
-server::socket_layer::connection_id ws_test_client::connect_blocking(const std::string& host, uint16_t port, int timeout_ms) {  // NOLINT(*swappable*)
-
-  // we use blocking connect and rely on connect retry from caller
-  auto sock = ::socket(AF_INET, SOCK_STREAM, 0);
-  if (sock < 0) {
-    return server::socket_layer::invalid_connection;
-  }
-
-  sockaddr_in sa{};
-  sa.sin_family = AF_INET;
-  sa.sin_port = ::htons(port);
-  if (::inet_pton(AF_INET, host.c_str(), &sa.sin_addr) != 1) {
-    ::close(sock);
-    return server::socket_layer::invalid_connection;
-  }
-
-  if (::connect(sock, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) != 0) {
-    ::close(sock);
-    return server::socket_layer::invalid_connection;
-  }
-
-  // set recv/send timeouts
-  set_socket_timeouts(sock, timeout_ms > 0 ? timeout_ms : 2000);
-
-  return server::socket_layer::connection_id{sock};
-}
-
-ssize_t ws_test_client::send_all(server::socket_layer::connection_id sock, const void* data, size_t len) {
-  size_t sent = 0;
-  while (sent < len) {
-    ssize_t s = ::send(sock.get_platform_id(), reinterpret_cast<const char*>(data) + sent, len - sent, 0);
-    if (s <= 0) {
-      return -1;
-    }
-    sent += static_cast<size_t>(s);
-  }
-  return static_cast<ssize_t>(sent);
-}
-
-std::string ws_test_client::recv_http_response(server::socket_layer::connection_id sock) {
-  // simple read until CRLFCRLF
-  std::string out;
-  std::array<char, 1024> buf;  // NOLINT(*init)
-  while (true) {
-    ssize_t r = ::recv(sock.get_platform_id(), buf.data(), buf.size(), 0);
-    if (r <= 0) {
-      break;
-    }
-    out.append(buf.data(), buf.data() + r);
-    if (out.find("\r\n\r\n") != std::string::npos) {
-      break;
-    }
-  }
-  return out;
-}
-
-std::string ws_test_client::generate_handshake_request(const std::string& path, const std::string& host, const std::string& key, const std::string& protocol) {  // NOLINT(*swappable*)
+std::string ws_test_client::generate_handshake_request(const http_test_client& client, const std::string& path, const std::string& key, const std::string& protocol) {  // NOLINT(*swappable*)
   std::string sec_key = key;
   if (sec_key.empty()) {
     sec_key = "dGhlIHNhbXBsZSBub25jZQ==";  // default sample
   }
 
-  std::string req = "GET ";
-  req += path;
-  req += " HTTP/1.1\r\n";
-  req += "Host: ";
-  req += host;
-  req += "\r\n";
+  std::string req = client.generate_req_head(server::http1::http_method::GET, path);
   req += "Upgrade: websocket\r\n";
   req += "Connection: Upgrade\r\n";
   req += "Sec-WebSocket-Key: ";
@@ -176,11 +88,12 @@ std::string ws_test_client::generate_handshake_request(const std::string& path, 
   return req;
 }
 
-ws_parsed_frame ws_test_client::recv_frame(server::socket_layer::connection_id sock) {
+ws_parsed_frame ws_test_client::recv_frame(http_test_client& client) {
   ws_parsed_frame res{};
   std::array<uint8_t, 2> header{};
-  ssize_t r = ::recv(sock.get_platform_id(), header.data(), header.size(), 0);
-  if (r <= 0) {
+
+  auto bytes = std::as_writable_bytes(std::span<uint8_t>{header});
+  if (!client.recv_bytes(bytes)) {
     on_error("recv failed or connection closed");
   }
 
@@ -192,15 +105,15 @@ ws_parsed_frame ws_test_client::recv_frame(server::socket_layer::connection_id s
 
   if (len == 126) {
     std::array<uint8_t, 2> ext{};
-    r = recv_all_timeout(sock, ext.data(), ext.size());
-    if (r <= 0) {
+    bytes = std::as_writable_bytes(std::span<uint8_t>{ext});
+    if (!client.recv_bytes(bytes)) {
       on_error("recv failed");
     }
     len = (static_cast<uint64_t>(ext[0]) << 8U) | static_cast<uint64_t>(ext[1]);
   } else if (len == 127) {
     std::array<uint8_t, 8> ext{};
-    r = recv_all_timeout(sock, ext.data(), ext.size());
-    if (r <= 0) {
+    bytes = std::as_writable_bytes(std::span<uint8_t>{ext});
+    if (!client.recv_bytes(bytes)) {
       on_error("recv failed");
     }
     len = 0;
@@ -211,16 +124,16 @@ ws_parsed_frame ws_test_client::recv_frame(server::socket_layer::connection_id s
 
   std::array<uint8_t, 4> mask_key = {};
   if (mask) {
-    r = recv_all_timeout(sock, mask_key.data(), mask_key.size());
-    if (r <= 0) {
+    bytes = std::as_writable_bytes(std::span<uint8_t>{mask_key});
+    if (!client.recv_bytes(bytes)) {
       on_error("recv failed");
     }
   }
 
   res.payload.resize(len);
   if (len > 0) {
-    r = recv_all_timeout(sock, res.payload.data(), len);
-    if (r <= 0) {
+    bytes = std::as_writable_bytes(std::span{res.payload.data(), len});
+    if (!client.recv_bytes(bytes)) {
       on_error("recv failed");
     }
   }

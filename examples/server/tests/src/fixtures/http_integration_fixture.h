@@ -4,6 +4,8 @@
 #include <gtest/gtest.h>
 #include <server/http1/http_server.h>
 
+#include "fixtures/http_test_client.h"
+
 class http_integration_fixture : public ::testing::Test {
  protected:
   void SetUp() override;
@@ -19,9 +21,10 @@ class http_integration_fixture : public ::testing::Test {
  protected:
   async_coro::mutex mutex;
   std::function<async_coro::task<>(const server::http1::request&, server::http1::response&)> get_test_handler CORO_THREAD_GUARDED_BY(mutex);
+  std::function<async_coro::task<>(const server::http1::request&, server::http1::response&)> head_test_handler CORO_THREAD_GUARDED_BY(mutex);
   std::function<async_coro::task<>(const server::http1::request&, server::http1::response&)> post_test_handler CORO_THREAD_GUARDED_BY(mutex);
   server::http1::http_server server;
   std::thread server_thread;
   uint16_t port = 0;
-  server::socket_layer::connection_id client_connection = server::socket_layer::invalid_connection;
+  http_test_client test_client;
 };

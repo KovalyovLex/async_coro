@@ -96,22 +96,6 @@ TEST(web_socket_frames, fragmented_message) {
   EXPECT_EQ((std::to_integer<uint8_t>(frame2[0]) & 0x80U), 0x80U);
 }
 
-// Test: handshake request generation
-TEST(web_socket_handshake, generate_handshake_request) {
-  auto request = ws_test_client::generate_handshake_request();
-  EXPECT_TRUE(request.find("GET / HTTP/1.1") != std::string::npos);
-  EXPECT_TRUE(request.find("Upgrade: websocket") != std::string::npos);
-  EXPECT_TRUE(request.find("Connection: Upgrade") != std::string::npos);
-  EXPECT_TRUE(request.find("Sec-WebSocket-Key:") != std::string::npos);
-  EXPECT_TRUE(request.find("Sec-WebSocket-Version: 13") != std::string::npos);
-}
-
-// Test: handshake request with protocol
-TEST(web_socket_handshake, generate_handshake_with_protocol) {
-  auto request = ws_test_client::generate_handshake_request("/", "localhost", "dGhlIHNhbXBsZSBub25jZQ==", "chat");
-  EXPECT_TRUE(request.find("Sec-WebSocket-Protocol: chat") != std::string::npos);
-}
-
 // Test: large text frame
 TEST(web_socket_frames, large_text_frame) {
   std::string large_text(10000, 'a');

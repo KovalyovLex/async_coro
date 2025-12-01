@@ -127,9 +127,9 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
   std::array<std::byte, 4 * 1024> buffer;  // NOLINT(*)
   size_t buff_i = 0;
 
-#define PUSH_TO_BUF(STR)                                                                                \
+#define PUSH_TO_BUF(ARR)                                                                                \
   {                                                                                                     \
-    const std::span str{STR};                                                                           \
+    const std::span str{ARR};                                                                           \
     if (buff_i + str.size() >= buffer.size()) {                                                         \
       const auto *ptr = str.data();                                                                     \
       const auto *ptr_end = str.data() + str.size();                                                    \
@@ -159,7 +159,7 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
 
   // http version
   PUSH_TO_BUF(as_string(_ver));
-  PUSH_TO_BUF(" ");
+  PUSH_TO_BUF(" "sv);
 
   // status code
   std::array<char, 6> buf;  // NOLINT(*)
@@ -170,25 +170,25 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
   } else {
     co_return res_t{unexpect, "Can't write status code"};
   }
-  PUSH_TO_BUF(" ");
+  PUSH_TO_BUF(" "sv);
 
   // reason
   PUSH_TO_BUF(_reason);
 
   // end first line
-  PUSH_TO_BUF("\r\n");
+  PUSH_TO_BUF("\r\n"sv);
 
   // write headers
   for (auto &header : _headers) {
     PUSH_TO_BUF(header.first);
-    PUSH_TO_BUF(": ");
+    PUSH_TO_BUF(": "sv);
     PUSH_TO_BUF(header.second);
-    PUSH_TO_BUF("\r\n");
+    PUSH_TO_BUF("\r\n"sv);
   }
 
   // Handle body and compression
   if (!_body.empty()) {
-    PUSH_TO_BUF("\r\n");
+    PUSH_TO_BUF("\r\n"sv);
 
     if (_encoder) {
       // Compress body
@@ -233,7 +233,7 @@ async_coro::task<expected<void, std::string>> response::send(server::socket_laye
       PUSH_TO_BUF(_body);
     }
   } else {
-    PUSH_TO_BUF("\r\n");
+    PUSH_TO_BUF("\r\n"sv);
   }
 
 #undef PUSH_TO_BUF

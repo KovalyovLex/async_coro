@@ -7,6 +7,7 @@
 #include <string>
 
 #include "fixtures/http_integration_fixture.h"
+
 class web_socket_integration_tests : public http_integration_fixture {
  protected:
   void SetUp() override;

@@ -6,8 +6,6 @@
 #include <server/http1/response.h>
 #include <server/tcp_server_config.h>
 
-#include "ws_test_client.h"
-
 void http_integration_fixture::SetUp() {
   setup_routes();
 
@@ -15,8 +13,7 @@ void http_integration_fixture::SetUp() {
 }
 
 void http_integration_fixture::TearDown() {
-  server::socket_layer::close_socket(client_connection.get_platform_id());
-  client_connection = server::socket_layer::invalid_connection;
+  test_client = {};
 
   server.terminate();
   if (server_thread.joinable()) {
@@ -29,15 +26,8 @@ void http_integration_fixture::TearDown() {
 }
 
 void http_integration_fixture::open_connection() {
-  client_connection = server::socket_layer::invalid_connection;
-  for (int i = 0; i < 10; ++i) {
-    client_connection = ws_test_client::connect_blocking("127.0.0.1", port, 1000);
-    if (client_connection != server::socket_layer::invalid_connection) {
-      break;
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
+  test_client = http_test_client{"127.0.0.1", port};
+  ASSERT_TRUE(test_client.is_valid());
 }
 
 void http_integration_fixture::setup_routes() {
@@ -69,6 +59,25 @@ void http_integration_fixture::setup_routes() {
     {
       async_coro::unique_lock lock{mutex};
       session_handler = post_test_handler;
+    }
+
+    if (session_handler) {
+      co_await session_handler(req, resp);
+    } else {
+      resp.set_status(status_code::not_found);
+    }
+
+    co_return;
+  });
+
+  server.get_router().add_route(server::http1::http_method::HEAD, "/test", [this](const server::http1::request& req, server::http1::response& resp) -> async_coro::task<> {  // NOLINT(*reference*)
+    using namespace server::http1;
+
+    decltype(head_test_handler) session_handler;
+
+    {
+      async_coro::unique_lock lock{mutex};
+      session_handler = head_test_handler;
     }
 
     if (session_handler) {

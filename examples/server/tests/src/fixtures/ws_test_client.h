@@ -1,7 +1,5 @@
 #pragma once
 
-#include <server/socket_layer/connection_id.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -15,6 +13,8 @@ struct ws_parsed_frame {
   bool fin;
   std::vector<std::byte> payload;
 };
+
+class http_test_client;
 
 // Helper class to generate WebSocket frames for testing
 class ws_test_client {
@@ -53,18 +53,12 @@ class ws_test_client {
   // Generate frame with wrong payload size (testing protocol violations)
   static std::vector<std::byte> generate_wrong_size_frame(std::string_view text, uint16_t declared_size);
 
-  static server::socket_layer::connection_id connect_blocking(const std::string& host, uint16_t port, int timeout_ms);
-
-  static ssize_t send_all(server::socket_layer::connection_id sock, const void* data, size_t len);
-
-  static std::string recv_http_response(server::socket_layer::connection_id sock);
-
-  static std::string generate_handshake_request(const std::string& path = "/",
-                                                const std::string& host = "127.0.0.1",
+  static std::string generate_handshake_request(const http_test_client& client,
+                                                const std::string& path = "/",
                                                 const std::string& key = "",
                                                 const std::string& protocol = "");
 
-  static ws_parsed_frame recv_frame(server::socket_layer::connection_id sock);
+  static ws_parsed_frame recv_frame(http_test_client& client);
 
  private:
   static std::vector<std::byte> generate_frame(uint8_t opcode, std::string_view text, bool final);

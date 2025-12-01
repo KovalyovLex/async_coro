@@ -1,14 +1,15 @@
 #include <async_coro/thread_safety/unique_lock.h>
 #include <gtest/gtest.h>
 #include <server/http1/session.h>
+#include <server/utils/zlib_compress.h>
+#include <server/utils/zlib_compression_constants.h>
 #include <server/web_socket/response_frame.h>
 
+#include <span>
 #include <string_view>
 
 #include "fixtures/web_socket_integration_fixture.h"
 #include "fixtures/ws_test_client.h"
-#include "server/utils/zlib_compress.h"
-#include "server/utils/zlib_compression_constants.h"
 
 // Test fixture for permessage-deflate compression tests
 class web_socket_deflate_tests : public web_socket_integration_tests {
@@ -54,7 +55,7 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
   }
 
   // Helper: perform handshake with extension string
-  static std::string do_handshake(server::socket_layer::connection_id conn, std::string_view ext) {
+  static std::string do_handshake(http_test_client& conn, std::string_view ext) {
     std::string handshake =
         "GET /chat-deflate HTTP/1.1\r\n"
         "Host: 127.0.0.1\r\n"
@@ -62,14 +63,16 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
         "Upgrade: websocket\r\n"
         "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
         "Sec-WebSocket-Version: 13\r\n";
+
     if (!ext.empty()) {
       handshake += "Sec-WebSocket-Extensions: ";
       handshake += ext;
       handshake += "\r\n";
     }
     handshake += "\r\n";
-    ws_test_client::send_all(conn, handshake.data(), handshake.size());
-    return ws_test_client::recv_http_response(conn);
+
+    EXPECT_TRUE(conn.send_all(std::as_bytes(std::span{handshake})));
+    return conn.read_response();
   }
 
   // Helper: compress payload using zlib (permessage-deflate)
@@ -203,13 +206,13 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
   }
 
   // Test: permessage-deflate text message echo with default settings
-  void run_deflate_echo_test(server::socket_layer::connection_id conn, std::string_view ext, std::string_view payload_msg, std::string_view expected_response, const compressor_config& conf) {  // NOLINT(*swappable*)
+  void run_deflate_echo_test(http_test_client& conn, std::string_view ext, std::string_view payload_msg, std::string_view expected_response, const compressor_config& conf) {  // NOLINT(*swappable*)
     auto resp = web_socket_deflate_tests::do_handshake(conn, ext);
     ASSERT_TRUE(resp.find("101") != std::string::npos);
 
     auto compressed_payload = compress_payload(payload_msg, conf);
     auto frame = web_socket_deflate_tests::make_compressed_frame(compressed_payload);
-    ASSERT_EQ(ws_test_client::send_all(conn, frame.data(), frame.size()), frame.size());
+    ASSERT_TRUE(conn.send_all(frame));
 
     auto pframe = ws_test_client::recv_frame(conn);
     auto response = decompress_payload(pframe.payload, conf);
@@ -218,7 +221,7 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
     // 2nd turn to check takeover
     compressed_payload = compress_payload(payload_msg, conf);
     frame = web_socket_deflate_tests::make_compressed_frame(compressed_payload);
-    ASSERT_EQ(ws_test_client::send_all(conn, frame.data(), frame.size()), frame.size());
+    ASSERT_TRUE(conn.send_all(frame));
 
     pframe = ws_test_client::recv_frame(conn);
     response = decompress_payload(pframe.payload, conf);
@@ -236,7 +239,6 @@ TEST_F(web_socket_deflate_tests, deflate_default_settings) {
   using namespace std::string_view_literals;
 
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
 
   // Send handshake with permessage-deflate extension
   std::string req =
@@ -249,8 +251,8 @@ TEST_F(web_socket_deflate_tests, deflate_default_settings) {
       "Sec-WebSocket-Extensions: permessage-deflate\r\n"
       "\r\n";
 
-  ASSERT_GT(ws_test_client::send_all(client_connection, req.data(), req.size()), 0);
-  auto resp = ws_test_client::recv_http_response(client_connection);
+  ASSERT_TRUE(test_client.send_all(std::as_bytes(std::span{req})));
+  auto resp = test_client.read_response();
 
   // Should accept with 101 status code
   ASSERT_TRUE(resp.find("101") != std::string::npos);
@@ -264,7 +266,6 @@ TEST_F(web_socket_deflate_tests, deflate_server_no_context_takeover) {
   using namespace std::string_view_literals;
 
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
 
   // Send handshake with server_no_context_takeover parameter
   std::string req =
@@ -277,8 +278,8 @@ TEST_F(web_socket_deflate_tests, deflate_server_no_context_takeover) {
       "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover\r\n"
       "\r\n";
 
-  ASSERT_GT(ws_test_client::send_all(client_connection, req.data(), req.size()), 0);
-  auto resp = ws_test_client::recv_http_response(client_connection);
+  ASSERT_TRUE(test_client.send_all(std::as_bytes(std::span{req})));
+  auto resp = test_client.read_response();
 
   // Should accept with 101 status code
   ASSERT_TRUE(resp.find("101") != std::string::npos);
@@ -292,7 +293,6 @@ TEST_F(web_socket_deflate_tests, deflate_client_no_context_takeover) {
   using namespace std::string_view_literals;
 
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
 
   // Send handshake with client_no_context_takeover parameter
   std::string req =
@@ -305,8 +305,8 @@ TEST_F(web_socket_deflate_tests, deflate_client_no_context_takeover) {
       "Sec-WebSocket-Extensions: permessage-deflate; client_no_context_takeover\r\n"
       "\r\n";
 
-  ASSERT_GT(ws_test_client::send_all(client_connection, req.data(), req.size()), 0);
-  auto resp = ws_test_client::recv_http_response(client_connection);
+  ASSERT_TRUE(test_client.send_all(std::as_bytes(std::span{req})));
+  auto resp = test_client.read_response();
 
   // Should accept with 101 status code
   ASSERT_TRUE(resp.find("101") != std::string::npos);
@@ -320,7 +320,6 @@ TEST_F(web_socket_deflate_tests, deflate_both_no_context_takeover) {
   using namespace std::string_view_literals;
 
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
 
   // Send handshake with both no_context_takeover parameters
   std::string req =
@@ -333,8 +332,8 @@ TEST_F(web_socket_deflate_tests, deflate_both_no_context_takeover) {
       "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover\r\n"
       "\r\n";
 
-  ASSERT_GT(ws_test_client::send_all(client_connection, req.data(), req.size()), 0);
-  auto resp = ws_test_client::recv_http_response(client_connection);
+  ASSERT_TRUE(test_client.send_all(std::as_bytes(std::span{req})));
+  auto resp = test_client.read_response();
 
   // Should accept with 101 status code
   ASSERT_TRUE(resp.find("101") != std::string::npos);
@@ -348,7 +347,6 @@ TEST_F(web_socket_deflate_tests, deflate_server_window_bits_8) {
   using namespace std::string_view_literals;
 
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
 
   // Send handshake with server_max_window_bits=8 (minimum window size)
   std::string req =
@@ -361,8 +359,8 @@ TEST_F(web_socket_deflate_tests, deflate_server_window_bits_8) {
       "Sec-WebSocket-Extensions: permessage-deflate; server_max_window_bits=8\r\n"
       "\r\n";
 
-  ASSERT_GT(ws_test_client::send_all(client_connection, req.data(), req.size()), 0);
-  auto resp = ws_test_client::recv_http_response(client_connection);
+  ASSERT_TRUE(test_client.send_all(std::as_bytes(std::span{req})));
+  auto resp = test_client.read_response();
 
   // Should accept with 101 status code
   ASSERT_TRUE(resp.find("101") != std::string::npos);
@@ -376,7 +374,6 @@ TEST_F(web_socket_deflate_tests, deflate_server_window_bits_15) {
   using namespace std::string_view_literals;
 
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
 
   // Send handshake with server_max_window_bits=15 (maximum window size)
   std::string req =
@@ -389,8 +386,8 @@ TEST_F(web_socket_deflate_tests, deflate_server_window_bits_15) {
       "Sec-WebSocket-Extensions: permessage-deflate; server_max_window_bits=15\r\n"
       "\r\n";
 
-  ASSERT_GT(ws_test_client::send_all(client_connection, req.data(), req.size()), 0);
-  auto resp = ws_test_client::recv_http_response(client_connection);
+  ASSERT_TRUE(test_client.send_all(std::as_bytes(std::span{req})));
+  auto resp = test_client.read_response();
 
   // Should accept with 101 status code
   ASSERT_TRUE(resp.find("101") != std::string::npos);
@@ -404,7 +401,6 @@ TEST_F(web_socket_deflate_tests, deflate_client_window_bits_8) {
   using namespace std::string_view_literals;
 
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
 
   // Send handshake with client_max_window_bits=8 (minimum window size)
   std::string req =
@@ -417,8 +413,8 @@ TEST_F(web_socket_deflate_tests, deflate_client_window_bits_8) {
       "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits=8\r\n"
       "\r\n";
 
-  ASSERT_GT(ws_test_client::send_all(client_connection, req.data(), req.size()), 0);
-  auto resp = ws_test_client::recv_http_response(client_connection);
+  ASSERT_TRUE(test_client.send_all(std::as_bytes(std::span{req})));
+  auto resp = test_client.read_response();
 
   // Should accept with 101 status code
   ASSERT_TRUE(resp.find("101") != std::string::npos);
@@ -432,7 +428,6 @@ TEST_F(web_socket_deflate_tests, deflate_client_window_bits_15) {
   using namespace std::string_view_literals;
 
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
 
   // Send handshake with client_max_window_bits=15 (maximum window size)
   std::string req =
@@ -445,8 +440,8 @@ TEST_F(web_socket_deflate_tests, deflate_client_window_bits_15) {
       "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits=15\r\n"
       "\r\n";
 
-  ASSERT_GT(ws_test_client::send_all(client_connection, req.data(), req.size()), 0);
-  auto resp = ws_test_client::recv_http_response(client_connection);
+  ASSERT_TRUE(test_client.send_all(std::as_bytes(std::span{req})));
+  auto resp = test_client.read_response();
 
   // Should accept with 101 status code
   ASSERT_TRUE(resp.find("101") != std::string::npos);
@@ -460,7 +455,6 @@ TEST_F(web_socket_deflate_tests, deflate_all_parameters_combined) {
   using namespace std::string_view_literals;
 
   open_connection();
-  ASSERT_NE(client_connection, server::socket_layer::invalid_connection);
 
   // Send handshake with all permessage-deflate parameters
   std::string req =
@@ -473,8 +467,8 @@ TEST_F(web_socket_deflate_tests, deflate_all_parameters_combined) {
       "Sec-WebSocket-Extensions: permessage-deflate; server_max_window_bits=10; client_max_window_bits=12; server_no_context_takeover; client_no_context_takeover\r\n"
       "\r\n";
 
-  ASSERT_GT(ws_test_client::send_all(client_connection, req.data(), req.size()), 0);
-  auto resp = ws_test_client::recv_http_response(client_connection);
+  ASSERT_TRUE(test_client.send_all(std::as_bytes(std::span{req})));
+  auto resp = test_client.read_response();
 
   // Should accept with 101 status code
   ASSERT_TRUE(resp.find("101") != std::string::npos);
@@ -488,7 +482,7 @@ TEST_F(web_socket_deflate_tests, deflate_text_echo_with_compression) {
 
   compressor_config conf{};
 
-  run_deflate_echo_test(client_connection,
+  run_deflate_echo_test(test_client,
                         "permessage-deflate",
                         "Hello compressed world - this is a test message that should compress well",
                         "Deflate: Hello compressed world - this is a test message that should compress well",
@@ -500,7 +494,7 @@ TEST_F(web_socket_deflate_tests, deflate_server_no_context_takeover_echo) {
 
   compressor_config conf{.server_no_takeover = true};
 
-  run_deflate_echo_test(client_connection,
+  run_deflate_echo_test(test_client,
                         "permessage-deflate; server_no_context_takeover",
                         "context takeover test",
                         "Deflate: context takeover test",
@@ -512,7 +506,7 @@ TEST_F(web_socket_deflate_tests, deflate_client_no_context_takeover_echo) {
 
   compressor_config conf{.client_no_takeover = true};
 
-  run_deflate_echo_test(client_connection,
+  run_deflate_echo_test(test_client,
                         "permessage-deflate; client_no_context_takeover",
                         "client context test",
                         "Deflate: client context test",
@@ -524,7 +518,7 @@ TEST_F(web_socket_deflate_tests, deflate_both_no_context_takeover_echo) {
 
   compressor_config conf{.server_no_takeover = true, .client_no_takeover = true};
 
-  run_deflate_echo_test(client_connection,
+  run_deflate_echo_test(test_client,
                         "permessage-deflate; server_no_context_takeover; client_no_context_takeover",
                         "both context test",
                         "Deflate: both context test",
@@ -536,7 +530,7 @@ TEST_F(web_socket_deflate_tests, deflate_server_window_bits_8_echo) {
 
   compressor_config conf{.server_window = server::zlib::window_bits{8}};
 
-  run_deflate_echo_test(client_connection,
+  run_deflate_echo_test(test_client,
                         "permessage-deflate; server_max_window_bits=8",
                         "window bits 8 test",
                         "Deflate: window bits 8 test",
@@ -548,7 +542,7 @@ TEST_F(web_socket_deflate_tests, deflate_server_window_bits_15_echo) {
 
   compressor_config conf{.server_window = server::zlib::window_bits{15}};
 
-  run_deflate_echo_test(client_connection,
+  run_deflate_echo_test(test_client,
                         "permessage-deflate; server_max_window_bits=15",
                         "window bits 15 test",
                         "Deflate: window bits 15 test",
@@ -561,7 +555,7 @@ TEST_F(web_socket_deflate_tests, deflate_client_window_bits_9_echo) {
 
   compressor_config conf{.client_window = server::zlib::window_bits{9}};
 
-  run_deflate_echo_test(client_connection,
+  run_deflate_echo_test(test_client,
                         "permessage-deflate; client_max_window_bits=9",
                         "client window bits 9",
                         "Deflate: client window bits 9",
@@ -573,7 +567,7 @@ TEST_F(web_socket_deflate_tests, deflate_client_window_bits_15_echo) {
 
   compressor_config conf{.client_window = server::zlib::window_bits{15}};
 
-  run_deflate_echo_test(client_connection,
+  run_deflate_echo_test(test_client,
                         "permessage-deflate; client_max_window_bits=15",
                         "client window bits 15",
                         "Deflate: client window bits 15",
@@ -585,7 +579,7 @@ TEST_F(web_socket_deflate_tests, deflate_all_parameters_combined_echo) {
 
   compressor_config conf{.server_window = server::zlib::window_bits{10}, .client_window = server::zlib::window_bits{12}, .server_no_takeover = true, .client_no_takeover = true};
 
-  run_deflate_echo_test(client_connection,
+  run_deflate_echo_test(test_client,
                         "permessage-deflate; server_max_window_bits=10; client_max_window_bits=12; server_no_context_takeover; client_no_context_takeover",
                         "all params test",
                         "Deflate: all params test",
