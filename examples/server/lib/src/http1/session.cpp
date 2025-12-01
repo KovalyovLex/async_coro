@@ -22,6 +22,7 @@ session::session(server::socket_layer::connection conn, const router& router, co
 [[nodiscard]] async_coro::task<void> session::run() {  // NOLINT(*complexity)
   request req;
   response res{http_version::http_1_1};
+  res.set_compression_pool(_compression_pool);
 
   while (!_conn.is_closed() && _keep_alive) {
     auto read_success = co_await req.read(_conn);
@@ -48,26 +49,24 @@ session::session(server::socket_layer::connection conn, const router& router, co
     }
 
     // Negotiate compression based on Accept-Encoding header
-    compression_encoding negotiated_encoding = compression_encoding::none;
     if (_compression_pool != nullptr) {
       constexpr size_t k_preallocated_size = 16;
 
       std::array<std::byte, sizeof(encoding_preference) * k_preallocated_size> tmp_buffer;  // NOLINT(*init)
-      std::pmr::monotonic_buffer_resource res{tmp_buffer.data(), tmp_buffer.size()};
-      std::pmr::vector<encoding_preference> preferences{std::pmr::polymorphic_allocator<encoding_preference>{&res}};
+      std::pmr::monotonic_buffer_resource buf_mem_res{tmp_buffer.data(), tmp_buffer.size()};
+      std::pmr::vector<encoding_preference> preferences{std::pmr::polymorphic_allocator<encoding_preference>{&buf_mem_res}};
       preferences.reserve(k_preallocated_size);
 
       req.foreach_header_with_name("Accept-Encoding", [&preferences](const auto& pair) {
         server::compression_negotiator::parse_accept_encoding(pair.second, preferences);
       });
 
-      negotiated_encoding = _negotiator.negotiate(std::span{preferences});
-    }
+      const auto negotiated_encoding = _negotiator.negotiate(std::span{preferences});
 
-    // Set up encoder if compression is negotiated
-    if (negotiated_encoding != compression_encoding::none) {
-      res.set_compression_pool(_compression_pool);
-      res.set_encoding(negotiated_encoding);
+      // Set up encoder if compression is negotiated
+      if (negotiated_encoding != compression_encoding::none) {
+        res.set_encoding(negotiated_encoding);
+      }
     }
 
     if (const auto* handler = _router->find_handler(req)) {
