@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <array>
 #include <charconv>
 #include <optional>
 #include <span>
@@ -94,34 +95,137 @@ class http_encoding_tests : public http_integration_fixture, public compression_
     }
     return len;
   }
+
+  static std::string decompress_body(std::string_view str, server::pooled_compressor<server::decompressor_variant>& decompress) {
+    auto bytes_in = std::as_bytes(std::span{str});
+    std::string res;
+
+    std::array<char, 1024> tmp_buf{};
+
+    while (!bytes_in.empty()) {
+      auto bytes_out = std::as_writable_bytes(std::span<char>{tmp_buf});
+      if (!decompress.update_stream(bytes_in, bytes_out)) {
+        EXPECT_TRUE(false) << "Decompression failed";
+        return {};
+      }
+
+      auto data_to_copy = std::string_view{tmp_buf.data(), tmp_buf.size() - bytes_out.size()};
+      res += data_to_copy;
+    }
+
+    while (true) {
+      auto bytes_out = std::as_writable_bytes(std::span<char>{tmp_buf});
+      bool has_more_data = decompress.end_stream(bytes_in, bytes_out);
+
+      auto data_to_copy = std::string_view{tmp_buf.data(), tmp_buf.size() - bytes_out.size()};
+      res += data_to_copy;
+
+      if (!has_more_data) {
+        break;
+      }
+    }
+
+    return res;
+  }
+
+  static std::string get_long_message() {
+    std::string long_string;
+
+    long_string = "The quick brown fox jumps over the lazy dog.";
+    for (int i = 0; i < 10000; ++i) {
+      long_string += (i % 1 == 0) ? ';' : '\n';
+      long_string += "Lorem ipsum dolor sit amet, consectetur adipiscing elit.";
+    }
+
+    return long_string;
+  }
+
+  void test_message_compression(std::string_view str_view, server::compression_encoding enc) {
+    const auto enc_str = as_string(enc);
+
+    {
+      async_coro::unique_lock lock{mutex};
+
+      get_test_handler = [str = std::string{str_view}](const server::http1::request&, server::http1::response& resp) -> async_coro::task<> {  // NOLINT(*reference*)
+        resp.set_body(str, server::http1::content_types::plain_text);
+        co_return;
+      };
+    }
+    open_connection();
+
+    std::string req = test_client.generate_req_head(server::http1::http_method::GET, "/test");
+    req += "Accept-Encoding: ";
+    req += enc_str;
+    req += "\r\n";
+    req += "\r\n";
+
+    test_client.send_all(std::as_bytes(std::span{req}));
+
+    auto resp = test_client.read_response();
+
+    std::string_view req_enc = get_encoding(resp);
+    EXPECT_EQ(req_enc, enc_str);
+
+    std::string_view body = get_body(resp);
+    auto cnt_len = get_content_length(resp);
+    ASSERT_TRUE(cnt_len);
+    EXPECT_EQ(*cnt_len, body.size());
+    EXPECT_NE(body, str_view);
+
+    auto decoder = compression_pool->acquire_decompressor(enc);
+    ASSERT_TRUE(decoder);
+
+    auto body_str = decompress_body(body, decoder);
+    EXPECT_EQ(body_str, str_view);
+  }
 };
 
+#if SERVER_HAS_ZLIB
 // Tests for gzip encoding message
 TEST_F(http_encoding_tests, test_gzip_encoded) {
-  {
-    async_coro::unique_lock lock{mutex};
+  constexpr std::string_view k_server_body = "Hello, this is a test message for gzip compression!";
 
-    get_test_handler = [](const server::http1::request&, server::http1::response& resp) -> async_coro::task<> {  // NOLINT(*reference*)
-      resp.set_body("Hello, this is a test message for gzip compression!", server::http1::content_types::plain_text);
-      co_return;
-    };
-  }
-  open_connection();
-
-  std::string req = test_client.generate_req_head(server::http1::http_method::GET, "/test");
-  req += "Accept-Encoding: gzip\r\n";
-  req += "\r\n";
-
-  test_client.send_all(std::as_bytes(std::span{req}));
-
-  auto resp = test_client.read_response();
-
-  std::string_view enc = get_encoding(resp);
-  EXPECT_EQ(enc, "gzip");
-
-  std::string_view body = get_body(resp);
-  auto cnt_len = get_content_length(resp);
-
-  ASSERT_TRUE(cnt_len);
-  EXPECT_EQ(*cnt_len, body.size());
+  test_message_compression(k_server_body, server::compression_encoding::gzip);
 }
+
+TEST_F(http_encoding_tests, test_gzip_encoded_long) {
+  test_message_compression(get_long_message(), server::compression_encoding::gzip);
+}
+
+// Tests for deflate encoding message
+TEST_F(http_encoding_tests, test_deflate_encoded) {
+  constexpr std::string_view k_server_body = "Hello, this is a test message for deflate compression!";
+
+  test_message_compression(k_server_body, server::compression_encoding::deflate);
+}
+
+TEST_F(http_encoding_tests, test_deflate_encoded_long) {
+  test_message_compression(get_long_message(), server::compression_encoding::deflate);
+}
+#endif  // SERVER_HAS_ZLIB
+
+#if SERVER_HAS_BROTLI
+// Tests for brotli encoding message
+TEST_F(http_encoding_tests, test_brotli_encoded) {
+  constexpr std::string_view k_server_body = "Hello, this is a test message for brotli compression!";
+
+  test_message_compression(k_server_body, server::compression_encoding::br);
+}
+
+TEST_F(http_encoding_tests, test_brotli_encoded_long) {
+  test_message_compression(get_long_message(), server::compression_encoding::br);
+}
+#endif  // SERVER_HAS_BROTLI
+
+#if SERVER_HAS_ZSTD
+// Tests for zstd encoding message
+TEST_F(http_encoding_tests, test_zstd_encoded) {
+  constexpr std::string_view k_server_body = "Hello, this is a test message for zstd compression!";
+
+  test_message_compression(k_server_body, server::compression_encoding::zstd);
+}
+
+TEST_F(http_encoding_tests, test_zstd_encoded_long) {
+  test_message_compression(get_long_message(), server::compression_encoding::zstd);
+}
+#endif  // SERVER_HAS_ZSTD
