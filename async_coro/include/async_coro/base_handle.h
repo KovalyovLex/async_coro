@@ -3,6 +3,7 @@
 #include <async_coro/callback.h>
 #include <async_coro/config.h>
 #include <async_coro/execution_queue_mark.h>
+#include <async_coro/internal/base_handle_ptr.h>
 #include <async_coro/internal/coroutine_suspender.h>
 
 #include <atomic>
@@ -63,12 +64,13 @@ class scheduled_run_data;
 class base_handle {
   friend scheduler;
   friend internal::coroutine_suspender;
+  friend base_handle_ptr;
 
   static constexpr uint8_t coroutine_state_mask = (1U << 0U) | (1U << 1U) | (1U << 2U);
   static constexpr uint8_t is_embedded_mask = (1U << 3U);
-  static constexpr uint8_t num_owners_step = (1U << 4U);
-  static constexpr uint8_t num_owners_mask = (1U << 4U) | (1U << 5U);  // can have 2 owners max (1 is scheduler and another is task_handle)
-  static constexpr uint8_t is_cancel_requested_mask = (1U << 6U);
+  static constexpr uint8_t is_cancel_requested_mask = (1U << 4U);
+  static constexpr uint8_t is_initialized_mask = (1U << 5U);
+  static constexpr uint8_t is_result_mask = (1U << 6U);
 
  public:
   /**
@@ -308,50 +310,43 @@ class base_handle {
     return {static_cast<coroutine_state>(state & coroutine_state_mask), state & is_cancel_requested_mask};
   }
 
+  base_handle_ptr get_owning_ptr();
+
  protected:
   // returns true if continuation was executed
-  virtual bool execute_continuation(bool cancelled, bool release_cancel) = 0;
+  virtual bool execute_continuation(bool cancelled) = 0;
 
 #if ASYNC_CORO_WITH_EXCEPTIONS
   // retrows exception if it was caught
   virtual void check_exception_base() = 0;
 #endif
 
-  void init_promise(std::coroutine_handle<> handle) noexcept { _handle = handle; }
-  std::coroutine_handle<> get_handle() noexcept { return _handle; }
+  [[nodiscard]] virtual std::coroutine_handle<> get_handle() noexcept = 0;
 
   void on_final_suspend() noexcept {
     set_coroutine_state(coroutine_state::finished, true);
   }
 
-  void on_task_freed_by_scheduler();
-
   void set_owning_by_task_handle(bool owning);
 
+  void set_owning_by_task(bool owning);
+
   callback_base* release_continuation_functor() noexcept {
-    return is_embedded() ? nullptr : _continuation.exchange(nullptr, std::memory_order::acquire);
+    return is_embedded() ? nullptr : _root_state.continuation.exchange(nullptr, std::memory_order::acquire);
   }
 
   void set_continuation_functor(callback_base* func) noexcept;
 
-  void release_cancel_lock() noexcept {
-    ASYNC_CORO_ASSERT_VARIABLE const auto was_inside = _is_inside_cancel.exchange(false, std::memory_order::release);
-    ASYNC_CORO_ASSERT(was_inside);
-
-    _is_inside_cancel.notify_one();
+  [[nodiscard]] bool is_initialized() const noexcept {
+    return (_atomic_state.load(std::memory_order::relaxed) & is_initialized_mask) != 0;
   }
 
- private:
-  void destroy_impl();
-
-  [[nodiscard]] base_handle* get_parent() const noexcept {
-    return is_embedded() ? _parent : nullptr;
+  [[nodiscard]] bool is_result() const noexcept {
+    return (_atomic_state.load(std::memory_order::relaxed) & is_result_mask) != 0;
   }
 
-  void set_parent(base_handle& parent) noexcept {
-    _parent = &parent;
-    parent._current_child = this;
-    set_embedded(true);
+  void set_initialized(bool is_result) noexcept {
+    update_value(is_initialized_mask | (is_result ? is_result_mask : 0U), get_inverted_mask(is_initialized_mask | is_result_mask));
   }
 
  private:
@@ -359,9 +354,21 @@ class base_handle {
     return static_cast<uint8_t>(~mask);
   }
 
-  uint8_t dec_num_owners() noexcept;
+  void destroy_impl() noexcept;
+
+  void dec_num_owners() noexcept;
 
   void inc_num_owners() noexcept;
+
+  [[nodiscard]] base_handle* get_parent() const noexcept {
+    return is_embedded() ? _parent : nullptr;
+  }
+
+  void set_parent(base_handle& parent) noexcept {
+    _parent = &parent;
+    parent._current_child = this->get_owning_ptr();
+    set_embedded(true);
+  }
 
   [[nodiscard]] coroutine_state get_coroutine_state(std::memory_order order = std::memory_order::relaxed) const noexcept {
     return static_cast<coroutine_state>(_atomic_state.load(order) & coroutine_state_mask);
@@ -385,7 +392,7 @@ class base_handle {
   }
 
   void set_embedded(bool value) noexcept {
-    update_value(value ? is_embedded_mask : 0, get_inverted_mask(is_embedded_mask));
+    update_value(value ? is_embedded_mask : 0U, get_inverted_mask(is_embedded_mask));
   }
 
   // returns previous value of cancel requested
@@ -402,24 +409,23 @@ class base_handle {
   }
 
  private:
+  struct root_coro_state {
+    std::atomic<callback_base*> continuation;
+    callback_base::ptr start_function;  // we should store start function for all lifetime of the coroutine because it stores captured arguments
+  };
+
   std::atomic<internal::scheduled_run_data*> _run_data{nullptr};
   union {
-    std::atomic<callback_base*> _continuation;
+    root_coro_state _root_state;
     base_handle* _parent;
-  };
-  std::coroutine_handle<> _handle;
+  };  // embedded coroutine cant have a continuation - continue can be assigned only for root coroutine
   scheduler* _scheduler = nullptr;
-  callback_base::ptr _start_function;
-  std::atomic<callback<void()>*> _on_cancel = nullptr;  // callback for our coroutine. It can be modified only inside our coroutine
-  base_handle* _current_child = nullptr;
+  std::atomic<callback<void()>*> _on_cancel = nullptr;  // callback for our coroutine. callback<void()> should be allocated on coroutine stack or outlive suspension point
+  base_handle_ptr _current_child = nullptr;             // current awaiting child coroutine. Used for cancel notifications
   std::thread::id _execution_thread;
-  execution_queue_mark _execution_queue = execution_queues::main;
-  std::atomic_uint8_t _atomic_state{num_owners_step};  // 1 owner by default
-  std::atomic_bool _is_inside_cancel{false};
-
- protected:
-  bool _is_initialized = false;  // NOLINT(*non-private-member*)
-  bool _is_result = false;       // NOLINT(*non-private-member*)
+  execution_queue_mark _execution_queue = execution_queues::any;
+  std::atomic_uint8_t _atomic_state{0};
+  std::atomic_uint32_t _num_owners{0};
 };
 
 }  // namespace async_coro

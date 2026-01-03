@@ -10,6 +10,8 @@ namespace async_coro {
 
 struct delayed_task_id {
   size_t task_id{};
+
+  auto operator<=>(const delayed_task_id &) const noexcept = default;
 };
 
 /**

@@ -29,12 +29,7 @@ scheduler::~scheduler() {
   _is_destroying = true;
   lock.unlock();
   _execution_system = nullptr;
-
-  for (auto* coro : coros) {
-    if (coro != nullptr) {
-      coro->on_task_freed_by_scheduler();
-    }
-  }
+  coros.clear();
 }
 
 bool scheduler::is_current_thread_fits(execution_queue_mark execution_queue) noexcept {
@@ -83,7 +78,8 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
           parent->_current_child = nullptr;
         }
 
-        ASYNC_CORO_ASSERT(run_data.coroutine_to_run_next == nullptr);
+        // We should not have any coroutines to proceed on finish unless this coroutine was cancelled
+        ASYNC_CORO_ASSERT(run_data.coroutine_to_run_next == nullptr || was_cancelled);
 
         if (cancelled_without_finish) {
           // cancel current coro and parent
@@ -138,13 +134,13 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
 }
 
 void scheduler::cleanup_coroutine(base_handle& handle_impl, bool cancelled) {
-  bool was_managed = false;
+  base_handle_ptr managed;
   {
     // remove from managed
     unique_lock lock{_mutex};
-    auto iter = std::ranges::find(_managed_coroutines, &handle_impl);
+    auto iter = std::find(_managed_coroutines.begin(), _managed_coroutines.end(), &handle_impl);
     if (iter != _managed_coroutines.end()) {
-      was_managed = true;
+      managed = std::move(*iter);
       if (*iter != _managed_coroutines.back()) {
         std::swap(*iter, _managed_coroutines.back());
       }
@@ -155,7 +151,7 @@ void scheduler::cleanup_coroutine(base_handle& handle_impl, bool cancelled) {
 #if ASYNC_CORO_WITH_EXCEPTIONS && ASYNC_CORO_COMPILE_WITH_EXCEPTIONS
   try {
     // try to handle exception by external api
-    if (!handle_impl.execute_continuation(cancelled, false)) {
+    if (!handle_impl.execute_continuation(cancelled)) {
       handle_impl.check_exception_base();
     }
   } catch (...) {
@@ -169,12 +165,8 @@ void scheduler::cleanup_coroutine(base_handle& handle_impl, bool cancelled) {
     }
   }
 #else
-  handle_impl.execute_continuation(cancelled, false);
+  handle_impl.execute_continuation(cancelled);
 #endif
-
-  if (was_managed) {
-    handle_impl.on_task_freed_by_scheduler();
-  }
 }
 
 void scheduler::plan_continue_on_thread(base_handle& handle_impl, execution_queue_mark execution_queue) {
@@ -194,21 +186,20 @@ void scheduler::add_coroutine(base_handle& handle_impl,
                               execution_queue_mark execution_queue) {
   ASYNC_CORO_ASSERT(handle_impl._execution_thread == std::thread::id{});
   ASYNC_CORO_ASSERT(handle_impl.get_coroutine_state() == coroutine_state::created);
-  ASYNC_CORO_ASSERT(handle_impl.get_handle());
 
-  handle_impl._start_function = std::move(start_function);
+  new (std::addressof(handle_impl._root_state)) base_handle::root_coro_state{.continuation = nullptr, .start_function = std::move(start_function)};
+
+  auto managed = handle_impl.get_owning_ptr();
 
   {
     unique_lock lock{_mutex};
 
     if (_is_destroying) {
-      lock.unlock();
       // if we are in destructor no way to run this coroutine
-      handle_impl.on_task_freed_by_scheduler();
       return;
     }
 
-    _managed_coroutines.push_back(&handle_impl);
+    _managed_coroutines.push_back(std::move(managed));
   }
 
   handle_impl._scheduler = this;

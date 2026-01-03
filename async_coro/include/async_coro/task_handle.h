@@ -16,6 +16,8 @@
 
 namespace async_coro {
 
+struct transfer_ownership {};
+
 /**
  * @brief Handle for scheduled coroutine tasks.
  *
@@ -38,12 +40,10 @@ class task_handle final {
 
  public:
   task_handle() noexcept = default;
-  explicit task_handle(handle_type handle) noexcept
+
+  task_handle(handle_type handle, transfer_ownership /*owner*/) noexcept
       : _handle(std::move(handle)) {
     ASYNC_CORO_ASSERT(_handle);
-    if (_handle) [[likely]] {
-      _handle.promise().set_owning_by_task_handle(true, passkey{this});
-    }
   }
 
   task_handle(const task_handle&) = delete;
@@ -53,7 +53,7 @@ class task_handle final {
 
   task_handle& operator=(const task_handle&) = delete;
   task_handle& operator=(task_handle&& other) noexcept {
-    if (&other == this) {
+    if (_handle == other._handle) {
       return *this;
     }
 
