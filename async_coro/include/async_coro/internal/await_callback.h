@@ -84,12 +84,11 @@ class await_callback {
       {
         async_coro::unique_lock lock{callback->_mutex};
         if (callback->_continue != nullptr) {
+          // cancel execution of callback
           callback->_continue->_handle = nullptr;
           callback->_continue->_cancelled.store(true, std::memory_order::relaxed);
-        } else {
-          // callback was destroyed and we assume continue was called
-          executed = true;
         }
+        executed = callback->_was_continue_called;
       }
 
       if (!executed) {
@@ -184,6 +183,7 @@ class await_callback {
         }
 
         _callback->_continue = nullptr;
+        _callback->_was_continue_called = true;
 
         handle = std::move(_handle);
       }
@@ -201,8 +201,9 @@ class await_callback {
 
   light_mutex _mutex;
   coroutine_suspender _suspension;
-  continue_callback* _continue CORO_THREAD_GUARDED_BY(_mutex) = nullptr;
   callback_on_stack<on_cancel_callback, void()> _on_cancel;
+  continue_callback* _continue CORO_THREAD_GUARDED_BY(_mutex) = nullptr;
+  bool _was_continue_called CORO_THREAD_GUARDED_BY(_mutex) = false;
   stored_result_t _result;
   T _on_await;
 };
