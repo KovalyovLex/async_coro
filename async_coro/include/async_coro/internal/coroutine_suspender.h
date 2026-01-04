@@ -1,14 +1,11 @@
 #pragma once
 
 #include <async_coro/config.h>
+#include <async_coro/internal/base_handle_ptr.h>
 
 #include <atomic>
 #include <cstdint>
 #include <utility>
-
-namespace async_coro {
-class base_handle;
-}
 
 namespace async_coro::internal {
 
@@ -28,12 +25,7 @@ namespace async_coro::internal {
 class coroutine_suspender {
  public:
   coroutine_suspender() noexcept = default;
-  coroutine_suspender(base_handle& handle, std::uint32_t suspend_count) noexcept
-      : _handle(&handle),
-        _suspend_count(suspend_count) {
-    // try_to_continue_on_same_thread should be called at least once
-    ASYNC_CORO_ASSERT(suspend_count > 0);
-  }
+  coroutine_suspender(base_handle& handle, std::uint32_t suspend_count) noexcept;
 
   coroutine_suspender(const coroutine_suspender&) = delete;
   coroutine_suspender(coroutine_suspender&& other) noexcept
@@ -65,7 +57,10 @@ class coroutine_suspender {
   void try_to_continue_immediately();
 
  private:
-  base_handle* _handle = nullptr;
+  void dec_num_suspends();
+
+ private:
+  base_handle_ptr _handle = nullptr;
   std::atomic_uint32_t _suspend_count{0};
   bool _was_continued_immediately{false};
 };

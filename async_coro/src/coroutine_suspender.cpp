@@ -23,28 +23,11 @@ coroutine_suspender::~coroutine_suspender() noexcept {
 void coroutine_suspender::try_to_continue_from_any_thread(bool cancel) {
   ASYNC_CORO_ASSERT(_handle);
 
-  const auto prev_count = _suspend_count.fetch_sub(1, std::memory_order::release);
-  ASYNC_CORO_ASSERT(prev_count != 0);
-
   if (cancel) {
     _handle->request_cancel();
   }
 
-  if (prev_count == 1) {
-    (void)_suspend_count.load(std::memory_order::acquire);
-
-    // reset our cancel
-    if (auto* on_cancel = _handle->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
-      on_cancel->destroy();
-    }
-
-    if (_handle->is_finished()) [[unlikely]] {
-      // some exception happened before callback call
-      return;
-    }
-
-    _handle->get_scheduler().continue_execution(*_handle, passkey{this});
-  }
+  dec_num_suspends();
 }
 
 void coroutine_suspender::try_to_continue_immediately() {
@@ -56,6 +39,10 @@ void coroutine_suspender::try_to_continue_immediately() {
     _handle->set_coroutine_state(coroutine_state::suspended);
   }
 
+  dec_num_suspends();
+}
+
+void coroutine_suspender::dec_num_suspends() {
   const auto prev_count = _suspend_count.fetch_sub(1, std::memory_order::release);
   ASYNC_CORO_ASSERT(prev_count != 0);
 
@@ -73,8 +60,16 @@ void coroutine_suspender::try_to_continue_immediately() {
       return;
     }
 
-    _handle->get_scheduler().continue_execution(*_handle, passkey{this});
+    auto handle = std::move(_handle);
+    handle->get_scheduler().continue_execution(*handle, passkey{this});
   }
+}
+
+coroutine_suspender::coroutine_suspender(base_handle& handle, std::uint32_t suspend_count) noexcept
+    : _handle(handle.get_owning_ptr()),
+      _suspend_count(suspend_count) {
+  // try_to_continue_on_same_thread should be called at least once
+  ASYNC_CORO_ASSERT(suspend_count > 0);
 }
 
 }  // namespace async_coro::internal
