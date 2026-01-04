@@ -116,8 +116,6 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
           cont_handle->request_cancel();
         }
 
-        handle_to_run->_run_data.store(nullptr, std::memory_order::release);
-
         cleanup_coroutine(*handle_to_run, cancelled_without_finish);
         break;
       }
@@ -167,6 +165,9 @@ void scheduler::cleanup_coroutine(base_handle& handle_impl, bool cancelled) {
 #else
   handle_impl.execute_continuation(cancelled);
 #endif
+
+  // now we can destroy coroutine
+  handle_impl._run_data.store(nullptr, std::memory_order::release);
 }
 
 void scheduler::plan_continue_on_thread(base_handle& handle_impl, execution_queue_mark execution_queue) {

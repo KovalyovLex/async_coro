@@ -121,7 +121,7 @@ struct await_sleep {
   base_handle* _promise = nullptr;
   callback_on_stack<on_cancel_callback, void()> _on_cancel;
   std::chrono::steady_clock::time_point _time;
-  std::atomic<delayed_task_id> _t_id{};
+  std::atomic<delayed_task_id> _t_id;
   execution_queue_mark _execution_queue = async_coro::execution_queues::any;
   bool _use_parent_q;
 };

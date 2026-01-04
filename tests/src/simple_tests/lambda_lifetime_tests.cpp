@@ -170,7 +170,7 @@ TEST(lambda_lifetime, start_task_in_coroutine) {
       auto nested_handle = co_await async_coro::start_task(async_coro::task_launcher{std::move(nested_task)});
 
       co_await async_coro::await_callback([&nested_handle](auto f) {
-        nested_handle.continue_with([f = std::move(f)](auto&, bool) { f(); });
+        nested_handle.continue_with([f = std::move(f)](auto&, bool) mutable { f(); });
       });
 
       co_return captured_arg.value;
