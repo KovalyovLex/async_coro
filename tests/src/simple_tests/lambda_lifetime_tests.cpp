@@ -391,3 +391,76 @@ TEST(lambda_lifetime, when_any_tasks) {
 
   EXPECT_EQ(lifetime_tracker::num_instances, 0);
 }
+
+TEST(lambda_lifetime, embedded_coro) {
+  lifetime_tracker::reset();
+
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
+
+  {
+    EXPECT_EQ(lifetime_tracker::num_instances, 0);
+
+    auto main_coroutine = []() mutable -> async_coro::task<int> {
+      EXPECT_EQ(lifetime_tracker::num_instances, 0);
+
+      {
+        // Create tasks with different completion times
+        auto task1 = [captured_arg = lifetime_tracker(100)]() -> async_coro::task<int> {
+          EXPECT_EQ(lifetime_tracker::num_instances, 1);
+
+          auto copy = captured_arg;
+          EXPECT_EQ(lifetime_tracker::num_instances, 2);
+
+          co_return copy.value;
+        };
+        EXPECT_EQ(lifetime_tracker::num_instances, 1);  // lambda captured
+
+        auto result = co_await task1();
+        EXPECT_EQ(result, 100);
+        EXPECT_EQ(lifetime_tracker::num_instances, 1);  // only lambda capture
+      }
+
+      EXPECT_EQ(lifetime_tracker::num_instances, 0);
+
+      {
+        auto task2 = [captured_arg = lifetime_tracker(200)]() mutable -> async_coro::task<int> {
+          EXPECT_EQ(lifetime_tracker::num_instances, 1);
+
+          auto copy = std::move(captured_arg);
+          EXPECT_EQ(lifetime_tracker::num_instances, 2);
+
+          co_return copy.value;
+        };
+        EXPECT_EQ(lifetime_tracker::num_instances, 1);  // lambda captured
+
+        auto result = co_await task2();
+        EXPECT_EQ(result, 200);
+        EXPECT_EQ(lifetime_tracker::num_instances, 1);  // only lambda capture
+      }
+
+      EXPECT_EQ(lifetime_tracker::num_instances, 0);
+
+      auto task3 = [captured_arg = lifetime_tracker(300)]() -> async_coro::task<int> {
+        EXPECT_EQ(lifetime_tracker::num_instances, 1);
+        co_return captured_arg.value;
+      };
+      EXPECT_EQ(lifetime_tracker::num_instances, 1);
+
+      auto result = co_await task3();
+      EXPECT_EQ(result, 300);
+      EXPECT_EQ(lifetime_tracker::num_instances, 1);
+
+      co_return result;
+    };
+
+    EXPECT_EQ(lifetime_tracker::num_instances, 0);
+
+    auto handle = scheduler.start_task(std::move(main_coroutine));
+
+    EXPECT_EQ(lifetime_tracker::num_instances, 0);
+    EXPECT_TRUE(handle.done());
+  }
+
+  EXPECT_EQ(lifetime_tracker::num_instances, 0);
+}
