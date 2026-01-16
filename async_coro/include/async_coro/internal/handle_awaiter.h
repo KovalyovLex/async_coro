@@ -43,9 +43,7 @@ class handle_awaiter {
     ASYNC_CORO_ASSERT(other._continue_f == nullptr);
   }
 
-  ~handle_awaiter() noexcept {
-    _can_be_freed.wait(false, std::memory_order::acquire);
-  }
+  ~handle_awaiter() noexcept = default;
 
   handle_awaiter& operator=(const handle_awaiter&) = delete;
   handle_awaiter& operator=(handle_awaiter&&) = delete;
@@ -80,7 +78,6 @@ class handle_awaiter {
     ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
     _continue_f = &continue_f;
-    _can_be_freed.store(false, std::memory_order::relaxed);
     _was_continued.store(false, std::memory_order::release);
 
     _handle.continue_with(_continue_callback);
@@ -91,19 +88,12 @@ class handle_awaiter {
   }
 
  private:
-  void set_can_be_freed() noexcept {
-    if (!_can_be_freed.exchange(true, std::memory_order::release)) {
-      _can_be_freed.notify_one();
-    }
-  }
-
- private:
   class on_continue_callback : public callback<void(promise_result<TRes>&, bool)> {
     using super = callback<void(promise_result<TRes>&, bool)>;
 
    public:
     explicit on_continue_callback(handle_awaiter* awaiter) noexcept
-        : super(&executor, &deleter),
+        : super(&executor, nullptr),
           _awaiter(awaiter) {}
 
    private:
@@ -116,18 +106,10 @@ class handle_awaiter {
         continue_callback::ptr continuation{std::exchange(clb->_continue_f, nullptr)};
         ASYNC_CORO_ASSERT(continuation != nullptr);
 
-        clb->set_can_be_freed();
-
         while (continuation) {
           std::tie(continuation, cancelled) = continuation.release()->execute_and_destroy(cancelled);
         }
-      } else {
-        clb->set_can_be_freed();
       }
-    }
-
-    static void deleter(callback_base* base) noexcept {
-      static_cast<on_continue_callback*>(base)->_awaiter->set_can_be_freed();
     }
 
    private:
@@ -135,7 +117,6 @@ class handle_awaiter {
   };
 
  private:
-  std::atomic_bool _can_be_freed{true};
   task_handle<TRes> _handle;
   continue_callback* _continue_f = nullptr;
   on_continue_callback _continue_callback;
