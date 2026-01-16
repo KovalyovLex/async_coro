@@ -136,7 +136,7 @@ void scheduler::cleanup_coroutine(base_handle& handle_impl, bool cancelled) {
   {
     // remove from managed
     unique_lock lock{_mutex};
-    auto iter = std::find(_managed_coroutines.begin(), _managed_coroutines.end(), &handle_impl);
+    auto iter = std::ranges::find_if(_managed_coroutines, [handle = &handle_impl](const auto& ptr) { return ptr == handle; });
     if (iter != _managed_coroutines.end()) {
       managed = std::move(*iter);
       if (*iter != _managed_coroutines.back()) {
