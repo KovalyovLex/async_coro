@@ -56,6 +56,9 @@ class coroutine_suspender {
   /// This method should be called at least once.
   void try_to_continue_immediately();
 
+  /// Returns owning handle
+  [[nodiscard]] const base_handle_ptr& get_handle() const noexcept { return _handle; }
+
  private:
   void dec_num_suspends();
 

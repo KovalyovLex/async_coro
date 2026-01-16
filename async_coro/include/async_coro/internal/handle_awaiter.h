@@ -2,6 +2,7 @@
 
 #include <async_coro/callback.h>
 #include <async_coro/config.h>
+#include <async_coro/internal/base_handle_ptr.h>
 #include <async_coro/internal/continue_callback.h>
 #include <async_coro/internal/type_traits.h>
 
@@ -74,9 +75,10 @@ class handle_awaiter {
     }
   }
 
-  void continue_after_complete(continue_callback& continue_f) {
+  void continue_after_complete(continue_callback& continue_f, const base_handle_ptr& handle) {
     ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
+    _self_handle = handle.copy();
     _continue_f = &continue_f;
     _was_continued.store(false, std::memory_order::release);
 
@@ -93,11 +95,11 @@ class handle_awaiter {
 
    public:
     explicit on_continue_callback(handle_awaiter* awaiter) noexcept
-        : super(&executor, nullptr),
+        : super(&on_execute, &on_destroy),
           _awaiter(awaiter) {}
 
    private:
-    static void executor(callback_base* base, ASYNC_CORO_ASSERT_VARIABLE bool with_destroy, promise_result<TRes>& /*result*/, bool cancelled) {
+    static void on_execute(callback_base* base, ASYNC_CORO_ASSERT_VARIABLE bool with_destroy, promise_result<TRes>& /*result*/, bool cancelled) {
       ASYNC_CORO_ASSERT(with_destroy);
 
       auto* clb = static_cast<on_continue_callback*>(base)->_awaiter;
@@ -106,10 +108,18 @@ class handle_awaiter {
         continue_callback::ptr continuation{std::exchange(clb->_continue_f, nullptr)};
         ASYNC_CORO_ASSERT(continuation != nullptr);
 
+        clb->_self_handle = nullptr;
+
         while (continuation) {
           std::tie(continuation, cancelled) = continuation.release()->execute_and_destroy(cancelled);
         }
       }
+    }
+
+    static void on_destroy(callback_base* base) noexcept {
+      auto* clb = static_cast<on_continue_callback*>(base)->_awaiter;
+
+      clb->_self_handle = nullptr;
     }
 
    private:
@@ -118,6 +128,7 @@ class handle_awaiter {
 
  private:
   task_handle<TRes> _handle;
+  base_handle_ptr _self_handle;  // self destroy protection for continuation callback
   continue_callback* _continue_f = nullptr;
   on_continue_callback _continue_callback;
   std::atomic_bool _was_continued{false};

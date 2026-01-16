@@ -28,6 +28,10 @@ class base_handle_ptr {
 
   ~base_handle_ptr() noexcept;
 
+  [[nodiscard]] base_handle_ptr copy() const noexcept {
+    return base_handle_ptr{get()};
+  }
+
   void reset(base_handle* handle = nullptr) noexcept;
 
   explicit operator bool() const noexcept {

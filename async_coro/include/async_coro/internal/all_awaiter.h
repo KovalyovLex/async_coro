@@ -146,7 +146,7 @@ class all_awaiter {
     }
   }
 
-  void continue_after_complete(continue_callback& continue_f) {
+  void continue_after_complete(continue_callback& continue_f, const base_handle_ptr& handle) {
     ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
     _continue_f = &continue_f;
@@ -156,7 +156,7 @@ class all_awaiter {
 
     const auto iter_awaiters = [&]<std::size_t... TI>(std::index_sequence<TI...>) {
       const auto set_continue = [&](auto& awaiter, continue_callback& callback) {
-        awaiter.continue_after_complete(callback);
+        awaiter.continue_after_complete(callback, handle);
       };
 
       (set_continue(std::get<TI>(_awaiters), std::get<TI>(_callbacks)), ...);

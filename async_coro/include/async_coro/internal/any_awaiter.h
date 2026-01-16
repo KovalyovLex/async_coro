@@ -163,7 +163,7 @@ class any_awaiter {
     }
   }
 
-  void continue_after_complete(continue_callback& continue_f) {
+  void continue_after_complete(continue_callback& continue_f, const base_handle_ptr& handle) {
     ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
     _continue_f = &continue_f;
@@ -172,7 +172,7 @@ class any_awaiter {
     const auto iter_awaiters = [&]<std::size_t... TI>(std::index_sequence<TI...>) {
       const auto set_continue = [&](auto& awaiter, continue_callback& callback) {
         _num_await_free.fetch_add(1, std::memory_order::relaxed);
-        awaiter.continue_after_complete(callback);
+        awaiter.continue_after_complete(callback, handle);
         return _result_index.load(std::memory_order::relaxed) == 0;
       };
 

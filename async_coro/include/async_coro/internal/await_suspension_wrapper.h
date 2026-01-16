@@ -49,7 +49,7 @@ class await_suspension_wrapper {
 
     _suspension = handle.promise().suspend(2, &_cancel_callback);
 
-    _awaiter.continue_after_complete(_continue_callback);
+    _awaiter.continue_after_complete(_continue_callback, _suspension.get_handle());
 
     _suspension.try_to_continue_immediately();
   }
