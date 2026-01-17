@@ -6,6 +6,7 @@
 #include <async_coro/internal/continue_callback.h>
 #include <async_coro/internal/type_traits.h>
 
+#include <atomic>
 #include <tuple>
 #include <utility>
 
@@ -53,9 +54,10 @@ class handle_awaiter : public advanced_awaiter<handle_awaiter<TRes>> {
   }
 
   void adv_await_suspend(continue_callback& continue_f) {
-    ASYNC_CORO_ASSERT(_continue_f == nullptr);
+    ASYNC_CORO_ASSERT(_continue_f.load(std::memory_order::relaxed) == nullptr);
 
-    _continue_f = &continue_f;
+    // barrier to prevent reordering
+    _continue_f.store(&continue_f, std::memory_order::release);
 
     _handle.continue_with(_continue_callback);
   }
@@ -79,7 +81,7 @@ class handle_awaiter : public advanced_awaiter<handle_awaiter<TRes>> {
 
       auto* clb = static_cast<on_continue_callback*>(base)->_awaiter;
 
-      continue_callback::ptr continuation{std::exchange(clb->_continue_f, nullptr)};
+      continue_callback::ptr continuation{clb->_continue_f.exchange(nullptr, std::memory_order::relaxed)};
       ASYNC_CORO_ASSERT(continuation != nullptr);
 
       while (continuation) {
@@ -91,7 +93,7 @@ class handle_awaiter : public advanced_awaiter<handle_awaiter<TRes>> {
       auto* clb = static_cast<on_continue_callback*>(base)->_awaiter;
 
       // destroy continuation
-      continue_callback::ptr continuation{std::exchange(clb->_continue_f, nullptr)};
+      continue_callback::ptr continuation{clb->_continue_f.exchange(nullptr, std::memory_order::relaxed)};
     }
 
    private:
@@ -100,7 +102,7 @@ class handle_awaiter : public advanced_awaiter<handle_awaiter<TRes>> {
 
  private:
   task_handle<TRes> _handle;
-  continue_callback* _continue_f = nullptr;
+  std::atomic<continue_callback*> _continue_f = nullptr;
   on_continue_callback _continue_callback;
 };
 
