@@ -273,67 +273,6 @@ class callback_impl<Fx, Noexcept, R(TArgs...)> final : public std::conditional_t
   Fx _fx;
 };
 
-template <typename Fx, typename TFunc>
-class callback_on_stack {
-  static_assert(always_false<TFunc>::value,
-                "callback_on_stack only accepts function types as template arguments, "
-                "with possibly noexcept qualifiers.");
-};
-
-template <typename Fx, typename R, typename... TArgs>
-class callback_on_stack<Fx, R(TArgs...)> : public callback<R(TArgs...)> {
- public:
-  template <class... TArgs2>
-    requires(sizeof...(TArgs2) != 1 || (!std::is_same_v<std::remove_cvref_t<TArgs2>, callback_on_stack<Fx, R(TArgs...)>> && ...))
-  explicit callback_on_stack(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
-      : callback<R(TArgs...)>(&executor, nullptr),
-        _fx(std::forward<TArgs2>(args)...) {}
-
-  callback_on_stack(const callback_on_stack&) = delete;
-  callback_on_stack(callback_on_stack&&) = delete;
-
-  callback_on_stack& operator=(const callback_on_stack&) = delete;
-  callback_on_stack& operator=(callback_on_stack&&) = delete;
-
-  ~callback_on_stack() noexcept = default;
-
- private:
-  static R executor(callback_base* base, bool /*destroy*/, TArgs... value) {
-    // no destroy need
-    return static_cast<callback_on_stack*>(base)->_fx(std::forward<TArgs>(value)...);
-  }
-
- private:
-  Fx _fx;
-};
-
-template <typename Fx, typename R, typename... TArgs>
-class callback_on_stack<Fx, R(TArgs...) noexcept> : public callback<R(TArgs...) noexcept> {
- public:
-  template <class... TArgs2>
-    requires(sizeof...(TArgs2) != 1 || (!std::is_same_v<std::remove_cvref_t<TArgs2>, callback_on_stack<Fx, R(TArgs...) noexcept>> && ...))
-  explicit callback_on_stack(TArgs2&&... args) noexcept(std::is_nothrow_constructible_v<Fx, TArgs2&&...>)
-      : callback<R(TArgs...)>(&executor, nullptr),
-        _fx(std::forward<TArgs2>(args)...) {}
-
-  callback_on_stack(const callback_on_stack&) = delete;
-  callback_on_stack(callback_on_stack&&) = delete;
-
-  callback_on_stack& operator=(const callback_on_stack&) = delete;
-  callback_on_stack& operator=(callback_on_stack&&) = delete;
-
-  ~callback_on_stack() noexcept = default;
-
- private:
-  static R executor(callback_base* base, bool /*destroy*/, TArgs... value) noexcept {
-    // no destroy need
-    return static_cast<callback_on_stack*>(base)->_fx(std::forward<TArgs>(value)...);
-  }
-
- private:
-  Fx _fx;
-};
-
 }  // namespace internal
 
 }  // namespace async_coro

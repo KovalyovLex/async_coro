@@ -5,6 +5,7 @@
 #include <async_coro/internal/base_handle_ptr.h>
 #include <async_coro/thread_safety/light_mutex.h>
 #include <async_coro/thread_safety/unique_lock.h>
+#include <async_coro/utils/no_unique_address.h>
 #include <async_coro/warnings.h>
 
 #include <algorithm>
@@ -57,7 +58,8 @@ class await_callback {
   void await_suspend(std::coroutine_handle<U> handle) {
     auto callback = continue_callback{*this, handle.promise().get_owning_ptr()};
 
-    this->_suspension = handle.promise().suspend(2, &this->_on_cancel);
+    // cancel and continue should always be called or destroyed
+    this->_suspension = handle.promise().suspend(3, &this->_on_cancel);
 
     this->_on_await(std::move(callback));
 
@@ -77,28 +79,53 @@ class await_callback {
   }
 
  private:
-  class on_cancel_callback {
+  class on_cancel_callback : public callback<void()> {
+    using super = callback<void()>;
+
    public:
-    void operator()() const {
+    explicit on_cancel_callback(await_callback* awaiter) noexcept
+        : super(&on_execute, &on_destroy),
+          _awaiter(awaiter) {}
+
+   private:
+    static void on_execute(callback_base* base, ASYNC_CORO_ASSERT_VARIABLE bool with_destroy) {
+      ASYNC_CORO_ASSERT(with_destroy);
+
+      auto* clb = static_cast<on_cancel_callback*>(base)->_awaiter;
+
+      // cancel awaiting first
       bool executed = false;
       {
-        async_coro::unique_lock lock{callback->_mutex};
-        if (callback->_continue != nullptr) {
+        async_coro::unique_lock lock{clb->_mutex};
+        if (clb->_continue != nullptr) {
           // cancel execution of callback
-          callback->_continue->_handle = nullptr;
-          callback->_continue->_cancelled.store(true, std::memory_order::relaxed);
+          clb->_continue->_handle = nullptr;
+          clb->_continue->_cancelled.store(true, std::memory_order::relaxed);
         }
-        executed = callback->_was_continue_called;
+        executed = clb->_was_continue_called;
       }
 
       if (!executed) {
-        callback->_suspension.try_to_continue_from_any_thread(true);
+        // decrease num suspensions for continuation callback as we disarmed it
+        clb->_suspension.try_to_continue_from_any_thread(true);
       }
+
+      // then decrease num suspensions
+      clb->_suspension.try_to_continue_from_any_thread(true);
     }
 
-    await_callback* callback;
+    static void on_destroy(callback_base* base) noexcept {
+      auto* clb = static_cast<on_cancel_callback*>(base)->_awaiter;
+
+      clb->_suspension.try_to_continue_from_any_thread(false);
+    }
+
+   private:
+    await_callback* _awaiter;
   };
 
+  // Continue callback that passes for external call
+  // Can only be moved
   class continue_callback {
     friend on_cancel_callback;
 
@@ -161,19 +188,16 @@ class await_callback {
         return;
       }
 
-      // store result under the continue lock (we hold _continue_mutex via callback_lock)
+      // store result
       std::construct_at(std::addressof(_callback->_result.res), std::forward<V>(value));
 
+      // notify suspension
       _callback->_suspension.try_to_continue_from_any_thread(false);
     }
 
    private:
     base_handle_ptr try_continue() {
       base_handle_ptr handle;
-
-      if (_cancelled.load(std::memory_order::relaxed)) {
-        return handle;
-      }
 
       {
         unique_lock lock{_callback->_mutex};
@@ -187,6 +211,12 @@ class await_callback {
 
         handle = std::move(_handle);
       }
+
+      if (handle) {
+        // remove cancel
+        _callback->_suspension.remove_cancel_callback();
+      }
+
       return handle;
     }
 
@@ -199,13 +229,14 @@ class await_callback {
  private:
   using stored_result_t = std::conditional_t<std::is_void_v<R>, empty_result, non_initialised_result<R>>;
 
-  light_mutex _mutex;
   coroutine_suspender _suspension;
-  callback_on_stack<on_cancel_callback, void()> _on_cancel;
+  on_cancel_callback _on_cancel;
+  // alive continue callback. Can be moved thats why we use mutex for synchronization
   continue_callback* _continue CORO_THREAD_GUARDED_BY(_mutex) = nullptr;
   bool _was_continue_called CORO_THREAD_GUARDED_BY(_mutex) = false;
-  stored_result_t _result;
-  T _on_await;
+  light_mutex _mutex;
+  ASYNC_CORO_NO_UNIQUE_ADDRESS T _on_await;
+  ASYNC_CORO_NO_UNIQUE_ADDRESS stored_result_t _result;
 };
 
 }  // namespace async_coro::internal

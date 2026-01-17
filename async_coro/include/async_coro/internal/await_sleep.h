@@ -75,8 +75,8 @@ struct await_sleep {
     // self destroy protection
     auto ptr = _promise->get_owning_ptr();
 
-    // Register cancellation callback with the promise so that if the parent
-    // cancels the operation the timer can be cancelled as well.
+    // Register cancellation callback with promise so that if parent
+    // cancels operation the timer action will be cancelled inmediatell.
     _promise->plan_sleep_on_queue(_execution_queue, _on_cancel);
 
     auto& execution_system = _promise->get_scheduler().get_execution_system();
@@ -86,7 +86,11 @@ struct await_sleep {
                       ptr->continue_after_sleep();
                     },
                     _execution_queue, _time),
-                std::memory_order::relaxed);
+                std::memory_order::release);
+
+    if (_was_cancelled.load(std::memory_order::acquire)) {
+      cancel_timer();
+    }
   }
 
   void await_resume() const noexcept {}
@@ -100,28 +104,50 @@ struct await_sleep {
   }
 
  private:
-  struct on_cancel_callback {
-    void operator()() const {
-      auto tid = clb->_t_id.exchange(delayed_task_id{}, std::memory_order::relaxed);
-      if (tid != delayed_task_id{}) {
-        auto& execution_sys = clb->_promise->get_scheduler().get_execution_system();
+  void cancel_timer() noexcept {
+    const auto tid = _t_id.exchange(delayed_task_id{}, std::memory_order::acquire);
+    if (tid != delayed_task_id{}) {
+      auto& execution_sys = _promise->get_scheduler().get_execution_system();
 
-        if (execution_sys.cancel_execution(tid)) {
-          // continue execution to run cancel logic
-          clb->_promise->continue_after_sleep();
-        }
-        // else continue will be called later by system
+      if (execution_sys.cancel_execution(tid)) {
+        // continue execution to run cancel logic
+        _promise->continue_after_sleep();
       }
+      // else continue will be called later by system
+    }
+  }
+
+ private:
+  class on_cancel_callback : public callback<void()> {
+    using super = callback<void()>;
+
+   public:
+    explicit on_cancel_callback(await_sleep* awaiter) noexcept
+        : super(&on_execute, nullptr),
+          _awaiter(awaiter) {}
+
+   private:
+    static void on_execute(callback_base* base, ASYNC_CORO_ASSERT_VARIABLE bool with_destroy) {
+      ASYNC_CORO_ASSERT(with_destroy);
+
+      auto* clb = static_cast<on_cancel_callback*>(base)->_awaiter;  // NOLINT(*downcast*)
+
+      // turn on flag first, as await_suspend will read it after seting _t_id
+      clb->_was_cancelled.store(true, std::memory_order::release);
+
+      clb->cancel_timer();
     }
 
-    await_sleep* clb;
+   private:
+    await_sleep* _awaiter;
   };
 
  private:
   base_handle* _promise = nullptr;
-  callback_on_stack<on_cancel_callback, void()> _on_cancel;
+  on_cancel_callback _on_cancel;
   std::chrono::steady_clock::time_point _time;
   std::atomic<delayed_task_id> _t_id;
+  std::atomic_bool _was_cancelled{false};
   execution_queue_mark _execution_queue = async_coro::execution_queues::any;
   bool _use_parent_q;
 };
