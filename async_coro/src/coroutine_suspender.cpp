@@ -42,6 +42,15 @@ void coroutine_suspender::try_to_continue_immediately() {
   dec_num_suspends();
 }
 
+void coroutine_suspender::remove_cancel_callback() {
+  ASYNC_CORO_ASSERT(_suspend_count.load(std::memory_order::relaxed) > 0);
+
+  // reset our cancel
+  if (auto* on_cancel = _handle->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
+    on_cancel->destroy();
+  }
+}
+
 void coroutine_suspender::dec_num_suspends() {
   const auto prev_count = _suspend_count.fetch_sub(1, std::memory_order::release);
   ASYNC_CORO_ASSERT(prev_count != 0);

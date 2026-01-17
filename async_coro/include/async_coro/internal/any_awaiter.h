@@ -1,10 +1,11 @@
 #pragma once
 
 #include <async_coro/config.h>
-#include <async_coro/internal/await_suspension_wrapper.h>
+#include <async_coro/internal/advanced_awaiter_fwd.h>
 #include <async_coro/internal/continue_callback.h>
 #include <async_coro/internal/handle_awaiter.h>
 #include <async_coro/internal/tuple_variant_helpers.h>
+#include <async_coro/internal/type_traits.h>
 #include <async_coro/warnings.h>
 
 #include <atomic>
@@ -54,8 +55,9 @@ class any_awaiter_continue_callback : public continue_callback {
 
 // awaiter for coroutines scheduled with || op
 template <class... TAwaiters>
-class any_awaiter {
-  static_assert(sizeof...(TAwaiters) > 1);
+class any_awaiter : public advanced_awaiter<any_awaiter<TAwaiters...>> {
+  static_assert((advanced_awaitable<TAwaiters> && ...), "Allowed to use only with advanced awaitable classes");
+  static_assert(sizeof...(TAwaiters) > 0);
 
   template <class...>
   friend class any_awaiter;
@@ -72,59 +74,16 @@ class any_awaiter {
     ASYNC_CORO_ASSERT(other._continue_f == nullptr);
   }
 
-  ~any_awaiter() noexcept {
-    // wee need to wait
-    auto count = _num_await_free.load(std::memory_order::relaxed);
-    while (count != 0) {
-      _num_await_free.wait(count, std::memory_order::relaxed);
-      count = _num_await_free.load(std::memory_order::relaxed);
-    }
-  }
+  ~any_awaiter() noexcept = default;
 
   any_awaiter& operator=(const any_awaiter&) = delete;
   any_awaiter& operator=(any_awaiter&&) = delete;
 
   template <class TAwaiter>
     requires(std::is_rvalue_reference_v<TAwaiter &&>)
-  auto operator||(TAwaiter&& other) && noexcept {
-    return any_awaiter<TAwaiters..., TAwaiter>{std::tuple_cat(std::move(_awaiters), std::tuple<TAwaiter>{std::forward<TAwaiter>(other)})};
-  }
+  auto append_awaiter(TAwaiter&& other) && noexcept;
 
-  template <class TRes>
-  auto operator||(task_handle<TRes>&& other) && noexcept {
-    return any_awaiter<TAwaiters..., handle_awaiter<TRes>>{std::tuple_cat(std::move(_awaiters), std::tuple<handle_awaiter<TRes>>{std::move(other)})};
-  }
-
-  template <class... TAwaiters2>
-  // NOLINTNEXTLINE(*-param-not-moved)
-  auto operator||(any_awaiter<TAwaiters2...>&& other) && noexcept {
-    return any_awaiter<TAwaiters..., TAwaiters2...>{std::tuple_cat(std::move(_awaiters), std::move(other._awaiters))};
-  }
-
-  // (|| ...) && (...) - case
-  template <class TAwaiter>
-    requires(std::is_rvalue_reference_v<TAwaiter &&>)
-  auto operator&&(TAwaiter&& other) && noexcept {
-    static_assert(!std::is_reference_v<TAwaiter>);
-
-    return all_awaiter{std::tuple<any_awaiter, TAwaiter>{std::move(*this), std::forward<TAwaiter>(other)}};
-  }
-
-  // || ... && task - case. Operator && has less precedence so this can happen only in (|| ...) && task case
-  template <class TRes>
-  auto operator&&(task_handle<TRes>&& other) && noexcept {
-    return all_awaiter{std::tuple<any_awaiter, handle_awaiter<TRes>>{std::move(*this), handle_awaiter<TRes>{std::move(other)}}};
-  }
-
-  template <class TAwaiter>
-    requires(std::is_rvalue_reference_v<TAwaiter &&>)
-  auto prepend_awaiter(TAwaiter&& other) && noexcept {
-    static_assert(!std::is_reference_v<TAwaiter>);
-
-    return internal::any_awaiter{std::tuple_cat(std::tuple<TAwaiter>(std::forward<TAwaiter>(other)), std::move(_awaiters))};
-  }
-
-  bool await_ready() noexcept {
+  bool adv_await_ready() noexcept {
     const auto func = [this](std::size_t awaiter_index) noexcept {
       std::uint32_t expected_index = 0;
       if (_result_index.compare_exchange_strong(expected_index, std::uint32_t(awaiter_index + 1), std::memory_order::relaxed)) {
@@ -132,7 +91,7 @@ class any_awaiter {
         call_functor_while_true(
             [&](auto& awaiter_to_cancel, auto, std::size_t index) {
               if (index != awaiter_index) {
-                awaiter_to_cancel.cancel_await();
+                awaiter_to_cancel.cancel_adv_await();
               }
               return true;
             },
@@ -146,33 +105,24 @@ class any_awaiter {
     return calculate_is_ready(func, std::index_sequence_for<TAwaiters...>{});
   }
 
-  void cancel_await() {
+  void cancel_adv_await() {
     std::apply(
         [&](auto&... awaiters) {
-          (awaiters.cancel_await(), ...);
+          (awaiters.cancel_adv_await(), ...);
         },
         _awaiters);
-
-    if (!_was_continued.exchange(true, std::memory_order::acquire)) {
-      continue_callback::ptr continuation{std::exchange(_continue_f, nullptr)};
-      bool cancel = true;
-
-      while (continuation) {
-        std::tie(continuation, cancel) = continuation.release()->execute_and_destroy(cancel);
-      }
-    }
   }
 
-  void continue_after_complete(continue_callback& continue_f, const base_handle_ptr& handle) {
+  void adv_await_suspend(continue_callback& continue_f) {
     ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
     _continue_f = &continue_f;
-    _was_continued.store(false, std::memory_order::release);
+    _num_await_free.store(0, std::memory_order::release);  // using ac_rel for _continue syncronization
 
     const auto iter_awaiters = [&]<std::size_t... TI>(std::index_sequence<TI...>) {
       const auto set_continue = [&](auto& awaiter, continue_callback& callback) {
         _num_await_free.fetch_add(1, std::memory_order::relaxed);
-        awaiter.continue_after_complete(callback, handle);
+        awaiter.adv_await_suspend(callback);
         return _result_index.load(std::memory_order::relaxed) == 0;
       };
 
@@ -190,20 +140,18 @@ class any_awaiter {
       call_functor_while_true(
           [&](auto& awaiter_to_cancel, auto, std::size_t index) {
             if (index != awaiter_index) {
-              awaiter_to_cancel.cancel_await();
+              awaiter_to_cancel.cancel_adv_await();
             }
             return true;
           },
           std::index_sequence_for<TAwaiters...>{});
 
       // continue execution
-      if (!_was_continued.exchange(true, std::memory_order::relaxed)) {
-        continue_callback::ptr continuation{std::exchange(_continue_f, nullptr)};
-        ASYNC_CORO_ASSERT(continuation);
+      continue_callback::ptr continuation{std::exchange(_continue_f, nullptr)};
+      ASYNC_CORO_ASSERT(continuation);
 
-        on_continuation_freed();
-        return {std::move(continuation), cancelled};
-      }
+      on_continuation_freed();
+      return {std::move(continuation), cancelled};
     }
 
     on_continuation_freed();
@@ -212,25 +160,28 @@ class any_awaiter {
 
   void on_continuation_freed() noexcept {
     if (_num_await_free.fetch_sub(1, std::memory_order::relaxed) == 1) {
-      _num_await_free.notify_one();
+      (void)_num_await_free.load(std::memory_order::acquire);  // to sync _continue_f
+
+      // destroy continuation if any
+      continue_callback::ptr continuation{std::exchange(_continue_f, nullptr)};
     }
   }
 
-  result_type await_resume() {
+  result_type adv_await_resume() {
     union_res res;
     std::size_t index = _result_index.load(std::memory_order::relaxed);
     ASYNC_CORO_ASSERT(index > 0);
     --index;
 
     const auto func = [&](auto& awaiter, auto variant_index, std::size_t awaiter_index) {
-      using result_t = decltype(awaiter.await_resume());
+      using result_t = decltype(awaiter.adv_await_resume());
 
       if (index == awaiter_index) {
         if constexpr (std::is_void_v<result_t>) {
-          awaiter.await_resume();
+          awaiter.adv_await_resume();
           new (&res.r) result_type{variant_index, std::monostate{}};
         } else {
-          new (&res.r) result_type{variant_index, awaiter.await_resume()};
+          new (&res.r) result_type{variant_index, awaiter.adv_await_resume()};
         }
         return false;
       }
@@ -247,14 +198,10 @@ class any_awaiter {
     ASYNC_CORO_WARNINGS_GCC_POP
   }
 
-  auto coro_await_transform(base_handle& /*handle*/) && {
-    return await_suspension_wrapper<any_awaiter>{std::move(*this)};
-  }
-
  private:
   template <class F, std::size_t... TI>
   auto calculate_is_ready(const F& store_result, std::integer_sequence<std::size_t, TI...> /*seq*/) noexcept {
-    return ((std::get<TI>(_awaiters).await_ready() && store_result(TI)) || ...);
+    return ((std::get<TI>(_awaiters).adv_await_ready() && store_result(TI)) || ...);
   }
 
   template <class F, std::size_t... TI>
@@ -290,10 +237,22 @@ class any_awaiter {
   continue_callback* _continue_f = nullptr;
   std::atomic_uint32_t _result_index{0};  // 1 based index
   std::atomic_uint32_t _num_await_free{0};
-  std::atomic_bool _was_continued{false};
 };
 
 template <typename... TArgs>
 any_awaiter(std::tuple<TArgs...>&&) -> any_awaiter<TArgs...>;
 
+template <class... TAwaiters>
+template <class TAwaiter>
+  requires(std::is_rvalue_reference_v<TAwaiter &&>)
+inline auto any_awaiter<TAwaiters...>::append_awaiter(TAwaiter&& other) && noexcept {
+  if constexpr (is_any_awaiter_v<TAwaiter>) {
+    return async_coro::internal::any_awaiter{std::tuple_cat(std::move(_awaiters), std::move(other._awaiters))};
+  } else {
+    return any_awaiter<TAwaiters..., TAwaiter>{std::tuple_cat(std::move(_awaiters), std::tuple<TAwaiter>{std::forward<TAwaiter>(other)})};
+  }
+}
+
 }  // namespace async_coro::internal
+
+#include <async_coro/internal/advanced_awaiter.h>

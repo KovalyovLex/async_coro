@@ -59,6 +59,9 @@ class coroutine_suspender {
   /// Returns owning handle
   [[nodiscard]] const base_handle_ptr& get_handle() const noexcept { return _handle; }
 
+  /// Removes and destroys current cancel callback from handle.
+  void remove_cancel_callback();
+
  private:
   void dec_num_suspends();
 

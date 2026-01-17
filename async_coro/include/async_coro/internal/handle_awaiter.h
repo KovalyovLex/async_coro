@@ -2,11 +2,10 @@
 
 #include <async_coro/callback.h>
 #include <async_coro/config.h>
-#include <async_coro/internal/base_handle_ptr.h>
+#include <async_coro/internal/advanced_awaiter.h>
 #include <async_coro/internal/continue_callback.h>
 #include <async_coro/internal/type_traits.h>
 
-#include <atomic>
 #include <tuple>
 #include <utility>
 
@@ -20,15 +19,9 @@ class promise_result;
 
 namespace async_coro::internal {
 
-template <class... TAwaiters>
-class all_awaiter;
-
-template <class... TAwaiters>
-class any_awaiter;
-
 // wrapper for single task to await with operators || and &&
 template <class TRes>
-class handle_awaiter {
+class handle_awaiter : public advanced_awaiter<handle_awaiter<TRes>> {
  public:
   using result_type = TRes;
 
@@ -49,43 +42,25 @@ class handle_awaiter {
   handle_awaiter& operator=(const handle_awaiter&) = delete;
   handle_awaiter& operator=(handle_awaiter&&) = delete;
 
-  template <class TRes2>
-  auto operator&&(task_handle<TRes2>&& other) && noexcept {
-    return all_awaiter{std::tuple<handle_awaiter<TRes>, handle_awaiter<TRes2>>{std::move(*this), handle_awaiter<TRes2>{std::move(other)}}};
-  }
+  [[nodiscard]] bool adv_await_ready() const noexcept { return _handle.done(); }
 
-  template <class TRes2>
-  auto operator||(task_handle<TRes2>&& other) && noexcept {
-    return any_awaiter{std::tuple<handle_awaiter<TRes>, handle_awaiter<TRes2>>{std::move(*this), handle_awaiter<TRes2>{std::move(other)}}};
-  }
-
-  [[nodiscard]] bool await_ready() const noexcept { return _handle.done(); }
-
-  void cancel_await() {
-    _handle.request_cancel();
+  void cancel_adv_await() {
+    // remove our continuation (but it can be continued after reset, thats why we clear _self_handle only in callback)
     _handle.reset_continue();
 
-    if (!_was_continued.exchange(true, std::memory_order::acquire)) {
-      continue_callback::ptr continuation{std::exchange(_continue_f, nullptr)};
-      bool cancel = true;
-
-      while (continuation) {
-        std::tie(continuation, cancel) = continuation.release()->execute_and_destroy(cancel);
-      }
-    }
+    // cancel execution of task
+    _handle.request_cancel();
   }
 
-  void continue_after_complete(continue_callback& continue_f, const base_handle_ptr& handle) {
+  void adv_await_suspend(continue_callback& continue_f) {
     ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
-    _self_handle = handle.copy();
     _continue_f = &continue_f;
-    _was_continued.store(false, std::memory_order::release);
 
     _handle.continue_with(_continue_callback);
   }
 
-  TRes await_resume() {
+  TRes adv_await_resume() {
     return std::move(_handle).get();
   }
 
@@ -104,22 +79,19 @@ class handle_awaiter {
 
       auto* clb = static_cast<on_continue_callback*>(base)->_awaiter;
 
-      if (!clb->_was_continued.exchange(true, std::memory_order::relaxed)) {
-        continue_callback::ptr continuation{std::exchange(clb->_continue_f, nullptr)};
-        ASYNC_CORO_ASSERT(continuation != nullptr);
+      continue_callback::ptr continuation{std::exchange(clb->_continue_f, nullptr)};
+      ASYNC_CORO_ASSERT(continuation != nullptr);
 
-        clb->_self_handle = nullptr;
-
-        while (continuation) {
-          std::tie(continuation, cancelled) = continuation.release()->execute_and_destroy(cancelled);
-        }
+      while (continuation) {
+        std::tie(continuation, cancelled) = continuation.release()->execute_and_destroy(cancelled);
       }
     }
 
     static void on_destroy(callback_base* base) noexcept {
       auto* clb = static_cast<on_continue_callback*>(base)->_awaiter;
 
-      clb->_self_handle = nullptr;
+      // destroy continuation
+      continue_callback::ptr continuation{std::exchange(clb->_continue_f, nullptr)};
     }
 
    private:
@@ -128,10 +100,8 @@ class handle_awaiter {
 
  private:
   task_handle<TRes> _handle;
-  base_handle_ptr _self_handle;  // self destroy protection for continuation callback
   continue_callback* _continue_f = nullptr;
   on_continue_callback _continue_callback;
-  std::atomic_bool _was_continued{false};
 };
 
 }  // namespace async_coro::internal
