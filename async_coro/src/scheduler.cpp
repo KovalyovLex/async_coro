@@ -39,14 +39,16 @@ bool scheduler::is_current_thread_fits(execution_queue_mark execution_queue) noe
 void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*complexity*)
   base_handle* handle_to_run = std::addressof(handle);
 
+  internal::scheduled_run_data run_data{};
+
   while (handle_to_run != nullptr) {
-    internal::scheduled_run_data run_data{};
+    run_data.coroutine_to_run_next = nullptr;
 
     {
       internal::scheduled_run_data* curren_data{nullptr};
 
       while (!handle_to_run->_run_data.compare_exchange_strong(curren_data, std::addressof(run_data), std::memory_order::acquire, std::memory_order::relaxed)) {
-        if (curren_data != nullptr && handle_to_run->is_current_thread_same()) {
+        if (curren_data != nullptr && curren_data->is_same_owner_thread(run_data)) {
           // push this coro to q on run next
           ASYNC_CORO_ASSERT(curren_data->coroutine_to_run_next == nullptr);
           curren_data->coroutine_to_run_next = handle_to_run;
