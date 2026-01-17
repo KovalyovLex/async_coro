@@ -4,11 +4,18 @@
 #include <type_traits>
 
 namespace async_coro {
-
 template <typename R>
 class task;
 
-}
+namespace internal {
+template <class... TAwaiters>
+class all_awaiter;
+
+template <class... TAwaiters>
+class any_awaiter;
+}  // namespace internal
+
+}  // namespace async_coro
 
 namespace async_coro::internal {
 
@@ -41,5 +48,23 @@ struct unwrap_task<task<R>> {
 
 template <typename T>
 using unwrap_task_t = typename unwrap_task<T>::type;
+
+template <typename T>
+struct is_any_awaiter : std::false_type {};
+
+template <typename... T>
+struct is_any_awaiter<any_awaiter<T...>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_any_awaiter_v = is_any_awaiter<T>::value;
+
+template <typename T>
+struct is_all_awaiter : std::false_type {};
+
+template <typename... T>
+struct is_all_awaiter<all_awaiter<T...>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_all_awaiter_v = is_all_awaiter<T>::value;
 
 }  // namespace async_coro::internal

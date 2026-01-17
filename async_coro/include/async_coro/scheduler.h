@@ -2,6 +2,7 @@
 
 #include <async_coro/config.h>
 #include <async_coro/i_execution_system.h>
+#include <async_coro/internal/base_handle_ptr.h>
 #include <async_coro/task_handle.h>
 #include <async_coro/task_launcher.h>
 #include <async_coro/thread_safety/analysis.h>
@@ -67,14 +68,12 @@ class scheduler {
   task_handle<R> start_task(task_launcher<R> launcher) {
     auto coro = launcher.launch();
     auto handle = coro.release_handle(passkey{this});
-    task_handle<R> result{handle};
+    task_handle<R> result{handle, transfer_ownership{}};
     if (!handle.done()) [[likely]] {
       add_coroutine(handle.promise(), launcher.get_start_function(), launcher.get_execution_queue());
       return result;
     }
     handle.promise().check_exception();
-    // free task as we released handle
-    handle.promise().on_task_freed_by_scheduler();
     return result;
   }
 
@@ -144,7 +143,7 @@ class scheduler {
  private:
   mutex _mutex;
   i_execution_system::ptr _execution_system;
-  std::vector<base_handle*> CORO_THREAD_GUARDED_BY(_mutex) _managed_coroutines;
+  std::vector<base_handle_ptr> CORO_THREAD_GUARDED_BY(_mutex) _managed_coroutines;
   bool _is_destroying CORO_THREAD_GUARDED_BY(_mutex) = false;
 
 #if ASYNC_CORO_WITH_EXCEPTIONS && ASYNC_CORO_COMPILE_WITH_EXCEPTIONS

@@ -1,4 +1,7 @@
 #include <async_coro/await/await_callback.h>
+#include <async_coro/scheduler.h>
+#include <async_coro/task.h>
+#include <async_coro/utils/unique_function.h>
 #include <gtest/gtest.h>
 
 #include <string>
