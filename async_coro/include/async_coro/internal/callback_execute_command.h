@@ -46,7 +46,7 @@ class callback_execute_command {
 #endif
   }
 
-  constexpr explicit callback_execute_command(callback_execute_type type, func_type sig_type) noexcept
+  constexpr explicit callback_execute_command(callback_execute_type type, ASYNC_CORO_ASSERT_VARIABLE func_type sig_type) noexcept
       :
 #if ASYNC_CORO_ASSERT_ENABLED
         sig_id(sig_type),
