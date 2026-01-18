@@ -3,6 +3,8 @@
 #include <async_coro/internal/callback_execute_command.h>
 #include <async_coro/utils/always_false.h>
 
+#include <type_traits>
+
 namespace async_coro {
 
 template <typename TFunc>
@@ -16,16 +18,16 @@ class callback {
 template <bool Noexcept>
 class callback_base {
  public:
-  using executor_t = void (*)(internal::callback_execute_command&, callback_base&) noexcept(Noexcept);
-
   static constexpr bool is_noexcept = Noexcept;
+
+  using executor_t = std::conditional_t<is_noexcept, void (*)(internal::callback_execute_command&, callback_base&) noexcept, void (*)(internal::callback_execute_command&, callback_base&)>;
 
  protected:
   constexpr explicit callback_base(executor_t exec) noexcept
       : _executor(exec) {}
 
  public:
-  void destroy() noexcept(Noexcept) {
+  void destroy() noexcept(is_noexcept) {
     internal::callback_execute_command arg;
     _executor(arg, *this);
   }

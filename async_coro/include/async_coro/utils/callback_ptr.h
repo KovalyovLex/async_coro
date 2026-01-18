@@ -100,52 +100,7 @@ class callback_ptr<R(TArgs...)> : public callback_base_ptr<false> {
 
   template <class Fx>
     requires(internal::is_runnable<std::remove_cvref_t<Fx>, R, TArgs...>)
-  static callback_ptr allocate(Fx&& func) noexcept(std::is_nothrow_constructible_v<std::remove_cvref_t<Fx>, Fx&&>) {
-    using fx_type = std::remove_cvref_t<Fx>;
-
-    class callback_on_heap : public callback_t {
-     public:
-      explicit callback_on_heap(Fx&& func) noexcept(std::is_nothrow_constructible_v<fx_type, Fx&&>)  // NOLINT(*not-moved*)
-          : callback_t(&execute),
-            _fx(std::forward<Fx>(func)) {}
-
-     private:
-      static void execute(internal::callback_execute_command& cmd, callback_base<callback_t::is_noexcept>& clb) noexcept(callback_t::is_noexcept) {
-        auto& self = static_cast<callback_on_heap&>(clb);
-
-        if (cmd.execute == internal::callback_execute_type::destroy) {
-          delete &self;  // NOLINT(*owning*)
-        } else {
-          auto& args = cmd.get_arguments<typename callback_t::execute_signature>();
-
-          if constexpr (std::is_void_v<typename callback_t::return_type>) {
-            std::apply(
-                [&self](auto&&... t_args) noexcept(callback_t::is_noexcept) {
-                  return self._fx(std::forward<decltype(t_args)>(t_args)...);
-                },
-                std::move(args.args.get_value()));
-          } else {
-            args.set_result(std::apply(
-                [&self](auto&&... t_args) noexcept(callback_t::is_noexcept) {
-                  return self._fx(std::forward<decltype(t_args)>(t_args)...);
-                },
-                std::move(args.args.get_value())));
-          }
-
-          if (cmd.execute == internal::callback_execute_type::execute_and_destroy) {
-            delete &self;  // NOLINT(*owning*)
-          }
-        }
-      }
-
-     private:
-      fx_type _fx;
-    };
-
-    auto ptr = new callback_on_heap{std::forward<Fx>(func)};  // NOLINT(*owning*)
-
-    return callback_ptr{ptr};
-  }
+  static callback_ptr allocate(Fx&& func) noexcept(std::is_nothrow_constructible_v<std::remove_cvref_t<Fx>, Fx&&>);
 };
 
 // Callback_base_ptr with ability to execute callback
@@ -210,52 +165,7 @@ class callback_ptr<R(TArgs...) noexcept> : public callback_base_ptr<true> {
 
   template <class Fx>
     requires(internal::is_noexcept_runnable<std::remove_cvref_t<Fx>, R, TArgs...>)
-  static callback_ptr allocate(Fx&& func) noexcept(std::is_nothrow_constructible_v<std::remove_cvref_t<Fx>, Fx&&>) {
-    using fx_type = std::remove_cvref_t<Fx>;
-
-    class callback_on_heap : public callback_t {
-     public:
-      explicit callback_on_heap(Fx&& func) noexcept(std::is_nothrow_constructible_v<fx_type, Fx&&>)  // NOLINT(*not-moved*)
-          : callback_t(&execute),
-            _fx(std::forward<Fx>(func)) {}
-
-     private:
-      static void execute(internal::callback_execute_command& cmd, callback_base<callback_t::is_noexcept>& clb) noexcept(callback_t::is_noexcept) {
-        auto& self = static_cast<callback_on_heap&>(clb);
-
-        if (cmd.execute == internal::callback_execute_type::destroy) {
-          delete &self;  // NOLINT(*owning*)
-        } else {
-          auto& args = cmd.get_arguments<typename callback_t::execute_signature>();
-
-          if constexpr (std::is_void_v<typename callback_t::return_type>) {
-            std::apply(
-                [&self](auto&&... t_args) noexcept(callback_t::is_noexcept) {
-                  return self._fx(std::forward<decltype(t_args)>(t_args)...);
-                },
-                std::move(args.args.get_value()));
-          } else {
-            args.set_result(std::apply(
-                [&self](auto&&... t_args) noexcept(callback_t::is_noexcept) {
-                  return self._fx(std::forward<decltype(t_args)>(t_args)...);
-                },
-                std::move(args.args.get_value())));
-          }
-
-          if (cmd.execute == internal::callback_execute_type::execute_and_destroy) {
-            delete &self;  // NOLINT(*owning*)
-          }
-        }
-      }
-
-     private:
-      fx_type _fx;
-    };
-
-    auto ptr = new callback_on_heap{std::forward<Fx>(func)};  // NOLINT(*owning*)
-
-    return callback_ptr{ptr};
-  }
+  static callback_ptr allocate(Fx&& func) noexcept(std::is_nothrow_constructible_v<std::remove_cvref_t<Fx>, Fx&&>);
 };
 
 // Thread safe variant of callback_ptr
@@ -404,6 +314,65 @@ template <typename R, typename... TArgs>
 inline callback_ptr<R(TArgs...) noexcept>::operator callback_atomic_ptr<R(TArgs...) noexcept>() && noexcept {
   auto* clb = std::exchange(_clb, nullptr);
   return callback_atomic_ptr<R(TArgs...)>{clb};
+}
+
+template <class Fx, class TCallback>
+class callback_on_heap final : public TCallback {
+ public:
+  template <class FxRef>
+  explicit callback_on_heap(FxRef&& func) noexcept(std::is_nothrow_constructible_v<Fx, FxRef&&>)  // NOLINT(*not-moved*)
+      : TCallback(&execute),
+        _fx(std::forward<FxRef>(func)) {}
+
+ private:
+  static void execute(internal::callback_execute_command& cmd, callback_base<TCallback::is_noexcept>& clb) noexcept(TCallback::is_noexcept) {
+    auto& self = static_cast<callback_on_heap&>(clb);
+
+    if (cmd.execute == internal::callback_execute_type::destroy) {
+      delete &self;  // NOLINT(*owning*)
+    } else {
+      auto& args = cmd.get_arguments<typename TCallback::execute_signature>();
+
+      if constexpr (std::is_void_v<typename TCallback::return_type>) {
+        std::apply(
+            [&self](auto&&... t_args) noexcept(TCallback::is_noexcept) {
+              return self._fx(std::forward<decltype(t_args)>(t_args)...);
+            },
+            std::move(args.args.get_value()));
+      } else {
+        args.set_result(std::apply(
+            [&self](auto&&... t_args) noexcept(TCallback::is_noexcept) {
+              return self._fx(std::forward<decltype(t_args)>(t_args)...);
+            },
+            std::move(args.args.get_value())));
+      }
+
+      if (cmd.execute == internal::callback_execute_type::execute_and_destroy) {
+        delete &self;  // NOLINT(*owning*)
+      }
+    }
+  }
+
+ private:
+  Fx _fx;
+};
+
+template <typename R, typename... TArgs>
+template <class Fx>
+  requires(internal::is_noexcept_runnable<std::remove_cvref_t<Fx>, R, TArgs...>)
+inline callback_ptr<R(TArgs...) noexcept> callback_ptr<R(TArgs...) noexcept>::allocate(Fx&& func) noexcept(std::is_nothrow_constructible_v<std::remove_cvref_t<Fx>, Fx&&>) {
+  auto ptr = new callback_on_heap<std::remove_cvref_t<Fx>, callback_t>{std::forward<Fx>(func)};  // NOLINT(*owning*)
+
+  return callback_ptr{ptr};
+}
+
+template <typename R, typename... TArgs>
+template <class Fx>
+  requires(internal::is_runnable<std::remove_cvref_t<Fx>, R, TArgs...>)
+inline callback_ptr<R(TArgs...)> callback_ptr<R(TArgs...)>::allocate(Fx&& func) noexcept(std::is_nothrow_constructible_v<std::remove_cvref_t<Fx>, Fx&&>) {
+  auto ptr = new callback_on_heap<std::remove_cvref_t<Fx>, callback_t>{std::forward<Fx>(func)};  // NOLINT(*owning*)
+
+  return callback_ptr{ptr};
 }
 
 }  // namespace async_coro
