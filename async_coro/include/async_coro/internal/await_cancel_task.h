@@ -27,7 +27,7 @@ class await_cancel_task {
   void await_suspend(std::coroutine_handle<U> handle) {
     base_handle& promise = handle.promise();
 
-    auto suspension = promise.suspend(1, nullptr);
+    auto suspension = promise.suspend(1, base_handle::cancel_callback_ptr{nullptr});
 
     promise.request_cancel();
 

@@ -1,5 +1,4 @@
 #include <async_coro/base_handle.h>
-#include <async_coro/callback.h>
 #include <async_coro/config.h>
 #include <async_coro/execution_system.h>
 #include <async_coro/internal/scheduled_run_data.h>
@@ -85,9 +84,7 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
 
         if (cancelled_without_finish) {
           // cancel current coro and parent
-          if (auto* on_cancel = handle_to_run->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
-            on_cancel->execute_and_destroy();
-          }
+          handle_to_run->_on_cancel.try_execute_and_destroy();
 
           parent->request_cancel();
 
@@ -107,9 +104,7 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
         // cleanup coroutine
 
         if (cancelled_without_finish) {
-          if (auto* on_cancel = handle_to_run->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
-            on_cancel->execute_and_destroy();
-          }
+          handle_to_run->_on_cancel.try_execute_and_destroy();
         }
 
         auto* cont_handle = run_data.coroutine_to_run_next;
@@ -185,12 +180,12 @@ void scheduler::plan_continue_on_thread(base_handle& handle_impl, execution_queu
 }
 
 void scheduler::add_coroutine(base_handle& handle_impl,
-                              callback_base::ptr start_function,
+                              callback_base_ptr<false> start_function,
                               execution_queue_mark execution_queue) {
   ASYNC_CORO_ASSERT(handle_impl._execution_thread == std::thread::id{});
   ASYNC_CORO_ASSERT(handle_impl.get_coroutine_state() == coroutine_state::created);
 
-  new (std::addressof(handle_impl._root_state)) base_handle::root_coro_state{.continuation = nullptr, .start_function = std::move(start_function)};
+  new (std::addressof(handle_impl._root_state)) base_handle::root_coro_state{.continuation{}, .start_function = std::move(start_function)};
 
   auto managed = handle_impl.get_owning_ptr();
 

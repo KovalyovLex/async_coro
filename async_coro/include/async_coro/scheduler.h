@@ -7,6 +7,7 @@
 #include <async_coro/task_launcher.h>
 #include <async_coro/thread_safety/analysis.h>
 #include <async_coro/thread_safety/mutex.h>
+#include <async_coro/utils/callback_ptr.h>
 #include <async_coro/utils/passkey.h>
 
 #if ASYNC_CORO_WITH_EXCEPTIONS
@@ -134,7 +135,7 @@ class scheduler {
 
  private:
   bool is_current_thread_fits(execution_queue_mark execution_queue) noexcept;
-  void add_coroutine(base_handle& handle_impl, callback_base::ptr start_function, execution_queue_mark execution_queue);
+  void add_coroutine(base_handle& handle_impl, callback_base_ptr<false> start_function, execution_queue_mark execution_queue);
   void continue_execution_impl(base_handle& handle_impl);
   void plan_continue_on_thread(base_handle& handle_impl, execution_queue_mark execution_queue);
   void change_execution_queue(base_handle& handle_impl, execution_queue_mark execution_queue);

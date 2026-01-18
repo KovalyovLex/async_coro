@@ -1,6 +1,5 @@
 #pragma once
 
-#include <async_coro/callback.h>
 #include <async_coro/config.h>
 #include <async_coro/internal/promise_type.h>
 #include <async_coro/utils/passkey.h>

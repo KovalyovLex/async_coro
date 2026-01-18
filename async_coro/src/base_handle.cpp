@@ -1,5 +1,4 @@
 #include <async_coro/base_handle.h>
-#include <async_coro/callback.h>
 #include <async_coro/config.h>
 #include <async_coro/internal/base_handle_ptr.h>
 #include <async_coro/internal/scheduled_run_data.h>
@@ -11,8 +10,8 @@
 namespace async_coro {
 
 base_handle::~base_handle() noexcept {
-  ASYNC_CORO_ASSERT(release_continuation_functor() == nullptr);
-  ASYNC_CORO_ASSERT(_on_cancel.load(std::memory_order::relaxed) == nullptr);
+  ASYNC_CORO_ASSERT(is_embedded() || _root_state.continuation.release() == nullptr);
+  ASYNC_CORO_ASSERT(!_on_cancel);
 }
 
 void base_handle::set_owning_by_task(bool owning) {
@@ -29,28 +28,23 @@ void base_handle::set_owning_by_task_handle(bool owning) {
   set_owning_by_task(owning);
 }
 
-void base_handle::set_continuation_functor(callback_base* func) noexcept {
+void base_handle::set_continuation_functor(callback_base_ptr<false> func) noexcept {
   ASYNC_CORO_ASSERT(!is_embedded());
 
-  auto* old_value = _root_state.continuation.exchange(func, std::memory_order::release);
-  if (old_value != nullptr) {
-    old_value->destroy();
-  }
+  _root_state.continuation.reset(func.release(), std::memory_order::release);
 }
 
 void base_handle::destroy_impl() noexcept {
-  callback_base* continuation = nullptr;
-  callback_base::ptr start_function;
+  callback_base_ptr<false> continuation;
+  callback_base_ptr<false> start_function;
 
   if (!is_embedded()) {
-    continuation = _root_state.continuation.exchange(nullptr, std::memory_order::acquire);
+    continuation.reset(_root_state.continuation.release(std::memory_order::acquire));
     start_function = std::move(_root_state.start_function);
   }
 
   // continuation can hold something from coro. So destroy continuation first
-  if (continuation != nullptr) {
-    continuation->destroy();
-  }
+  continuation.reset();
 
   while (_run_data.load(std::memory_order::relaxed) != nullptr) {
     // wait for continuation finish
@@ -105,9 +99,8 @@ bool base_handle::request_cancel() {
     if (_current_child != nullptr) {
       _current_child->request_cancel();
     }
-    if (auto* on_cancel = _on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
-      on_cancel->execute_and_destroy();
-    }
+
+    _on_cancel.try_execute_and_destroy();
 
     execute_continuation(true);
   }
@@ -121,9 +114,7 @@ bool base_handle::request_cancel() {
 
 void base_handle::continue_after_sleep() {
   // reset our cancel
-  if (auto* on_cancel = _on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
-    on_cancel->destroy();
-  }
+  _on_cancel = cancel_callback_ptr{nullptr};
 
   ASYNC_CORO_ASSERT(is_cancelled() || get_scheduler().get_execution_system().is_current_thread_fits(_execution_queue));
 

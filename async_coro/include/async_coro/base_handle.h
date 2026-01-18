@@ -1,15 +1,15 @@
 #pragma once
 
-#include <async_coro/callback.h>
 #include <async_coro/config.h>
 #include <async_coro/execution_queue_mark.h>
 #include <async_coro/internal/base_handle_ptr.h>
 #include <async_coro/internal/coroutine_suspender.h>
+#include <async_coro/utils/callback_fwd.h>
+#include <async_coro/utils/callback_ptr.h>
 
 #include <atomic>
 #include <coroutine>
 #include <cstdint>
-#include <memory>
 #include <thread>
 
 namespace async_coro {
@@ -73,6 +73,10 @@ class base_handle {
   static constexpr uint8_t is_result_mask = (1U << 6U);
 
  public:
+  using cancel_callback_ptr = callback_ptr<void()>;
+  using cancel_callback_atomic_ptr = callback_atomic_ptr<void()>;
+  using cancel_callback = cancel_callback_ptr::callback_t;
+
   /**
    * @brief Default constructor
    *
@@ -237,9 +241,8 @@ class base_handle {
    * @note This method is noexcept and will not throw exceptions
    * @note After this method continue_after_sleep should be called
    */
-  void plan_sleep_on_queue(execution_queue_mark execution_queue, callback<void()>& on_cancel) noexcept {
-    ASYNC_CORO_ASSERT_VARIABLE auto* prev = this->_on_cancel.exchange(std::addressof(on_cancel), std::memory_order::relaxed);
-    ASYNC_CORO_ASSERT(prev == nullptr);
+  void plan_sleep_on_queue(execution_queue_mark execution_queue, cancel_callback_ptr on_cancel) noexcept {
+    this->_on_cancel.assign_to_no_init(std::move(on_cancel));
 
     set_coroutine_state(coroutine_state::suspended);
     _execution_queue = execution_queue;
@@ -277,9 +280,8 @@ class base_handle {
    *
    * @see `coroutine_suspender`
    */
-  auto suspend(std::uint32_t suspend_count, callback<void()>* on_cancel) noexcept {
-    ASYNC_CORO_ASSERT_VARIABLE auto* prev = this->_on_cancel.exchange(on_cancel, std::memory_order::relaxed);
-    ASYNC_CORO_ASSERT(prev == nullptr);
+  auto suspend(std::uint32_t suspend_count, cancel_callback_ptr on_cancel) noexcept {
+    this->_on_cancel.assign_to_no_init(std::move(on_cancel));
 
     return internal::coroutine_suspender{*this, suspend_count};
   }
@@ -310,6 +312,9 @@ class base_handle {
     return {static_cast<coroutine_state>(state & coroutine_state_mask), state & is_cancel_requested_mask};
   }
 
+  /**
+   * @brief Returns owning ptr to keep coroutine from destruction
+   */
   base_handle_ptr get_owning_ptr();
 
  protected:
@@ -331,11 +336,18 @@ class base_handle {
 
   void set_owning_by_task(bool owning);
 
-  callback_base* release_continuation_functor() noexcept {
-    return is_embedded() ? nullptr : _root_state.continuation.exchange(nullptr, std::memory_order::acquire);
+  template <typename TSig>
+  callback_ptr<TSig> release_continuation_functor() noexcept {
+    using result_t = callback_ptr<TSig>;
+
+    if (is_embedded()) {
+      return result_t{nullptr};
+    }
+    auto* clb = static_cast<result_t::callback_t*>(_root_state.continuation.release(std::memory_order::acquire));
+    return result_t{clb};
   }
 
-  void set_continuation_functor(callback_base* func) noexcept;
+  void set_continuation_functor(callback_base_ptr<false> func) noexcept;
 
   [[nodiscard]] bool is_initialized() const noexcept {
     return (_atomic_state.load(std::memory_order::relaxed) & is_initialized_mask) != 0;
@@ -410,8 +422,8 @@ class base_handle {
 
  private:
   struct root_coro_state {
-    std::atomic<callback_base*> continuation;
-    callback_base::ptr start_function;  // we should store start function for all lifetime of the coroutine because it stores captured arguments
+    callback_base_atomic_ptr<false> continuation;
+    callback_base_ptr<false> start_function;  // we should store start function for all lifetime of the coroutine because it stores captured arguments
   };
 
   std::atomic<internal::scheduled_run_data*> _run_data{nullptr};
@@ -420,8 +432,11 @@ class base_handle {
     base_handle* _parent;
   };  // embedded coroutine cant have a continuation - continue can be assigned only for root coroutine
   scheduler* _scheduler = nullptr;
-  std::atomic<callback<void()>*> _on_cancel = nullptr;  // callback for our coroutine. callback<void()> should be allocated on coroutine stack or outlive suspension point
-  base_handle_ptr _current_child = nullptr;             // current awaiting child coroutine. Used for cancel notifications
+  // cancel_callback should be allocated on coroutine stack in suspension points.
+  // It can be executed and destroyed or just destroyed in case of no cancel
+  cancel_callback_atomic_ptr _on_cancel = nullptr;
+  // Currently awaiting child coroutine. Used for cancel notifications
+  base_handle_ptr _current_child = nullptr;
   std::thread::id _execution_thread;
   execution_queue_mark _execution_queue = execution_queues::any;
   std::atomic_uint8_t _atomic_state{0};

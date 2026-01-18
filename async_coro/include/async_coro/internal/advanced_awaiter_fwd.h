@@ -1,23 +1,22 @@
 #pragma once
 
+#include <async_coro/internal/continue_callback.h>
+
 #include <concepts>
 #include <type_traits>
 #include <utility>
-
 namespace async_coro {
 class base_handle;
 }  // namespace async_coro
 
 namespace async_coro::internal {
 
-class continue_callback;
-
 template <typename T>
 concept advanced_awaitable = requires(T awaiter) {
   std::is_move_constructible_v<T>;
   { awaiter.adv_await_ready() } -> std::same_as<bool>;
   { awaiter.cancel_adv_await() };
-  { awaiter.adv_await_suspend(std::declval<continue_callback&>()) };
+  { awaiter.adv_await_suspend(std::declval<continue_callback_ptr>()) };
   { awaiter.adv_await_resume() };
 };
 

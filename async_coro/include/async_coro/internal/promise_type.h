@@ -1,7 +1,6 @@
 #pragma once
 
 #include <async_coro/base_handle.h>
-#include <async_coro/callback.h>
 #include <async_coro/internal/promise_result_holder.h>
 #include <async_coro/utils/passkey.h>
 
@@ -62,12 +61,13 @@ class promise_type final : public internal::promise_result_holder<R> {
     base_handle::set_owning_by_task(owning);
   }
 
-  void set_continuation_functor(callback_base* func, passkey_any<task_handle<R>> /*key*/) noexcept {
-    base_handle::set_continuation_functor(func);
+  void set_continuation_functor(callback_base_ptr<false> func, passkey_any<task_handle<R>> /*key*/) noexcept {
+    base_handle::set_continuation_functor(std::move(func));
   }
 
-  callback_base* get_continuation_functor(passkey_any<task_handle<R>> /*key*/) noexcept {
-    return base_handle::release_continuation_functor();
+  template <typename TSig>
+  auto get_continuation_functor(passkey_any<task_handle<R>> /*key*/) noexcept {
+    return base_handle::release_continuation_functor<TSig>();
   }
 
  protected:

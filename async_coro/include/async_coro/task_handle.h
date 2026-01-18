@@ -1,10 +1,10 @@
 #pragma once
 
 #include <async_coro/base_handle.h>
-#include <async_coro/callback.h>
 #include <async_coro/config.h>
 #include <async_coro/internal/handle_awaiter.h>
 #include <async_coro/internal/promise_type.h>
+#include <async_coro/utils/callback_ptr.h>
 #include <async_coro/utils/passkey.h>
 
 #include <atomic>
@@ -34,9 +34,11 @@ template <typename R = void>
 class task_handle final {
   using promise_type = async_coro::internal::promise_type<R>;
   using handle_type = std::coroutine_handle<promise_type>;
-  using callback_type = callback<void(promise_result<R>&, bool)>;
+  using callback_sig = void(promise_result<R>&, bool);
 
  public:
+  using callback_ptr = callback_ptr<callback_sig>;
+
   task_handle() noexcept = default;
 
   task_handle(handle_type handle, transfer_ownership /*owner*/) noexcept
@@ -108,14 +110,13 @@ class task_handle final {
     if (done()) {
       func(promise, false);
     } else {
-      const auto continue_f = callback_type::allocate(std::forward<Fx>(func)).release();
-      promise.set_continuation_functor(continue_f, passkey{this});
+      auto* continue_f = callback_ptr::allocate(std::forward<Fx>(func)).release();
+      promise.set_continuation_functor(callback_ptr{continue_f}, passkey{this});
       auto [state, cancelled] = promise.get_coroutine_state_and_cancelled(std::memory_order::acquire);
       if (state == async_coro::coroutine_state::finished || cancelled) {
-        if (auto* f_base = promise.get_continuation_functor(passkey{this})) {
+        if (auto f_base = promise.template get_continuation_functor<callback_sig>(passkey{this})) {
           ASYNC_CORO_ASSERT(f_base == continue_f);
-          (void)f_base;
-          continue_f->execute_and_destroy(promise, cancelled);
+          f_base.execute_and_destroy(promise, cancelled);
         }
       }
     }
@@ -123,11 +124,10 @@ class task_handle final {
 
   // Sets callback that will be called after coroutine finish on thread that finished the coroutine.
   // If coroutine is already finished, the callback will be called and destroyed immediately.
-  void continue_with(callback_type& func) {
+  void continue_with(callback_ptr func) {
     ASYNC_CORO_ASSERT(!_handle.promise().is_coro_embedded());
 
     if (!_handle) {
-      func.destroy();
       return;
     }
 
@@ -135,13 +135,13 @@ class task_handle final {
     if (done()) {
       func.execute_and_destroy(promise, false);
     } else {
-      const auto ptr = &func;
-      promise.set_continuation_functor(ptr, passkey{this});
+      const auto ptr = func.release();
+      promise.set_continuation_functor(callback_ptr{ptr}, passkey{this});
       const auto [state, cancelled] = promise.get_coroutine_state_and_cancelled(std::memory_order::acquire);
       if (state == async_coro::coroutine_state::finished || cancelled) {
-        if (auto* f_base = promise.get_continuation_functor(passkey{this})) {
+        if (auto f_base = promise.template get_continuation_functor<callback_sig>(passkey{this})) {
           ASYNC_CORO_ASSERT(f_base == ptr);
-          ptr->execute_and_destroy(promise, cancelled);
+          f_base.execute_and_destroy(promise, cancelled);
         }
       };
     }

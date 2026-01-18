@@ -1,11 +1,11 @@
 #pragma once
 
-#include <async_coro/callback.h>
 #include <async_coro/execution_queue_mark.h>
 #include <async_coro/internal/type_traits.h>
 #include <async_coro/task.h>
+#include <async_coro/utils/allocate_callback.h>
+#include <async_coro/utils/callback_ptr.h>
 
-#include <memory>
 #include <type_traits>
 
 namespace async_coro {
@@ -28,7 +28,7 @@ class task_launcher {
    * @param start_function A callback function that returns a task<R> when executed
    * @param execution_queue The execution queue where the task should be scheduled
    */
-  task_launcher(callback<task<R>()>::ptr start_function, execution_queue_mark execution_queue) noexcept
+  task_launcher(callback_ptr<task<R>()> start_function, execution_queue_mark execution_queue) noexcept
       : _start_function(std::move(start_function)),
         _coro(typename task<R>::handle_type(nullptr)),
         _execution_queue(execution_queue) {}
@@ -38,7 +38,7 @@ class task_launcher {
    *
    * @param start_function A callback function that returns a task<R> when executed
    */
-  explicit task_launcher(callback<task<R>()>::ptr start_function) noexcept
+  explicit task_launcher(callback_ptr<task<R>()> start_function) noexcept
       : task_launcher(std::move(start_function), execution_queues::main) {}
 
   /**
@@ -47,7 +47,7 @@ class task_launcher {
    * @param start_function A noexcept callback function that returns a task<R> when executed
    * @param execution_queue The execution queue where the task should be scheduled
    */
-  task_launcher(callback<task<R>() noexcept>::ptr start_function, execution_queue_mark execution_queue) noexcept
+  task_launcher(callback_ptr<task<R>() noexcept> start_function, execution_queue_mark execution_queue) noexcept
       : _start_function(reinterpret_cast<callback<task<R>()>*>(start_function.release())),  // NOLINT(*-reinterpret-cast)
         _coro(typename task<R>::handle_type(nullptr)),
         _execution_queue(execution_queue) {}
@@ -57,7 +57,7 @@ class task_launcher {
    *
    * @param start_function A noexcept callback function that returns a task<R> when executed
    */
-  explicit task_launcher(callback<task<R>() noexcept>::ptr start_function) noexcept
+  explicit task_launcher(callback_ptr<task<R>() noexcept> start_function) noexcept
       : task_launcher(std::move(start_function), execution_queues::main) {}
 
   /**
@@ -128,7 +128,7 @@ class task_launcher {
    */
   task<R> launch() {
     if (_start_function) {
-      return _start_function->execute();
+      return _start_function.execute();
     }
     return std::move(_coro);
   }
@@ -138,8 +138,8 @@ class task_launcher {
    *
    * @return A pointer to the callback base, or nullptr if no callback was set
    */
-  callback_base::ptr get_start_function() noexcept {
-    return callback_base::ptr{_start_function.release()};
+  callback_base_ptr<false> get_start_function() noexcept {
+    return std::move(_start_function);
   }
 
   /**
@@ -152,20 +152,20 @@ class task_launcher {
   }
 
  private:
-  callback<task<R>()>::ptr _start_function;
+  callback_ptr<task<R>()> _start_function = nullptr;
   task<R> _coro;
   execution_queue_mark _execution_queue;
 };
 
 template <typename R>
-task_launcher(std::unique_ptr<callback<task<R>()>, callback_base::deleter>) -> task_launcher<R>;
+task_launcher(callback_ptr<task<R>()>) -> task_launcher<R>;
 template <typename R>
-task_launcher(std::unique_ptr<callback<task<R>()>, callback_base::deleter>, execution_queue_mark) -> task_launcher<R>;
+task_launcher(callback_ptr<task<R>()>, execution_queue_mark) -> task_launcher<R>;
 
 template <typename R>
-task_launcher(std::unique_ptr<callback<task<R>() noexcept>, callback_base::deleter>) -> task_launcher<R>;
+task_launcher(callback_ptr<task<R>() noexcept>) -> task_launcher<R>;
 template <typename R>
-task_launcher(std::unique_ptr<callback<task<R>() noexcept>, callback_base::deleter>, execution_queue_mark) -> task_launcher<R>;
+task_launcher(callback_ptr<task<R>() noexcept>, execution_queue_mark) -> task_launcher<R>;
 
 template <typename R>
 task_launcher(task<R>) -> task_launcher<R>;

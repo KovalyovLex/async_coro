@@ -14,9 +14,7 @@ coroutine_suspender::~coroutine_suspender() noexcept {
     // probably exception was thrown
 
     // reset our cancel
-    if (auto* cancel = _handle->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
-      cancel->destroy();
-    }
+    _handle->_on_cancel = base_handle::cancel_callback_ptr{nullptr};
   }
 }
 
@@ -46,9 +44,7 @@ void coroutine_suspender::remove_cancel_callback() {
   ASYNC_CORO_ASSERT(_suspend_count.load(std::memory_order::relaxed) > 0);
 
   // reset our cancel
-  if (auto* on_cancel = _handle->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
-    on_cancel->destroy();
-  }
+  _handle->_on_cancel = base_handle::cancel_callback_ptr{nullptr};
 }
 
 void coroutine_suspender::dec_num_suspends() {
@@ -60,9 +56,7 @@ void coroutine_suspender::dec_num_suspends() {
     (void)_suspend_count.load(std::memory_order::acquire);
 
     // reset our cancel
-    if (auto* on_cancel = _handle->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
-      on_cancel->destroy();
-    }
+    _handle->_on_cancel = base_handle::cancel_callback_ptr{nullptr};
 
     if (_handle->is_finished()) [[unlikely]] {
       // some exception happened before callback call

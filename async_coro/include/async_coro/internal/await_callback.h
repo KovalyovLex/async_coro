@@ -5,6 +5,7 @@
 #include <async_coro/internal/base_handle_ptr.h>
 #include <async_coro/thread_safety/light_mutex.h>
 #include <async_coro/thread_safety/unique_lock.h>
+#include <async_coro/utils/callback_on_stack.h>
 #include <async_coro/utils/no_unique_address.h>
 #include <async_coro/warnings.h>
 
@@ -36,8 +37,7 @@ class await_callback {
 
  public:
   explicit await_callback(T&& callback) noexcept(std::is_nothrow_constructible_v<T, T&&>)
-      : _on_cancel(this),
-        _on_await(std::move(callback)) {}
+      : _on_await(std::move(callback)) {}
 
   // cannot be moved as we need to keep pointer in external callback
   await_callback(const await_callback&) = delete;
@@ -59,7 +59,7 @@ class await_callback {
     auto callback = continue_callback{*this, handle.promise().get_owning_ptr()};
 
     // cancel and continue should always be called or destroyed
-    this->_suspension = handle.promise().suspend(3, &this->_on_cancel);
+    this->_suspension = handle.promise().suspend(3, base_handle::cancel_callback_ptr{&this->_on_cancel});
 
     this->_on_await(std::move(callback));
 
@@ -79,55 +79,43 @@ class await_callback {
   }
 
  private:
-  class on_cancel_callback : public callback<void()> {
-    using super = callback<void()>;
-
+  class cancel_callback : public callback_on_stack<cancel_callback, base_handle::cancel_callback> {
    public:
-    explicit on_cancel_callback(await_callback* awaiter) noexcept
-        : super(&on_execute, &on_destroy),
-          _awaiter(awaiter) {}
+    void on_destroy() {
+      auto& awaiter = this->get_owner(&await_callback::_on_cancel);
 
-   private:
-    static void on_execute(callback_base* base, ASYNC_CORO_ASSERT_VARIABLE bool with_destroy) {
-      ASYNC_CORO_ASSERT(with_destroy);
+      awaiter._suspension.try_to_continue_from_any_thread(false);
+    }
 
-      auto* clb = static_cast<on_cancel_callback*>(base)->_awaiter;
+    void on_execute_and_destroy() {
+      auto& awaiter = this->get_owner(&await_callback::_on_cancel);
 
       // cancel awaiting first
       bool executed = false;
       {
-        async_coro::unique_lock lock{clb->_mutex};
-        if (clb->_continue != nullptr) {
+        async_coro::unique_lock lock{awaiter._mutex};
+        if (awaiter._continue != nullptr) {
           // cancel execution of callback
-          clb->_continue->_handle = nullptr;
-          clb->_continue->_cancelled.store(true, std::memory_order::relaxed);
+          awaiter._continue->_handle = nullptr;
+          awaiter._continue->_cancelled.store(true, std::memory_order::relaxed);
         }
-        executed = clb->_was_continue_called;
+        executed = awaiter._was_continue_called;
       }
 
       if (!executed) {
         // decrease num suspensions for continuation callback as we disarmed it
-        clb->_suspension.try_to_continue_from_any_thread(true);
+        awaiter._suspension.try_to_continue_from_any_thread(true);
       }
 
       // then decrease num suspensions
-      clb->_suspension.try_to_continue_from_any_thread(true);
+      awaiter._suspension.try_to_continue_from_any_thread(true);
     }
-
-    static void on_destroy(callback_base* base) noexcept {
-      auto* clb = static_cast<on_cancel_callback*>(base)->_awaiter;
-
-      clb->_suspension.try_to_continue_from_any_thread(false);
-    }
-
-   private:
-    await_callback* _awaiter;
   };
 
   // Continue callback that passes for external call
   // Can only be moved
   class continue_callback {
-    friend on_cancel_callback;
+    friend await_callback;
 
    public:
     continue_callback(await_callback& callback, base_handle_ptr handle) noexcept
@@ -230,7 +218,7 @@ class await_callback {
   using stored_result_t = std::conditional_t<std::is_void_v<R>, empty_result, non_initialised_result<R>>;
 
   coroutine_suspender _suspension;
-  on_cancel_callback _on_cancel;
+  cancel_callback _on_cancel;
   // alive continue callback. Can be moved thats why we use mutex for synchronization
   continue_callback* _continue CORO_THREAD_GUARDED_BY(_mutex) = nullptr;
   bool _was_continue_called CORO_THREAD_GUARDED_BY(_mutex) = false;

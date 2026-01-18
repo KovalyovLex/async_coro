@@ -6,6 +6,7 @@
 #include <async_coro/internal/handle_awaiter.h>
 #include <async_coro/internal/tuple_variant_helpers.h>
 #include <async_coro/internal/type_traits.h>
+#include <async_coro/utils/callback_on_stack.h>
 #include <async_coro/warnings.h>
 
 #include <atomic>
@@ -24,29 +25,17 @@ class task_handle;
 namespace async_coro::internal {
 
 template <std::size_t I, class TAwaiter>
-class any_awaiter_continue_callback : public continue_callback {
+class any_awaiter_continue_callback : public callback_on_stack<any_awaiter_continue_callback<I, TAwaiter>, continue_callback> {
  public:
   explicit any_awaiter_continue_callback(TAwaiter& awaiter) noexcept
-      : continue_callback(&executor, &deleter),
-        _awaiter(&awaiter) {}
+      : _awaiter(&awaiter) {}
 
-  any_awaiter_continue_callback(const any_awaiter_continue_callback&) = delete;
-  any_awaiter_continue_callback(any_awaiter_continue_callback&&) noexcept = default;
-
-  ~any_awaiter_continue_callback() noexcept = default;
-
-  any_awaiter_continue_callback& operator=(const any_awaiter_continue_callback&) = delete;
-  any_awaiter_continue_callback& operator=(any_awaiter_continue_callback&&) = delete;
-
- private:
-  static continue_callback::return_type executor(callback_base* base, ASYNC_CORO_ASSERT_VARIABLE bool with_destroy, bool cancelled) {
-    ASYNC_CORO_ASSERT(with_destroy);
-
-    return static_cast<any_awaiter_continue_callback*>(base)->_awaiter->on_continue(cancelled, I);
+  void on_destroy() {
+    _awaiter->on_continuation_freed();
   }
 
-  static void deleter(callback_base* base) noexcept {
-    static_cast<any_awaiter_continue_callback*>(base)->_awaiter->on_continuation_freed();
+  continue_callback::return_type on_execute_and_destroy(bool cancelled) {
+    return _awaiter->on_continue(cancelled, I);
   }
 
  private:
@@ -113,16 +102,16 @@ class any_awaiter : public advanced_awaiter<any_awaiter<TAwaiters...>> {
         _awaiters);
   }
 
-  void adv_await_suspend(continue_callback& continue_f) {
+  void adv_await_suspend(continue_callback_ptr continue_f) {
     ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
-    _continue_f = &continue_f;
+    _continue_f = std::move(continue_f);
     _num_await_free.store(0, std::memory_order::release);  // using ac_rel for _continue syncronization
 
     const auto iter_awaiters = [&]<std::size_t... TI>(std::index_sequence<TI...>) {
-      const auto set_continue = [&](auto& awaiter, continue_callback& callback) {
+      const auto set_continue = [&](auto& awaiter, auto& callback) {
         _num_await_free.fetch_add(1, std::memory_order::relaxed);
-        awaiter.adv_await_suspend(callback);
+        awaiter.adv_await_suspend(callback.get_ptr());
         return _result_index.load(std::memory_order::relaxed) == 0;
       };
 
@@ -147,7 +136,7 @@ class any_awaiter : public advanced_awaiter<any_awaiter<TAwaiters...>> {
           std::index_sequence_for<TAwaiters...>{});
 
       // continue execution
-      continue_callback::ptr continuation{std::exchange(_continue_f, nullptr)};
+      continue_callback_holder continuation{std::move(_continue_f)};
       ASYNC_CORO_ASSERT(continuation);
 
       on_continuation_freed();
@@ -155,7 +144,7 @@ class any_awaiter : public advanced_awaiter<any_awaiter<TAwaiters...>> {
     }
 
     on_continuation_freed();
-    return {nullptr, false};
+    return {continue_callback_holder{nullptr}, false};
   }
 
   void on_continuation_freed() noexcept {
@@ -163,7 +152,7 @@ class any_awaiter : public advanced_awaiter<any_awaiter<TAwaiters...>> {
       (void)_num_await_free.load(std::memory_order::acquire);  // to sync _continue_f
 
       // destroy continuation if any
-      continue_callback::ptr continuation{std::exchange(_continue_f, nullptr)};
+      continue_callback_holder continuation{std::move(_continue_f)};
     }
   }
 
@@ -234,7 +223,7 @@ class any_awaiter : public advanced_awaiter<any_awaiter<TAwaiters...>> {
 
   std::tuple<TAwaiters...> _awaiters;
   TCallbacks _callbacks = create_callbacks(*this);
-  continue_callback* _continue_f = nullptr;
+  continue_callback_ptr _continue_f = nullptr;
   std::atomic_uint32_t _result_index{0};  // 1 based index
   std::atomic_uint32_t _num_await_free{0};
 };

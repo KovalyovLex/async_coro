@@ -44,12 +44,10 @@ class promise_result : public internal::promise_result_base<T> {
 
  protected:
   bool execute_continuation(bool cancelled) override {
-    using callback_t = callback<void(promise_result<T>&, bool)>;
-
-    auto* continue_callback = static_cast<callback_t*>(this->release_continuation_functor());  // NOLINT(*-downcast) This is safe to do so as set can be dont only with this type
+    auto continue_callback = this->template release_continuation_functor<void(promise_result<T>&, bool)>();
 
     if (continue_callback) {
-      continue_callback->execute_and_destroy(*this, cancelled);
+      continue_callback.execute_and_destroy(*this, cancelled);
       return true;
     }
     return false;
@@ -88,12 +86,10 @@ class promise_result<void> : public internal::promise_result_base<void> {
 
  protected:
   bool execute_continuation(bool cancelled) override {
-    using callback_t = callback<void(promise_result<void>&, bool)>;
+    auto continue_callback = this->release_continuation_functor<void(promise_result<void>&, bool)>();
 
-    auto* continue_callback = static_cast<callback_t*>(this->release_continuation_functor());  // NOLINT(*-downcast) This is safe to do so as set can be dont only with this type
-
-    if (continue_callback != nullptr) {
-      continue_callback->execute_and_destroy(*this, cancelled);
+    if (continue_callback) {
+      continue_callback.execute_and_destroy(*this, cancelled);
       return true;
     }
     return false;

@@ -1,9 +1,11 @@
 #pragma once
 
-#include <async_coro/callback.h>
+#include <async_coro/base_handle.h>
+#include <async_coro/config.h>
 #include <async_coro/internal/advanced_awaiter_fwd.h>
 #include <async_coro/internal/continue_callback.h>
 #include <async_coro/internal/coroutine_suspender.h>
+#include <async_coro/utils/callback_on_stack.h>
 
 #include <concepts>
 #include <coroutine>
@@ -19,16 +21,12 @@ template <advanced_awaitable TAwaiter>
 class await_suspension_wrapper {
  public:
   explicit await_suspension_wrapper(TAwaiter&& awaiter) noexcept(std::is_nothrow_constructible_v<TAwaiter, TAwaiter&&>)
-      : _awaiter(std::move(awaiter)),
-        _cancel_callback(on_cancel_callback{this}),
-        _continue_callback(on_continue_callback{this}) {
+      : _awaiter(std::move(awaiter)) {
   }
 
   await_suspension_wrapper(const await_suspension_wrapper&) = delete;
   await_suspension_wrapper(await_suspension_wrapper&& other) noexcept
-      : _awaiter(std::move(other._awaiter)),
-        _cancel_callback(on_cancel_callback{this}),
-        _continue_callback(on_continue_callback{this}) {
+      : _awaiter(std::move(other._awaiter)) {
   }
 
   ~await_suspension_wrapper() noexcept = default;
@@ -44,9 +42,9 @@ class await_suspension_wrapper {
     requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> handle) {
     // cancel and continue should both be called in any case
-    _suspension = handle.promise().suspend(3, &_cancel_callback);
+    _suspension = handle.promise().suspend(3, _cancel_callback.get_ptr());
 
-    _awaiter.adv_await_suspend(_continue_callback);
+    _awaiter.adv_await_suspend(_continue_callback.get_ptr());
 
     _suspension.try_to_continue_immediately();
   }
@@ -56,75 +54,51 @@ class await_suspension_wrapper {
   }
 
  private:
-  class on_cancel_callback : public callback<void()> {
-    using super = callback<void()>;
-
+  class cancel_callback : public callback_on_stack<cancel_callback, base_handle::cancel_callback> {
    public:
-    explicit on_cancel_callback(await_suspension_wrapper* awaiter) noexcept
-        : super(&on_execute, &on_destroy),
-          _awaiter(awaiter) {}
+    void on_destroy() {
+      auto& awaiter = this->get_owner(&await_suspension_wrapper::_cancel_callback);
 
-   private:
-    static void on_execute(callback_base* base, ASYNC_CORO_ASSERT_VARIABLE bool with_destroy) {
-      ASYNC_CORO_ASSERT(with_destroy);
+      awaiter._suspension.try_to_continue_from_any_thread(false);
+    }
 
-      auto* clb = static_cast<on_cancel_callback*>(base)->_awaiter;
+    void on_execute_and_destroy() {
+      auto& awaiter = this->get_owner(&await_suspension_wrapper::_cancel_callback);
 
       // cancel awaiting first
-      clb->_awaiter.cancel_adv_await();
+      awaiter._awaiter.cancel_adv_await();
 
       // then decrease num suspensions
-      clb->_suspension.try_to_continue_from_any_thread(true);
+      awaiter._suspension.try_to_continue_from_any_thread(true);
     }
-
-    static void on_destroy(callback_base* base) noexcept {
-      auto* clb = static_cast<on_cancel_callback*>(base)->_awaiter;
-
-      clb->_suspension.try_to_continue_from_any_thread(false);
-    }
-
-   private:
-    await_suspension_wrapper* _awaiter;
   };
 
-  class on_continue_callback : public continue_callback {
-    using super = continue_callback;
-
+  class continue_callback : public callback_on_stack<continue_callback, internal::continue_callback> {
    public:
-    explicit on_continue_callback(await_suspension_wrapper* awaiter) noexcept
-        : super(&on_execute, &on_destroy),
-          _awaiter(awaiter) {}
+    void on_destroy() {
+      auto& awaiter = this->get_owner(&await_suspension_wrapper::_continue_callback);
 
-   private:
-    static super::return_type on_execute(callback_base* base, ASYNC_CORO_ASSERT_VARIABLE bool with_destroy, bool cancelled) {
-      ASYNC_CORO_ASSERT(with_destroy);
-
-      auto* clb = static_cast<on_continue_callback*>(base)->_awaiter;
-
-      // destroying cancel callback first to dec num suspensions
-      clb->_suspension.remove_cancel_callback();
-
-      // continue execution
-      clb->_suspension.try_to_continue_from_any_thread(cancelled);
-
-      return {nullptr, false};
+      awaiter._suspension.try_to_continue_from_any_thread(false);
     }
 
-    static void on_destroy(callback_base* base) noexcept {
-      auto* clb = static_cast<on_continue_callback*>(base)->_awaiter;
+    continue_callback::return_type on_execute_and_destroy(bool cancelled) {
+      auto& awaiter = this->get_owner(&await_suspension_wrapper::_continue_callback);
 
-      clb->_suspension.try_to_continue_from_any_thread(false);
+      // cancel awaiting first
+      awaiter._awaiter.cancel_adv_await();
+
+      // then decrease num suspensions
+      awaiter._suspension.try_to_continue_from_any_thread(cancelled);
+
+      return {continue_callback_holder{nullptr}, false};
     }
-
-   private:
-    await_suspension_wrapper* _awaiter;
   };
 
  private:
-  TAwaiter _awaiter;
   coroutine_suspender _suspension;
-  on_cancel_callback _cancel_callback;
-  on_continue_callback _continue_callback;
+  cancel_callback _cancel_callback;
+  continue_callback _continue_callback;
+  TAwaiter _awaiter;
 };
 
 }  // namespace async_coro::internal
