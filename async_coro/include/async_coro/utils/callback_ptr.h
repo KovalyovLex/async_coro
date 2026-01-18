@@ -320,6 +320,7 @@ template <class Fx, class TCallback>
 class callback_on_heap final : public TCallback {
  public:
   template <class FxRef>
+    requires(!std::is_convertible_v<FxRef &&, callback_on_heap> && std::is_convertible_v<FxRef &&, Fx>)
   explicit callback_on_heap(FxRef&& func) noexcept(std::is_nothrow_constructible_v<Fx, FxRef&&>)  // NOLINT(*not-moved*)
       : TCallback(&execute),
         _fx(std::forward<FxRef>(func)) {}
