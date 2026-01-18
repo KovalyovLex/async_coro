@@ -367,7 +367,7 @@ class base_handle {
   }
 
   void set_is_inside_cancel(bool value) noexcept {
-    update_value((value ? is_inside_cancel_mask : 0U), get_inverted_mask(is_inside_cancel_mask), std::memory_order::release);
+    update_value((value ? is_inside_cancel_mask : 0U), get_inverted_mask(is_inside_cancel_mask), std::memory_order::relaxed, std::memory_order::release);
   }
 
  private:

@@ -62,8 +62,12 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
         curren_data = nullptr;
       }
 
-      while (handle_to_run->is_inside_cancel()) {
-        // wait for cancel finish
+      if (handle_to_run->is_inside_cancel(std::memory_order::acquire)) [[unlikely]] {
+        while (handle_to_run->is_inside_cancel()) {
+          // wait for cancel finish without mem sync
+        }
+
+        (void)handle_to_run->is_inside_cancel(std::memory_order::acquire);
       }
     }
 
