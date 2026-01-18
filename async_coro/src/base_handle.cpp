@@ -76,30 +76,15 @@ bool base_handle::request_cancel() {
     return false;
   }
 
-  internal::scheduled_run_data run_data{};
-  std::optional<std::thread::id> current_thread;
-  bool return_run_data = false;
-
   const auto [was_requested, state] = set_cancel_requested();
   if (!was_requested && (state == coroutine_state::suspended || state == coroutine_state::waiting_switch)) {
     // this is first cancel - notify continuation if coroutine was not running
 
-    {
-      internal::scheduled_run_data* curren_data{nullptr};
-      return_run_data = true;
+    set_is_inside_cancel(true);
 
-      while (!_run_data.compare_exchange_strong(curren_data, std::addressof(run_data), std::memory_order::acquire, std::memory_order::relaxed)) {
-        if (curren_data != nullptr) {
-          if (!current_thread) {
-            current_thread = std::this_thread::get_id();
-          }
-          if (_execution_thread == current_thread) {
-            // Can safely proceed cancel without locking _run_data
-            return_run_data = false;
-            break;
-          }
-        }
-        curren_data = nullptr;
+    if (!is_current_thread_same()) {
+      while (_run_data.load(std::memory_order::acquire) != nullptr) {
+        // wait for current run finish
       }
     }
 
@@ -110,10 +95,8 @@ bool base_handle::request_cancel() {
     _on_cancel.try_execute_and_destroy();
 
     execute_continuation(true);
-  }
 
-  if (return_run_data) {
-    _run_data.store(nullptr, std::memory_order::release);
+    set_is_inside_cancel(false);
   }
 
   return was_requested;

@@ -61,6 +61,10 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
         }
         curren_data = nullptr;
       }
+
+      while (handle_to_run->is_inside_cancel()) {
+        // wait for cancel finish
+      }
     }
 
     bool was_cancelled = handle_to_run->set_coroutine_state_and_get_cancelled(coroutine_state::running);

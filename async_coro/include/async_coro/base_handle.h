@@ -71,6 +71,7 @@ class base_handle {
   static constexpr uint8_t is_cancel_requested_mask = (1U << 4U);
   static constexpr uint8_t is_initialized_mask = (1U << 5U);
   static constexpr uint8_t is_result_mask = (1U << 6U);
+  static constexpr uint8_t is_inside_cancel_mask = (1U << 7U);
 
  public:
   using cancel_callback_ptr = callback_ptr<void()>;
@@ -359,6 +360,14 @@ class base_handle {
 
   void set_initialized(bool is_result) noexcept {
     update_value(is_initialized_mask | (is_result ? is_result_mask : 0U), get_inverted_mask(is_initialized_mask | is_result_mask));
+  }
+
+  [[nodiscard]] bool is_inside_cancel(std::memory_order order = std::memory_order::relaxed) const noexcept {
+    return (_atomic_state.load(order) & is_inside_cancel_mask) != 0;
+  }
+
+  void set_is_inside_cancel(bool value) noexcept {
+    update_value((value ? is_inside_cancel_mask : 0U), get_inverted_mask(is_inside_cancel_mask), std::memory_order::release);
   }
 
  private:
