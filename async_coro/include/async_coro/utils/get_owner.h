@@ -21,7 +21,10 @@ TTuple& get_owner_tuple(TValue& member) noexcept {
   static_assert(std::is_same_v<std::remove_cvref_t<decltype(std::get<I>(std::declval<TTuple>()))>, std::remove_cvref_t<TValue>>, "Wrong type provided");
   static_assert(std::is_reference_v<decltype(std::get<I>(std::declval<TTuple>()))>, "Wrong type of tuple?");
 
-  const auto offset = reinterpret_cast<std::ptrdiff_t>(&std::get<I>(*static_cast<TTuple*>(nullptr)));  // NOLINT(*reinterpret-cast*)
+  static auto offset = []() {
+    TTuple tuple;
+    return reinterpret_cast<std::ptrdiff_t>(&std::get<I>(tuple)) - reinterpret_cast<std::ptrdiff_t>(&tuple);  // NOLINT(*reinterpret-cast*)
+  }();
 
   return *reinterpret_cast<TTuple*>(reinterpret_cast<char*>(std::addressof(member)) - offset);  // NOLINT(*reinterpret-cast*, *pointer*)
 }

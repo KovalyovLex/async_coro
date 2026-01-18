@@ -7,6 +7,7 @@
 #include <async_coro/internal/tuple_variant_helpers.h>
 #include <async_coro/internal/type_traits.h>
 #include <async_coro/utils/callback_on_stack.h>
+#include <async_coro/utils/get_owner.h>
 #include <async_coro/warnings.h>
 
 #include <atomic>
@@ -27,19 +28,21 @@ namespace async_coro::internal {
 template <std::size_t I, class TAwaiter>
 class any_awaiter_continue_callback : public callback_on_stack<any_awaiter_continue_callback<I, TAwaiter>, continue_callback> {
  public:
-  explicit any_awaiter_continue_callback(TAwaiter& awaiter) noexcept
-      : _awaiter(&awaiter) {}
+  explicit any_awaiter_continue_callback() noexcept = default;
 
   void on_destroy() {
-    _awaiter->on_continuation_freed();
+    auto& tuple = get_owner_tuple<typename TAwaiter::TCallbacks, I>(*this);
+    auto& awaiter = get_owner(tuple, &TAwaiter::_callbacks);
+
+    awaiter.on_continuation_freed();
   }
 
   continue_callback::return_type on_execute_and_destroy(bool cancelled) {
-    return _awaiter->on_continue(cancelled, I);
-  }
+    auto& tuple = get_owner_tuple<typename TAwaiter::TCallbacks, I>(*this);
+    auto& awaiter = get_owner(tuple, &TAwaiter::_callbacks);
 
- private:
-  TAwaiter* _awaiter;
+    return awaiter.on_continue(cancelled, I);
+  }
 };
 
 // awaiter for coroutines scheduled with || op
@@ -50,6 +53,9 @@ class any_awaiter : public advanced_awaiter<any_awaiter<TAwaiters...>> {
 
   template <class...>
   friend class any_awaiter;
+
+  template <size_t I, class>
+  friend class any_awaiter_continue_callback;
 
  public:
   using result_type = decltype(get_variant_for_types(replace_void_type_in_holder(types_holder<typename TAwaiters::result_type...>{})));
@@ -198,9 +204,9 @@ class any_awaiter : public advanced_awaiter<any_awaiter<TAwaiters...>> {
     ((func(std::get<TI>(_awaiters), std::in_place_index_t<TI>{}, TI)) && ...);
   }
 
-  static auto create_callbacks(any_awaiter& await) noexcept {
+  static auto create_callbacks() noexcept {
     const auto iter_awaiters = [&]<std::size_t... TI>(std::index_sequence<TI...>) {
-      return std::make_tuple(any_awaiter_continue_callback<TI, any_awaiter>{await}...);
+      return std::make_tuple(any_awaiter_continue_callback<TI, any_awaiter>{}...);
     };
 
     return iter_awaiters(std::index_sequence_for<TAwaiters...>{});
@@ -219,10 +225,10 @@ class any_awaiter : public advanced_awaiter<any_awaiter<TAwaiters...>> {
   };
 
  private:
-  using TCallbacks = decltype(create_callbacks(std::declval<any_awaiter&>()));
+  using TCallbacks = decltype(create_callbacks());
 
   std::tuple<TAwaiters...> _awaiters;
-  TCallbacks _callbacks = create_callbacks(*this);
+  TCallbacks _callbacks;
   continue_callback_ptr _continue_f = nullptr;
   std::atomic_uint32_t _result_index{0};  // 1 based index
   std::atomic_uint32_t _num_await_free{0};

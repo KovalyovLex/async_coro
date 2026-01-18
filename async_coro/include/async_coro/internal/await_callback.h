@@ -59,7 +59,7 @@ class await_callback {
     auto callback = continue_callback{*this, handle.promise().get_owning_ptr()};
 
     // cancel and continue should always be called or destroyed
-    this->_suspension = handle.promise().suspend(3, base_handle::cancel_callback_ptr{&this->_on_cancel});
+    this->_suspension = handle.promise().suspend(3, _on_cancel.get_ptr());
 
     this->_on_await(std::move(callback));
 

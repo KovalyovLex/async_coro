@@ -28,19 +28,21 @@ namespace async_coro::internal {
 template <std::size_t I, class TAwaiter>
 class all_awaiter_continue_callback : public callback_on_stack<all_awaiter_continue_callback<I, TAwaiter>, continue_callback> {
  public:
-  explicit all_awaiter_continue_callback(TAwaiter& awaiter) noexcept
-      : _awaiter(&awaiter) {}
+  explicit all_awaiter_continue_callback() noexcept = default;
 
   void on_destroy() {
-    _awaiter->on_continuation_freed();
+    auto& tuple = get_owner_tuple<typename TAwaiter::TCallbacks, I>(*this);
+    auto& awaiter = get_owner(tuple, &TAwaiter::_callbacks);
+
+    awaiter.on_continuation_freed();
   }
 
   continue_callback::return_type on_execute_and_destroy(bool cancelled) {
-    return _awaiter->on_continue(cancelled, I);
-  }
+    auto& tuple = get_owner_tuple<typename TAwaiter::TCallbacks, I>(*this);
+    auto& awaiter = get_owner(tuple, &TAwaiter::_callbacks);
 
- private:
-  TAwaiter* _awaiter;
+    return awaiter.on_continue(cancelled, I);
+  }
 };
 
 // awaiter for coroutines scheduled with && op
@@ -50,6 +52,9 @@ class all_awaiter : public advanced_awaiter<all_awaiter<TAwaiters...>> {
 
   template <class...>
   friend class all_awaiter;
+
+  template <size_t I, class>
+  friend class all_awaiter_continue_callback;
 
  public:
   using result_type = remove_void_tuple_t<typename TAwaiters::result_type...>;
@@ -163,19 +168,19 @@ class all_awaiter : public advanced_awaiter<all_awaiter<TAwaiters...>> {
   }
 
  private:
-  static auto create_callbacks(all_awaiter& await) noexcept {
+  static auto create_callbacks() noexcept {
     const auto iter_awaiters = [&]<std::size_t... TI>(std::index_sequence<TI...>) {
-      return std::make_tuple(all_awaiter_continue_callback<TI, all_awaiter>{await}...);
+      return std::make_tuple(all_awaiter_continue_callback<TI, all_awaiter>{}...);
     };
 
     return iter_awaiters(std::index_sequence_for<TAwaiters...>{});
   };
 
  private:
-  using TCallbacks = decltype(create_callbacks(std::declval<all_awaiter&>()));
+  using TCallbacks = decltype(create_callbacks());
 
   std::tuple<TAwaiters...> _awaiters;
-  TCallbacks _callbacks = create_callbacks(*this);
+  TCallbacks _callbacks;
   continue_callback_ptr _continue_f = nullptr;
   std::atomic_uint32_t _num_await_free{0};
   std::atomic_bool _was_any_cancelled{false};
