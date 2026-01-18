@@ -39,6 +39,7 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
   base_handle* handle_to_run = std::addressof(handle);
 
   internal::scheduled_run_data run_data{};
+  std::optional<std::thread::id> current_thread;
 
   while (handle_to_run != nullptr) {
     run_data.coroutine_to_run_next = nullptr;
@@ -47,11 +48,16 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
       internal::scheduled_run_data* curren_data{nullptr};
 
       while (!handle_to_run->_run_data.compare_exchange_strong(curren_data, std::addressof(run_data), std::memory_order::acquire, std::memory_order::relaxed)) {
-        if (curren_data != nullptr && curren_data->is_same_owner_thread(run_data)) {
-          // push this coro to q on run next
-          ASYNC_CORO_ASSERT(curren_data->coroutine_to_run_next == nullptr);
-          curren_data->coroutine_to_run_next = handle_to_run;
-          return;
+        if (curren_data != nullptr) {
+          if (!current_thread) {
+            current_thread = std::this_thread::get_id();
+          }
+          if (handle_to_run->_execution_thread == current_thread) {
+            // push this coro to q on run next
+            ASYNC_CORO_ASSERT(curren_data->coroutine_to_run_next == nullptr);
+            curren_data->coroutine_to_run_next = handle_to_run;
+            return;
+          }
         }
         curren_data = nullptr;
       }
