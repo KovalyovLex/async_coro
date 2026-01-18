@@ -81,7 +81,7 @@ class await_suspension_wrapper {
       awaiter._suspension.try_to_continue_from_any_thread(false);
     }
 
-    continue_callback::return_type on_execute_and_destroy(bool cancelled) {
+    internal::continue_callback::return_type on_execute_and_destroy(bool cancelled) {
       auto& awaiter = this->get_owner(&await_suspension_wrapper::_continue_callback);
 
       // remove cancel callback

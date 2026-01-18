@@ -61,7 +61,11 @@ class callback_ptr<R(TArgs...)> : public callback_base_ptr<false> {
       return clb->execute_and_destroy(std::forward<TArgs>(args)...);
     }
 
-    return result_type{};
+    if constexpr (std::is_void_v<result_type>) {
+      return;
+    } else {
+      return result_type{};
+    }
   }
 
   callback_t::return_type execute_and_destroy(TArgs... args) {
@@ -171,7 +175,11 @@ class callback_ptr<R(TArgs...) noexcept> : public callback_base_ptr<true> {
       return clb->execute_and_destroy(std::forward<TArgs>(args)...);
     }
 
-    return result_type{};
+    if constexpr (std::is_void_v<result_type>) {
+      return;
+    } else {
+      return result_type{};
+    }
   }
 
   callback_t::return_type execute_and_destroy(TArgs... args) noexcept {
@@ -285,7 +293,11 @@ class callback_atomic_ptr<R(TArgs...)> : public callback_base_atomic_ptr<false> 
       return clb->execute_and_destroy(std::forward<TArgs>(args)...);
     }
 
-    return result_type{};
+    if constexpr (std::is_void_v<result_type>) {
+      return;
+    } else {
+      return result_type{};
+    }
   }
 
   auto execute_and_destroy(TArgs... args) {
@@ -293,7 +305,7 @@ class callback_atomic_ptr<R(TArgs...)> : public callback_base_atomic_ptr<false> 
   }
 
   callback_t::return_type execute(TArgs... args) const {
-    auto* clb = _clb.load(std::memory_order::acquire);
+    auto* clb = static_cast<callback_t*>(_clb.load(std::memory_order::acquire));
 
     ASYNC_CORO_ASSERT(_clb != nullptr);
 
@@ -348,7 +360,11 @@ class callback_atomic_ptr<R(TArgs...) noexcept> : public callback_base_atomic_pt
       return clb->execute_and_destroy(std::forward<TArgs>(args)...);
     }
 
-    return result_type{};
+    if constexpr (std::is_void_v<result_type>) {
+      return;
+    } else {
+      return result_type{};
+    }
   }
 
   auto execute_and_destroy(TArgs... args) noexcept {
@@ -356,9 +372,9 @@ class callback_atomic_ptr<R(TArgs...) noexcept> : public callback_base_atomic_pt
   }
 
   callback_t::return_type execute(TArgs... args) const noexcept {
-    auto* clb = _clb.load(std::memory_order::acquire);
+    auto* clb = static_cast<callback_t*>(_clb.load(std::memory_order::acquire));
 
-    ASYNC_CORO_ASSERT(_clb != nullptr);
+    ASYNC_CORO_ASSERT(clb != nullptr);
 
     return clb->execute(std::forward<TArgs>(args)...);
   }

@@ -37,7 +37,7 @@ class task_handle final {
   using callback_sig = void(promise_result<R>&, bool);
 
  public:
-  using callback_ptr = callback_ptr<callback_sig>;
+  using callback_ptr = async_coro::callback_ptr<callback_sig>;
 
   task_handle() noexcept = default;
 
