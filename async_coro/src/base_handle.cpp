@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <thread>
+#include <utility>
 
 namespace async_coro {
 
@@ -82,11 +83,31 @@ bool base_handle::request_cancel() {
 
     set_is_inside_cancel(true);
 
-    if (!is_current_thread_same()) {
-      while (_run_data.load(std::memory_order::acquire) != nullptr) {
-        // wait for current run finish
+    internal::scheduled_run_data run_data{};
+    bool return_run_data = true;
+    auto current_thread = std::this_thread::get_id();
+
+    {
+      internal::scheduled_run_data* curren_data{nullptr};
+
+      while (!_run_data.compare_exchange_weak(curren_data, std::addressof(run_data), std::memory_order::acquire, std::memory_order::relaxed)) {
+        if (curren_data != nullptr && _execution_thread == current_thread) {
+          return_run_data = false;
+          break;  // its save to proceed
+        }
+        // wait other continue finish and lock run data
+        curren_data = nullptr;
       }
     }
+
+    auto old_thread = current_thread;
+    if (return_run_data) {
+      // change owner thread as callbacks may call continue on this thread
+      old_thread = std::exchange(_execution_thread, current_thread);
+    }
+
+    // unlock update loop for current thread
+    set_is_inside_cancel(false);
 
     if (_current_child != nullptr) {
       _current_child->request_cancel();
@@ -96,7 +117,16 @@ bool base_handle::request_cancel() {
 
     execute_continuation(true);
 
-    set_is_inside_cancel(false);
+    if (return_run_data) {
+      if (_execution_thread != current_thread) {
+        // continue from another thread happened
+      } else {
+        _execution_thread = old_thread;
+      }
+
+      ASYNC_CORO_ASSERT(run_data.coroutine_to_run_next == nullptr || run_data.coroutine_to_run_next->is_cancelled());
+      _run_data.store(nullptr, std::memory_order::release);
+    }
   }
 
   return was_requested;

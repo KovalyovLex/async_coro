@@ -44,10 +44,18 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
   while (handle_to_run != nullptr) {
     run_data.coroutine_to_run_next = nullptr;
 
+    if (handle_to_run->is_inside_cancel()) [[unlikely]] {
+      while (handle_to_run->is_inside_cancel()) {
+        // wait for cancel finish without mem sync
+      }
+
+      (void)handle_to_run->is_inside_cancel(std::memory_order::acquire);
+    }
+
     {
       internal::scheduled_run_data* curren_data{nullptr};
 
-      while (!handle_to_run->_run_data.compare_exchange_strong(curren_data, std::addressof(run_data), std::memory_order::acquire, std::memory_order::relaxed)) {
+      while (!handle_to_run->_run_data.compare_exchange_weak(curren_data, std::addressof(run_data), std::memory_order::acquire, std::memory_order::relaxed)) {
         if (curren_data != nullptr) {
           if (!current_thread) {
             current_thread = std::this_thread::get_id();
@@ -60,14 +68,6 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
           }
         }
         curren_data = nullptr;
-      }
-
-      if (handle_to_run->is_inside_cancel(std::memory_order::acquire)) [[unlikely]] {
-        while (handle_to_run->is_inside_cancel()) {
-          // wait for cancel finish without mem sync
-        }
-
-        (void)handle_to_run->is_inside_cancel(std::memory_order::acquire);
       }
     }
 
