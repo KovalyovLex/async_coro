@@ -34,6 +34,8 @@ enum class coroutine_state : std::uint8_t {
 };
 
 class scheduler;
+class executor_data;
+
 namespace internal {
 class scheduled_run_data;
 }
@@ -71,7 +73,6 @@ class base_handle {
   static constexpr uint8_t is_cancel_requested_mask = (1U << 4U);
   static constexpr uint8_t is_initialized_mask = (1U << 5U);
   static constexpr uint8_t is_result_mask = (1U << 6U);
-  static constexpr uint8_t is_inside_cancel_mask = (1U << 7U);
 
  public:
   using cancel_callback_ptr = callback_ptr<void()>;
@@ -152,8 +153,8 @@ class base_handle {
    * @note This method is useful for determining if immediate execution is safe
    * @note The result may change if the coroutine switches execution contexts
    */
-  [[nodiscard]] bool is_current_thread_same() const noexcept {
-    return _execution_thread == std::this_thread::get_id();
+  [[nodiscard]] bool is_execution_thread_same(std::thread::id thread_id) const noexcept {
+    return _execution_thread.load(std::memory_order::relaxed) == thread_id;
   }
 
   /**
@@ -254,7 +255,7 @@ class base_handle {
    *
    * @note Should be called from thread that fits execution_queue
    */
-  void continue_after_sleep();
+  void continue_after_sleep(std::thread::id current_thread = std::this_thread::get_id());
 
   /**
    * @brief Returns the current execution queue for this coroutine
@@ -362,14 +363,6 @@ class base_handle {
     update_value(is_initialized_mask | (is_result ? is_result_mask : 0U), get_inverted_mask(is_initialized_mask | is_result_mask));
   }
 
-  [[nodiscard]] bool is_inside_cancel(std::memory_order order = std::memory_order::relaxed) const noexcept {
-    return (_atomic_state.load(order) & is_inside_cancel_mask) != 0;
-  }
-
-  void set_is_inside_cancel(bool value) noexcept {
-    update_value((value ? is_inside_cancel_mask : 0U), get_inverted_mask(is_inside_cancel_mask), std::memory_order::relaxed, std::memory_order::release);
-  }
-
  private:
   static constexpr uint8_t get_inverted_mask(uint8_t mask) noexcept {
     return static_cast<uint8_t>(~mask);
@@ -390,6 +383,44 @@ class base_handle {
     parent._current_child = this->get_owning_ptr();
     set_embedded(true);
   }
+
+  class defer_leave {
+   public:
+    defer_leave(const defer_leave&) = delete;
+    defer_leave(defer_leave&&) = delete;
+    defer_leave& operator=(const defer_leave&) = delete;
+    defer_leave& operator=(defer_leave&&) = delete;
+
+    defer_leave(base_handle* handle, bool was_exclusive_enterred) noexcept
+        : _handle(was_exclusive_enterred ? handle : nullptr),
+          _was_exclusive_enterred(was_exclusive_enterred) {}
+
+    ~defer_leave() noexcept {
+      leave();
+    }
+
+    void leave() noexcept {
+      if (_handle == nullptr) {
+        return;
+      }
+      _handle->leave_update_loop();
+      _handle = nullptr;
+    }
+
+    [[nodiscard]] bool was_exclusive_enterred() const noexcept {
+      return _was_exclusive_enterred;
+    }
+
+   private:
+    base_handle* _handle;
+    bool _was_exclusive_enterred;
+  };
+
+  // returns true if loop was exclusively locked
+  defer_leave enter_update_loop(internal::scheduled_run_data& run_data, internal::scheduled_run_data*& current_data, std::thread::id current_thread) noexcept;
+
+  // leaves update loop
+  void leave_update_loop() noexcept;
 
   [[nodiscard]] coroutine_state get_coroutine_state(std::memory_order order = std::memory_order::relaxed) const noexcept {
     return static_cast<coroutine_state>(_atomic_state.load(order) & coroutine_state_mask);
@@ -424,7 +455,7 @@ class base_handle {
 
   uint8_t update_value(const uint8_t value, const uint8_t mask, std::memory_order read = std::memory_order::relaxed, std::memory_order write = std::memory_order::relaxed) noexcept {
     uint8_t expected = _atomic_state.load(read);
-    while (!_atomic_state.compare_exchange_strong(expected, (expected & mask) | value, write, read)) {  // NOLINT(*-signed-bitwise)
+    while (!_atomic_state.compare_exchange_weak(expected, (expected & mask) | value, write, read)) {  // NOLINT(*-signed-bitwise)
     }
     return expected;
   }
@@ -435,7 +466,7 @@ class base_handle {
     callback_base_ptr<false> start_function;  // we should store start function for all lifetime of the coroutine because it stores captured arguments
   };
 
-  std::atomic<internal::scheduled_run_data*> _run_data{nullptr};
+  std::atomic_uint32_t _num_owners{0};
   union {
     root_coro_state _root_state;
     base_handle* _parent;
@@ -446,10 +477,14 @@ class base_handle {
   cancel_callback_atomic_ptr _on_cancel = nullptr;
   // Currently awaiting child coroutine. Used for cancel notifications
   base_handle_ptr _current_child = nullptr;
-  std::thread::id _execution_thread;
   execution_queue_mark _execution_queue = execution_queues::any;
   std::atomic_uint8_t _atomic_state{0};
-  std::atomic_uint32_t _num_owners{0};
+  // They get changed synchronously with state so no false sharing
+  std::atomic<internal::scheduled_run_data*> _run_data{nullptr};
+  std::atomic<std::thread::id> _execution_thread;
+
+  static_assert(decltype(_execution_thread)::is_always_lock_free, "Wrong platform/compiler?");
+  static_assert(decltype(_run_data)::is_always_lock_free, "Wrong platform/compiler?");
 };
 
 }  // namespace async_coro

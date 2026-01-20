@@ -3,6 +3,7 @@
 #include <async_coro/base_handle.h>
 #include <async_coro/config.h>
 #include <async_coro/execution_queue_mark.h>
+#include <async_coro/executor_data.h>
 #include <async_coro/i_execution_system.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/thread_safety/analysis.h>
@@ -81,8 +82,8 @@ struct await_sleep {
     auto& execution_system = _promise->get_scheduler().get_execution_system();
 
     _t_id.store(execution_system.plan_execution_after(
-                    [ptr = std::move(ptr)] {
-                      ptr->continue_after_sleep();
+                    [ptr = std::move(ptr)](const executor_data& data) {
+                      ptr->continue_after_sleep(data.get_owning_thread());
                     },
                     _execution_queue, _time),
                 std::memory_order::release);

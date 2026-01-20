@@ -4,15 +4,24 @@
 #include <async_coro/utils/unique_function.h>
 
 #include <chrono>
+#include <cstddef>
 #include <memory>
+#include <thread>
 
 namespace async_coro {
 
+/**
+ * @brief Abstract task identifier to use in i_execution_system::plan_execution_after
+ *
+ * Used for identification of scheduled task and later cancelling of execution
+ */
 struct delayed_task_id {
   size_t task_id{};
 
   auto operator<=>(const delayed_task_id &) const noexcept = default;
 };
+
+class executor_data;
 
 /**
  * @brief Abstract interface for execution systems
@@ -48,7 +57,7 @@ class i_execution_system {
    * Task functions should be callable objects (functions, lambdas, function objects)
    * that take no parameters and return void.
    */
-  using task_function = unique_function<void(), sizeof(void *) * 3>;
+  using task_function = unique_function<void(const executor_data &), sizeof(void *) * 3>;
 
   /**
    * @brief Type alias for unique pointer to execution system interface
@@ -135,7 +144,7 @@ class i_execution_system {
    * @note This method provides better performance than plan_execution() when immediate
    *       execution is possible
    */
-  virtual void execute_or_plan_execution(task_function func, execution_queue_mark execution_queue) = 0;
+  virtual void execute_or_plan_execution(task_function func, execution_queue_mark execution_queue, const executor_data &curent_data) = 0;
 
   /**
    * @brief Checks if the current thread can execute tasks from the specified queue
@@ -156,7 +165,14 @@ class i_execution_system {
    * @note This method is useful for optimizing task execution by avoiding
    *       unnecessary queuing when immediate execution is possible
    */
-  [[nodiscard]] virtual bool is_current_thread_fits(execution_queue_mark execution_queue) const noexcept = 0;
+  [[nodiscard]] virtual bool is_thread_fits(execution_queue_mark execution_queue, std::thread::id thread_id) const noexcept = 0;
 };
 
 }  // namespace async_coro
+
+template <>
+struct std::hash<async_coro::delayed_task_id> {
+  std::size_t operator()(const async_coro::delayed_task_id &tid) const noexcept {
+    return std::hash<decltype(tid.task_id)>{}(tid.task_id);
+  }
+};

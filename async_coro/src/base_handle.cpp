@@ -1,5 +1,6 @@
 #include <async_coro/base_handle.h>
 #include <async_coro/config.h>
+#include <async_coro/executor_data.h>
 #include <async_coro/internal/base_handle_ptr.h>
 #include <async_coro/internal/scheduled_run_data.h>
 #include <async_coro/scheduler.h>
@@ -71,6 +72,38 @@ base_handle_ptr base_handle::get_owning_ptr() {
   return base_handle_ptr{this};
 }
 
+base_handle::defer_leave base_handle::enter_update_loop(internal::scheduled_run_data& run_data, internal::scheduled_run_data*& current_data, std::thread::id current_thread) noexcept {
+  if (is_execution_thread_same(current_thread)) {
+    current_data = _run_data.load(std::memory_order::relaxed);
+    if (current_data != nullptr && is_execution_thread_same(current_thread)) {
+      // we are in update loop. Its save to continue execution
+      current_data = _run_data.load(std::memory_order::relaxed);
+      ASYNC_CORO_ASSERT(current_data != nullptr);
+      return {this, false};
+    }
+  }
+
+  // enter crit section exclusively
+
+  current_data = nullptr;
+  while (!_run_data.compare_exchange_weak(current_data, std::addressof(run_data), std::memory_order::relaxed)) {
+    // wait while we set _run_data exclusively
+    current_data = nullptr;
+  }
+  current_data = std::addressof(run_data);
+
+  if (!is_execution_thread_same(current_thread)) {
+    _execution_thread.store(current_thread, std::memory_order::relaxed);
+    current_data = _run_data.load(std::memory_order::acquire);  // to sync data with another thread
+  }
+
+  return {this, true};
+}
+
+void base_handle::leave_update_loop() noexcept {
+  _run_data.store(nullptr, std::memory_order::release);
+}
+
 bool base_handle::request_cancel() {
   if (is_cancelled()) {
     // was cancelled already
@@ -78,36 +111,14 @@ bool base_handle::request_cancel() {
   }
 
   const auto [was_requested, state] = set_cancel_requested();
-  if (!was_requested && (state == coroutine_state::suspended || state == coroutine_state::waiting_switch)) {
+  if (!was_requested && (state != coroutine_state::finished && state != coroutine_state::created)) {
     // this is first cancel - notify continuation if coroutine was not running
 
-    set_is_inside_cancel(true);
-
     internal::scheduled_run_data run_data{};
-    bool return_run_data = true;
+    internal::scheduled_run_data* current_data = nullptr;
     auto current_thread = std::this_thread::get_id();
 
-    {
-      internal::scheduled_run_data* curren_data{nullptr};
-
-      while (!_run_data.compare_exchange_weak(curren_data, std::addressof(run_data), std::memory_order::acquire, std::memory_order::relaxed)) {
-        if (curren_data != nullptr && _execution_thread == current_thread) {
-          return_run_data = false;
-          break;  // its save to proceed
-        }
-        // wait other continue finish and lock run data
-        curren_data = nullptr;
-      }
-    }
-
-    auto old_thread = current_thread;
-    if (return_run_data) {
-      // change owner thread as callbacks may call continue on this thread
-      old_thread = std::exchange(_execution_thread, current_thread);
-    }
-
-    // unlock update loop for current thread
-    set_is_inside_cancel(false);
+    auto leave = enter_update_loop(run_data, current_data, current_thread);
 
     if (_current_child != nullptr) {
       _current_child->request_cancel();
@@ -117,29 +128,19 @@ bool base_handle::request_cancel() {
 
     execute_continuation(true);
 
-    if (return_run_data) {
-      if (_execution_thread != current_thread) {
-        // continue from another thread happened
-      } else {
-        _execution_thread = old_thread;
-      }
-
-      ASYNC_CORO_ASSERT(run_data.coroutine_to_run_next == nullptr || run_data.coroutine_to_run_next->is_cancelled());
-      _run_data.store(nullptr, std::memory_order::release);
-    }
+    ASYNC_CORO_ASSERT(run_data.coroutine_to_run_next == nullptr || run_data.coroutine_to_run_next->is_cancelled());
   }
 
   return was_requested;
 }
 
-void base_handle::continue_after_sleep() {
+void base_handle::continue_after_sleep(std::thread::id current_thread) {
   // reset our cancel
   _on_cancel = cancel_callback_ptr{nullptr};
 
-  ASYNC_CORO_ASSERT(is_cancelled() || get_scheduler().get_execution_system().is_current_thread_fits(_execution_queue));
+  ASYNC_CORO_ASSERT(is_cancelled() || get_scheduler().get_execution_system().is_thread_fits(_execution_queue, current_thread));
 
-  _execution_thread = std::this_thread::get_id();
-  get_scheduler().continue_execution(*this, passkey{this});
+  get_scheduler().continue_execution(*this, current_thread, passkey{this});
 }
 
 }  // namespace async_coro

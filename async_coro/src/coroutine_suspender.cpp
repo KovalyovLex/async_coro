@@ -6,6 +6,7 @@
 #include <async_coro/utils/passkey.h>
 
 #include <atomic>
+#include <thread>
 
 namespace async_coro::internal {
 
@@ -65,7 +66,7 @@ void coroutine_suspender::dec_num_suspends() {
       return;
     }
 
-    handle->get_scheduler().continue_execution(*handle, passkey{this});
+    handle->get_scheduler().continue_execution(*handle, std::this_thread::get_id(), passkey{this});
   }
 }
 
