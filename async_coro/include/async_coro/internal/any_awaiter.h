@@ -112,7 +112,7 @@ class any_awaiter : public advanced_awaiter<any_awaiter<TAwaiters...>> {
     ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
     _continue_f = std::move(continue_f);
-    _num_await_free.store(0, std::memory_order::release);  // using ac_rel for _continue syncronization
+    _num_await_free.store(1, std::memory_order::release);  // using ac_rel for _continue syncronization
 
     const auto iter_awaiters = [&]<std::size_t... TI>(std::index_sequence<TI...>) {
       const auto set_continue = [&](auto& awaiter, auto& callback) {
@@ -126,11 +126,14 @@ class any_awaiter : public advanced_awaiter<any_awaiter<TAwaiters...>> {
     };
 
     iter_awaiters(std::index_sequence_for<TAwaiters...>{});
+
+    // decrease 1 that we set above
+    on_continuation_freed();
   }
 
   continue_callback::return_type on_continue(bool cancelled, std::size_t awaiter_index) {
     std::uint32_t expected_index = 0;
-    if (_result_index.compare_exchange_strong(expected_index, std::uint32_t(awaiter_index + 1), std::memory_order::relaxed)) {
+    if (!cancelled && _result_index.compare_exchange_strong(expected_index, std::uint32_t(awaiter_index + 1), std::memory_order::relaxed)) {
       // cancel other coroutines
       call_functor_while_true(
           [&](auto& awaiter_to_cancel, auto, std::size_t index) {
@@ -141,12 +144,7 @@ class any_awaiter : public advanced_awaiter<any_awaiter<TAwaiters...>> {
           },
           std::index_sequence_for<TAwaiters...>{});
 
-      // continue execution
-      continue_callback_holder continuation{std::move(_continue_f)};
-      ASYNC_CORO_ASSERT(continuation);
-
-      on_continuation_freed();
-      return {std::move(continuation), cancelled};
+      // we cant call _continue_f here as all callbacks should be finished to guarantee lifetime of coroutine
     }
 
     on_continuation_freed();
@@ -157,8 +155,13 @@ class any_awaiter : public advanced_awaiter<any_awaiter<TAwaiters...>> {
     if (_num_await_free.fetch_sub(1, std::memory_order::relaxed) == 1) {
       (void)_num_await_free.load(std::memory_order::acquire);  // to sync _continue_f
 
-      // destroy continuation if any
       continue_callback_holder continuation{std::move(_continue_f)};
+      ASYNC_CORO_ASSERT(continuation);
+
+      auto cancelled = _result_index.load(std::memory_order::relaxed) == 0;
+      while (continuation) {
+        std::tie(continuation, cancelled) = continuation.execute_and_destroy(cancelled);
+      }
     }
   }
 
