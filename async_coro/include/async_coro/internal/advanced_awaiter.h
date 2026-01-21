@@ -6,30 +6,6 @@
 #include <async_coro/internal/await_suspension_wrapper.h>
 #include <async_coro/internal/type_traits.h>
 
-namespace async_coro {
-
-template <internal::advanced_awaitable TAwaiter1, internal::advanced_awaitable TAwaiter2>
-  requires(std::is_rvalue_reference_v<TAwaiter1 &&> && std::is_rvalue_reference_v<TAwaiter2 &&>)
-inline auto operator&&(TAwaiter1&& left, TAwaiter2&& right) noexcept {
-  if constexpr (internal::is_all_awaiter_v<TAwaiter1>) {
-    return std::forward<TAwaiter1>(left).append_awaiter(std::forward<TAwaiter2>(right));
-  } else {
-    return internal::all_awaiter<TAwaiter1>{std::forward<TAwaiter1>(left)}.append_awaiter(std::forward<TAwaiter2>(right));
-  }
-}
-
-template <internal::advanced_awaitable TAwaiter1, internal::advanced_awaitable TAwaiter2>
-  requires(std::is_rvalue_reference_v<TAwaiter1 &&> && std::is_rvalue_reference_v<TAwaiter2 &&>)
-inline auto operator||(TAwaiter1&& left, TAwaiter2&& right) noexcept {
-  if constexpr (internal::is_any_awaiter_v<TAwaiter1>) {
-    return std::forward<TAwaiter1>(left).append_awaiter(std::forward<TAwaiter2>(right));
-  } else {
-    return internal::any_awaiter<TAwaiter1>{std::forward<TAwaiter1>(left)}.append_awaiter(std::forward<TAwaiter2>(right));
-  }
-}
-
-}  // namespace async_coro
-
 namespace async_coro::internal {
 
 template <class T>

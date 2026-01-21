@@ -47,7 +47,7 @@ class advanced_awaiter {
 
   template <internal::can_be_awaited TAwaiter>
   auto operator||(TAwaiter&& right) && noexcept {
-    return std::move(*this) && adv_await_transform(std::forward<TAwaiter>(right));
+    return std::move(*this) || adv_await_transform(std::forward<TAwaiter>(right));
   }
 
   auto coro_await_transform(base_handle& handle) && noexcept(std::is_nothrow_constructible_v<T, T&&>);
@@ -55,52 +55,4 @@ class advanced_awaiter {
 
 }  // namespace async_coro::internal
 
-namespace async_coro {
-
-// operator&& defines
-
-template <internal::advanced_awaitable TAwaiter1, internal::advanced_awaitable TAwaiter2>
-  requires(std::is_rvalue_reference_v<TAwaiter1 &&> && std::is_rvalue_reference_v<TAwaiter2 &&>)
-auto operator&&(TAwaiter1&& left, TAwaiter2&& right) noexcept;
-
-template <internal::can_be_awaited TAwaiter1, internal::advanced_awaitable TAwaiter2>
-  requires(std::is_rvalue_reference_v<TAwaiter2 &&>)
-auto operator&&(TAwaiter1&& left, TAwaiter2&& right) noexcept {
-  return adv_await_transform(std::forward<TAwaiter1>(left)) && std::forward<TAwaiter2>(right);
-}
-
-template <internal::can_be_awaited TAwaiter1, internal::can_be_awaited TAwaiter2>
-auto operator&&(TAwaiter1&& left, TAwaiter2&& right) noexcept {
-  return adv_await_transform(std::forward<TAwaiter1>(left)) && adv_await_transform(std::forward<TAwaiter2>(right));
-}
-
-template <internal::advanced_awaitable TAwaiter1, internal::can_be_awaited TAwaiter2>
-  requires(std::is_rvalue_reference_v<TAwaiter2 &&>)
-auto operator&&(TAwaiter1&& left, TAwaiter2&& right) noexcept {
-  return std::forward<TAwaiter1>(left) && adv_await_transform(std::forward<TAwaiter2>(right));
-}
-
-// operator|| defines
-
-template <internal::advanced_awaitable TAwaiter1, internal::advanced_awaitable TAwaiter2>
-  requires(std::is_rvalue_reference_v<TAwaiter1 &&> && std::is_rvalue_reference_v<TAwaiter2 &&>)
-auto operator||(TAwaiter1&& left, TAwaiter2&& right) noexcept;
-
-template <internal::can_be_awaited TAwaiter1, internal::advanced_awaitable TAwaiter2>
-  requires(std::is_rvalue_reference_v<TAwaiter2 &&>)
-auto operator||(TAwaiter1&& left, TAwaiter2&& right) noexcept {
-  return adv_await_transform(std::forward<TAwaiter1>(left)) || std::forward<TAwaiter2>(right);
-}
-
-template <internal::can_be_awaited TAwaiter1, internal::can_be_awaited TAwaiter2>
-auto operator||(TAwaiter1&& left, TAwaiter2&& right) noexcept {
-  return adv_await_transform(std::forward<TAwaiter1>(left)) || adv_await_transform(std::forward<TAwaiter2>(right));
-}
-
-template <internal::advanced_awaitable TAwaiter1, internal::can_be_awaited TAwaiter2>
-  requires(std::is_rvalue_reference_v<TAwaiter2 &&>)
-auto operator||(TAwaiter1&& left, TAwaiter2&& right) noexcept {
-  return std::forward<TAwaiter1>(left) || adv_await_transform(std::forward<TAwaiter2>(right));
-}
-
-}  // namespace async_coro
+// We should not define operator|| and operator&& as free functions because this will have undefined execution order on different platforms

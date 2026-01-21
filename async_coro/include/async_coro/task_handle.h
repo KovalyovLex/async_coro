@@ -2,6 +2,7 @@
 
 #include <async_coro/base_handle.h>
 #include <async_coro/config.h>
+#include <async_coro/internal/advanced_awaiter_fwd.h>
 #include <async_coro/internal/handle_awaiter.h>
 #include <async_coro/internal/promise_type.h>
 #include <async_coro/utils/callback_ptr.h>
@@ -183,6 +184,18 @@ class task_handle final {
 
   auto coro_await_transform(base_handle& handle) && {
     return internal::handle_awaiter<R>{std::move(*this)}.coro_await_transform(handle);
+  }
+
+  template <class TAwaiter>
+    requires(std::is_rvalue_reference_v<TAwaiter &&> && (internal::advanced_awaitable<TAwaiter> || internal::can_be_awaited<TAwaiter>))
+  auto operator||(TAwaiter&& right) && noexcept {
+    return internal::handle_awaiter<R>{std::move(*this)} || std::forward<TAwaiter>(right);
+  }
+
+  template <class TAwaiter>
+    requires(std::is_rvalue_reference_v<TAwaiter &&> && (internal::advanced_awaitable<TAwaiter> || internal::can_be_awaited<TAwaiter>))
+  auto operator&&(TAwaiter&& right) && noexcept {
+    return internal::handle_awaiter<R>{std::move(*this)} && std::forward<TAwaiter>(right);
   }
 
  private:
