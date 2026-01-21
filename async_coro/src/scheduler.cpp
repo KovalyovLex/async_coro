@@ -27,6 +27,10 @@ scheduler::~scheduler() {
   auto coros = std::move(_managed_coroutines);
   _is_destroying = true;
   lock.unlock();
+
+  for (auto& coro : coros) {
+    coro->request_cancel();
+  }
   _execution_system = nullptr;
   coros.clear();
 }
