@@ -926,7 +926,7 @@ TEST(task, when_any) {
   };
 
   auto routine3 = [&]() -> async_coro::task<double> {
-    std::this_thread::sleep_for(std::chrono::milliseconds{10});
+    std::this_thread::sleep_for(std::chrono::milliseconds{5});
 
     co_return 5.72;
   };
