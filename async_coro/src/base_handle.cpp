@@ -111,7 +111,7 @@ bool base_handle::request_cancel() {
   }
 
   const auto [was_requested, state] = set_cancel_requested();
-  if (!was_requested && (state != coroutine_state::finished && state != coroutine_state::created)) {
+  if (!was_requested && (state == coroutine_state::suspended || state == coroutine_state::waiting_switch)) {
     // this is first cancel - notify continuation if coroutine was not running
 
     internal::scheduled_run_data run_data{};
