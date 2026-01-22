@@ -1,6 +1,7 @@
 #pragma once
 
 #include <async_coro/base_handle.h>
+#include <async_coro/execution_queue_mark.h>
 #include <async_coro/scheduler.h>
 
 #include <concepts>
@@ -26,10 +27,11 @@ struct await_switch {
     ASYNC_CORO_ASSERT(_need_switch);
 
     base_handle& promise = handle.promise();
+    _queue_before = promise.get_execution_queue();
     promise.switch_execution_queue(_execution_queue);
   }
 
-  void await_resume() const noexcept {}
+  auto await_resume() const noexcept { return _queue_before; }  // NOLINT(*nodiscard*)
 
   await_switch& coro_await_transform(base_handle& parent) noexcept {
     _need_switch = parent.get_execution_queue() != _execution_queue;
@@ -38,6 +40,7 @@ struct await_switch {
 
  private:
   execution_queue_mark _execution_queue;
+  execution_queue_mark _queue_before = execution_queues::any;
   bool _need_switch = true;
 };
 

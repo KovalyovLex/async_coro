@@ -142,6 +142,59 @@ TEST(cancel_task, when_all_parent_cancelled) {
   EXPECT_TRUE(handle.is_cancelled());
 }
 
+TEST(cancel_task, when_any_children_cancelled) {
+  std::binary_semaphore sema{0};
+
+  auto child1 = [&sema]() -> async_coro::task<int> {
+    auto q_before = co_await async_coro::switch_to_queue(async_coro::execution_queues::worker);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    sema.release();
+
+    co_await async_coro::switch_to_queue(q_before);
+
+    // request cancel of parent
+    co_await async_coro::cancel();
+    co_return 5;
+  };
+
+  auto child2 = []() -> async_coro::task<int> {
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+
+    co_await async_coro::cancel();
+
+    // should not reach here
+    ADD_FAILURE();
+
+    co_return 7;
+  };
+
+  auto parent = [&]() -> async_coro::task<int> {
+    // both children awaited with when_all - cancellation in one should cancel the whole group
+    co_await (co_await async_coro::start_task(child1()) || co_await async_coro::start_task(child2()));
+
+    // should not reach here
+    ADD_FAILURE();
+
+    co_return 0;
+  };
+
+  async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
+      async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
+
+  auto handle = scheduler.start_task(parent());
+  EXPECT_FALSE(handle.done());
+  EXPECT_FALSE(handle.is_cancelled());
+
+  sema.acquire();
+
+  // process cancellations
+  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
+
+  EXPECT_FALSE(handle.done());
+  EXPECT_TRUE(handle.is_cancelled());
+}
+
 TEST(cancel_task, cross_queue_cancel) {
   std::atomic_bool worker_done = false;
 
@@ -188,7 +241,9 @@ TEST(cancel_task, cross_queue_cancel) {
   scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
   EXPECT_FALSE(handle.done());
-  EXPECT_TRUE(handle.is_cancelled());
+
+  // parent coroutine with any await can be cancelled when all children were cancelled or coroutine itself were cancelled
+  EXPECT_FALSE(handle.is_cancelled());
 }
 
 TEST(cancel_task, root_request_cancel_with_embedded_children) {

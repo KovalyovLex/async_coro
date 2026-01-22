@@ -1,6 +1,7 @@
 #pragma once
 
 #include <async_coro/atomic_queue.h>
+#include <async_coro/executor_data.h>
 #include <async_coro/i_execution_system.h>
 #include <async_coro/internal/hardware_interference_size.h>
 #include <async_coro/thread_notifier.h>
@@ -150,7 +151,7 @@ class execution_system : public i_execution_system {
    * @note This method provides better performance for tasks that can be executed immediately
    * @note Thread safety: This method is thread-safe and can be called from any thread
    */
-  void execute_or_plan_execution(task_function func, execution_queue_mark execution_queue) override;
+  void execute_or_plan_execution(task_function func, execution_queue_mark execution_queue, const executor_data &curent_data) override;
 
   /**
    * @brief Schedules a task to be executed at or after the given steady_clock time
@@ -184,7 +185,7 @@ class execution_system : public i_execution_system {
    *
    * @note This method is useful for determining if immediate execution is possible
    */
-  [[nodiscard]] bool is_current_thread_fits(execution_queue_mark execution_queue) const noexcept override;
+  [[nodiscard]] bool is_thread_fits(execution_queue_mark execution_queue, std::thread::id thread_id) const noexcept override;
 
   /**
    * @brief Processes one task from the main thread's execution queues
@@ -220,6 +221,11 @@ class execution_system : public i_execution_system {
    * @note This includes both worker threads and the main thread if it has appropriate permissions
    */
   [[nodiscard]] std::uint32_t get_num_workers_for_queue(execution_queue_mark execution_queue) const noexcept;
+
+  /**
+   * @brief Returns executor_data used in main update loop
+   */
+  executor_data &get_main_thread_executor_data() noexcept { return _main_thread_data; }
 
  private:
   struct worker_thread_data;
@@ -286,6 +292,9 @@ class execution_system : public i_execution_system {
     // The actual thread object
     std::thread thread;
 
+    // Executor data for this worker
+    executor_data data;
+
     // Pointers to task queues this worker can process
     std::vector<tasks *> task_queues;
 
@@ -323,8 +332,8 @@ class execution_system : public i_execution_system {
   // NOLINTNEXTLINE(*-avoid-c-arrays)
   std::unique_ptr<worker_thread_data[]> _thread_data;
 
-  // ID of the main thread for identification purposes
-  std::thread::id _main_thread_id;
+  // Executor data for this worker
+  executor_data _main_thread_data;
 
   // Bit mask defining which execution queues the main thread can process
   const execution_thread_mask _main_thread_mask;

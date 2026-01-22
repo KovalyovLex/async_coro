@@ -3,11 +3,13 @@
 #include <async_coro/base_handle.h>
 #include <async_coro/config.h>
 #include <async_coro/execution_queue_mark.h>
+#include <async_coro/executor_data.h>
 #include <async_coro/i_execution_system.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/thread_safety/analysis.h>
 #include <async_coro/thread_safety/light_mutex.h>
 #include <async_coro/thread_safety/unique_lock.h>
+#include <async_coro/utils/callback_on_stack.h>
 
 #include <atomic>
 #include <concepts>
@@ -48,21 +50,17 @@ namespace async_coro::internal {
  */
 struct await_sleep {
   explicit await_sleep(std::chrono::steady_clock::duration sleep_duration) noexcept
-      : _on_cancel(this),
-        _time(std::chrono::steady_clock::now() + sleep_duration),
+      : _time(std::chrono::steady_clock::now() + sleep_duration),
         _use_parent_q(true) {}
   await_sleep(std::chrono::steady_clock::duration sleep_duration, execution_queue_mark execution_q) noexcept
-      : _on_cancel(this),
-        _time(std::chrono::steady_clock::now() + sleep_duration),
+      : _time(std::chrono::steady_clock::now() + sleep_duration),
         _execution_queue(execution_q),
         _use_parent_q(false) {}
 
   await_sleep(const await_sleep&) = delete;
   await_sleep(await_sleep&&) = delete;
 
-  ~await_sleep() noexcept {
-    reset_callback();
-  }
+  ~await_sleep() noexcept = default;
 
   await_sleep& operator=(await_sleep&&) = delete;
   await_sleep& operator=(const await_sleep&) = delete;
@@ -74,25 +72,25 @@ struct await_sleep {
   void await_suspend(std::coroutine_handle<U> handle) {
     _promise = std::addressof(handle.promise());
 
-    // Register cancellation callback with the promise so that if the parent
-    // cancels the operation the timer can be cancelled as well.
-    _promise->plan_sleep_on_queue(_execution_queue, _on_cancel);
+    // self destroy protection
+    auto ptr = _promise->get_owning_ptr();
+
+    // Register cancellation callback with promise so that if parent
+    // cancels operation the timer action will be cancelled inmediatell.
+    _promise->plan_sleep_on_queue(_execution_queue, base_handle::cancel_callback_ptr{&_on_cancel});
 
     auto& execution_system = _promise->get_scheduler().get_execution_system();
 
-    // Schedule delayed execution in the execution system and keep the
-    // returned delayed task id so we can cancel it if needed.
-    async_coro::unique_lock lock{_callback_mutex};
-    auto clb = execution_callback{this};
-    _t_id = {};
-    lock.unlock();  // any move constructors of execution_callback should be called without lock
+    _t_id.store(execution_system.plan_execution_after(
+                    [ptr = std::move(ptr)](const executor_data& data) {
+                      ptr->continue_after_sleep(data.get_owning_thread());
+                    },
+                    _execution_queue, _time),
+                std::memory_order::release);
 
-    const auto t_id = execution_system.plan_execution_after(
-        std::move(clb),
-        _execution_queue, _time);
-
-    lock.lock();
-    _t_id = t_id;
+    if (_was_cancelled.load(std::memory_order::acquire)) {
+      cancel_timer();
+    }
   }
 
   void await_resume() const noexcept {}
@@ -106,145 +104,42 @@ struct await_sleep {
   }
 
  private:
-  void reset_callback() CORO_THREAD_EXCLUDES(_callback_mutex) {
-    _is_dying.store(true, std::memory_order::release);
+  void cancel_timer() noexcept {
+    const auto tid = _t_id.exchange(delayed_task_id{}, std::memory_order::acquire);
+    if (tid != delayed_task_id{}) {
+      auto& execution_sys = _promise->get_scheduler().get_execution_system();
 
-    async_coro::unique_lock lock_callback{_callback_mutex};
-
-    if (_callback != nullptr) {
-      async_coro::unique_lock lock{_callback->await_mutex};
-      _callback->awaiter = nullptr;
-      _callback = nullptr;
+      if (execution_sys.cancel_execution(tid)) {
+        // continue execution to run cancel logic
+        _promise->continue_after_sleep();
+      }
+      // else continue will be called later by system
     }
   }
 
-  void reset_callback_no_lock() CORO_THREAD_REQUIRES(_callback_mutex) {
-    _is_dying.store(true, std::memory_order::release);
+ private:
+  class cancel_callback : public callback_on_stack<cancel_callback, base_handle::cancel_callback> {
+   public:
+    void on_execute_and_destroy() {
+      auto& awaiter = this->get_owner(&await_sleep::_on_cancel);
 
-    if (_callback != nullptr) {
-      async_coro::unique_lock lock{_callback->await_mutex};
-      _callback->awaiter = nullptr;
-      _callback = nullptr;
+      // turn on flag first, as await_suspend will read it after seting _t_id
+      awaiter._was_cancelled.store(true, std::memory_order::release);
+
+      awaiter.cancel_timer();
     }
-  }
-
-  struct CORO_THREAD_SCOPED_CAPABILITY callback_lock : async_coro::unique_lock<light_mutex> {
-    using super = async_coro::unique_lock<light_mutex>;
-
-    explicit callback_lock(await_sleep& await) noexcept CORO_THREAD_EXCLUDES(await._callback_mutex)
-        : super(await._callback_mutex, std::defer_lock) {}
-
-    bool try_lock_mutex(await_sleep& await) CORO_THREAD_TRY_ACQUIRE(true) {
-      ASYNC_CORO_ASSERT(!this->owns_lock());
-
-      while (!await._is_dying.load(std::memory_order::relaxed)) {
-        if (this->try_lock()) {
-          return true;
-        }
-      }
-
-      return false;
-    }
-  };
-
-  struct execution_callback {
-    explicit execution_callback(await_sleep* awt) noexcept CORO_THREAD_REQUIRES(awt->_callback_mutex)
-        : awaiter(awt) {
-      ASYNC_CORO_ASSERT(awt->_callback == nullptr);
-
-      awt->_callback = this;
-    }
-    execution_callback(const execution_callback&) = delete;
-    execution_callback(execution_callback&& other) noexcept CORO_THREAD_EXCLUDES(other.await_mutex, other.awaiter->_callback_mutex) {
-      async_coro::unique_lock lock{other.await_mutex};
-
-      awaiter = std::exchange(other.awaiter, nullptr);
-      if (awaiter != nullptr) {
-        callback_lock lock_callback{*awaiter};
-        if (lock_callback.try_lock_mutex(*awaiter)) {
-          awaiter->_callback = this;
-        } else {
-          awaiter = nullptr;
-        }
-      }
-    }
-    ~execution_callback() noexcept CORO_THREAD_EXCLUDES(await_mutex, awaiter->_callback_mutex) {
-      async_coro::unique_lock lock{await_mutex};
-
-      if (awaiter != nullptr) {
-        callback_lock lock_callback{*awaiter};
-        if (lock_callback.try_lock_mutex(*awaiter)) {
-          awaiter->_callback = nullptr;
-        }
-      }
-    }
-    execution_callback& operator=(const execution_callback&) = delete;
-    execution_callback& operator=(execution_callback&& other) = delete;
-
-    void operator()() const CORO_THREAD_EXCLUDES(await_mutex, awaiter->_callback_mutex) {
-      async_coro::unique_lock lock{await_mutex};
-
-      if (awaiter == nullptr) {
-        return;
-      }
-
-      callback_lock lock_callback{*awaiter};
-      if (lock_callback.try_lock_mutex(*awaiter)) {
-        awaiter->_callback = nullptr;
-        awaiter->_t_id = {};
-      } else {
-        awaiter = nullptr;
-        return;
-      }
-
-      if (!awaiter->_was_done.exchange(true, std::memory_order::relaxed)) {
-        auto* promise = awaiter->_promise;
-        awaiter = nullptr;
-        lock_callback.unlock();
-        lock.unlock();
-
-        // resume
-        promise->continue_after_sleep();
-        return;
-      }
-
-      awaiter = nullptr;
-    }
-
-    mutable await_sleep* awaiter CORO_THREAD_GUARDED_BY(await_mutex);
-    mutable light_mutex await_mutex;
-  };
-
-  struct on_cancel_callback {
-    void operator()() const CORO_THREAD_EXCLUDES(clb->_callback_mutex) {
-      if (!clb->_was_done.exchange(true, std::memory_order::relaxed)) {
-        async_coro::unique_lock lock{clb->_callback_mutex};
-
-        clb->reset_callback_no_lock();
-
-        auto& execution_sys = clb->_promise->get_scheduler().get_execution_system();
-        execution_sys.cancel_execution(clb->_t_id);
-        lock.unlock();
-
-        // continue execution
-        clb->_promise->continue_after_sleep();
-      }
-    }
-
-    await_sleep* clb;
   };
 
  private:
-  light_mutex _callback_mutex;
-  execution_callback* _callback CORO_THREAD_GUARDED_BY(_callback_mutex) = {nullptr};
   base_handle* _promise = nullptr;
-  callback_on_stack<on_cancel_callback, void()> _on_cancel;
+  cancel_callback _on_cancel;
   std::chrono::steady_clock::time_point _time;
-  delayed_task_id _t_id CORO_THREAD_GUARDED_BY(_callback_mutex) = {};
+  std::atomic<delayed_task_id> _t_id;
+  std::atomic_bool _was_cancelled{false};
   execution_queue_mark _execution_queue = async_coro::execution_queues::any;
   bool _use_parent_q;
-  std::atomic_bool _was_done{false};
-  std::atomic_bool _is_dying{false};
 };
+
+static_assert(std::atomic<delayed_task_id>::is_always_lock_free);
 
 }  // namespace async_coro::internal
