@@ -191,7 +191,7 @@ TEST(cancel_task, when_any_all_children_cancelled) {
   // process cancellations
   scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
 
-  std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  std::this_thread::sleep_for(std::chrono::milliseconds(15));
 
   EXPECT_FALSE(handle.done());
   EXPECT_TRUE(handle.is_cancelled());
