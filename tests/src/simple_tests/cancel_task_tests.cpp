@@ -142,7 +142,7 @@ TEST(cancel_task, when_all_parent_cancelled) {
   EXPECT_TRUE(handle.is_cancelled());
 }
 
-TEST(cancel_task, when_any_children_cancelled) {
+TEST(cancel_task, when_any_all_children_cancelled) {
   std::binary_semaphore sema{0};
 
   auto child1 = [&sema]() -> async_coro::task<int> {
@@ -190,6 +190,8 @@ TEST(cancel_task, when_any_children_cancelled) {
 
   // process cancellations
   scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(2));
 
   EXPECT_FALSE(handle.done());
   EXPECT_TRUE(handle.is_cancelled());
