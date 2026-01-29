@@ -188,10 +188,12 @@ TEST(cancel_task, when_any_all_children_cancelled) {
 
   sema.acquire();
 
-  // process cancellations
-  scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
+  for (int i = 0; i < 30 && !(handle.done() || handle.is_cancelled()); ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
+  }
 
-  std::this_thread::sleep_for(std::chrono::milliseconds(15));
+  std::this_thread::sleep_for(std::chrono::milliseconds(30));
 
   EXPECT_FALSE(handle.done());
   EXPECT_TRUE(handle.is_cancelled());

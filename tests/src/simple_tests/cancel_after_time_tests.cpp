@@ -34,7 +34,7 @@ TEST(cancel_after_time, when_any_triggers_cancel_on_main) {
 
   auto handle = scheduler.start_task(parent());
 
-  for (int i = 0; i < 2000 && !(handle.done() || handle.is_cancelled()); ++i) {
+  for (int i = 0; i < 100 && !(handle.done() || handle.is_cancelled()); ++i) {
     std::this_thread::sleep_for(1ms);
     scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
   }
@@ -51,10 +51,17 @@ TEST(cancel_after_time, timer_scheduled_on_worker_queue) {
 
   auto long_on_worker = []() -> async_coro::task<int> {
     auto prev_q = co_await async_coro::switch_to_queue(async_coro::execution_queues::worker);
-    // make sure this task blocks for longer than the timer
-    std::this_thread::sleep_for(50ms);
+
+    for (int i = 0; i < 5; i++) {
+      // make sure this task blocks for longer than the timer
+      std::this_thread::sleep_for(10ms);
+
+      co_await async_coro::switch_to_queue(prev_q);
+      co_await async_coro::switch_to_queue(async_coro::execution_queues::worker);
+    }
 
     co_await async_coro::switch_to_queue(prev_q);
+
     // should not reach here
     ADD_FAILURE();
     co_return 42;
@@ -62,7 +69,7 @@ TEST(cancel_after_time, timer_scheduled_on_worker_queue) {
 
   auto parent = [&]() -> async_coro::task<int> {
     // schedule timer on worker so cancellation logic runs there
-    co_await (co_await async_coro::start_task(long_on_worker()) || async_coro::cancel_after_time(10ms, async_coro::execution_queues::main));
+    co_await (co_await async_coro::start_task(long_on_worker()) || async_coro::cancel_after_time(5ms, async_coro::execution_queues::main));
 
     // should not reach here
     ADD_FAILURE();
@@ -71,7 +78,7 @@ TEST(cancel_after_time, timer_scheduled_on_worker_queue) {
 
   auto handle = scheduler.start_task(parent());
 
-  for (int i = 0; i < 2000 && !(handle.done() || handle.is_cancelled()); ++i) {
+  for (int i = 0; i < 100 && !(handle.done() || handle.is_cancelled()); ++i) {
     std::this_thread::sleep_for(1ms);
     scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
   }
