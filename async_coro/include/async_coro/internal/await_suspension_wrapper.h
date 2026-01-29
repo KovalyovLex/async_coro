@@ -42,9 +42,10 @@ class await_suspension_wrapper {
     requires(std::derived_from<U, base_handle>)
   void await_suspend(std::coroutine_handle<U> handle) {
     // cancel and continue should both be called in any case
-    _suspension = handle.promise().suspend(3, _cancel_callback.get_ptr());
+    base_handle& coro_handle = handle.promise();
+    _suspension = coro_handle.suspend(3, _cancel_callback.get_ptr());
 
-    _awaiter.adv_await_suspend(_continue_callback.get_ptr());
+    _awaiter.adv_await_suspend(_continue_callback.get_ptr(), coro_handle);
 
     _suspension.try_to_continue_immediately();
   }

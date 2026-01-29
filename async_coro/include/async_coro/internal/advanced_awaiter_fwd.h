@@ -17,7 +17,7 @@ concept advanced_awaitable = requires(T awaiter) {
   std::is_move_constructible_v<T>;
   { awaiter.adv_await_ready() } -> std::same_as<bool>;
   { awaiter.cancel_adv_await() };
-  { awaiter.adv_await_suspend(std::declval<continue_callback_ptr>()) };
+  { awaiter.adv_await_suspend(std::declval<continue_callback_ptr>(), std::declval<async_coro::base_handle&>()) };
   { awaiter.adv_await_resume() };
 };
 

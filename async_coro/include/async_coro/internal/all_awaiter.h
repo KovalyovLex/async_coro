@@ -96,7 +96,7 @@ class all_awaiter : public advanced_awaiter<all_awaiter<TAwaiters...>> {
         _awaiters);
   }
 
-  void adv_await_suspend(continue_callback_ptr continue_f) {
+  void adv_await_suspend(continue_callback_ptr continue_f, async_coro::base_handle& handle) {
     ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
     _continue_f = std::move(continue_f);
@@ -104,7 +104,7 @@ class all_awaiter : public advanced_awaiter<all_awaiter<TAwaiters...>> {
 
     const auto iter_awaiters = [&]<std::size_t... TI>(std::index_sequence<TI...>) {
       const auto set_continue = [&](auto& awaiter, auto& callback) {
-        awaiter.adv_await_suspend(callback.get_ptr());
+        awaiter.adv_await_suspend(callback.get_ptr(), handle);
       };
 
       (set_continue(std::get<TI>(_awaiters), std::get<TI>(_callbacks)), ...);

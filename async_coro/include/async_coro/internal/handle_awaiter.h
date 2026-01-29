@@ -51,7 +51,7 @@ class handle_awaiter : public advanced_awaiter<handle_awaiter<TRes>> {
     _handle.request_cancel();
   }
 
-  void adv_await_suspend(continue_callback_ptr continue_f) {
+  void adv_await_suspend(continue_callback_ptr continue_f, async_coro::base_handle& /*handle*/) {
     ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
     // barrier to prevent reordering
