@@ -449,7 +449,7 @@ class base_handle {
 
   // returns previous value of cancel requested
   std::pair<bool, coroutine_state> set_cancel_requested() noexcept {
-    const auto prev_state = update_value(is_cancel_requested_mask, get_inverted_mask(is_cancel_requested_mask));
+    const auto prev_state = update_value(is_cancel_requested_mask, get_inverted_mask(is_cancel_requested_mask), std::memory_order::relaxed, std::memory_order::release);
     return {prev_state & is_cancel_requested_mask, static_cast<coroutine_state>(prev_state & coroutine_state_mask)};
   }
 
