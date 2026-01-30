@@ -455,7 +455,9 @@ class base_handle {
 
   uint8_t update_value(const uint8_t value, const uint8_t mask, std::memory_order read = std::memory_order::relaxed, std::memory_order write = std::memory_order::relaxed) noexcept {
     uint8_t expected = _atomic_state.load(read);
-    while (!_atomic_state.compare_exchange_weak(expected, (expected & mask) | value, write, read)) {  // NOLINT(*-signed-bitwise)
+    uint8_t desired = uint8_t(expected & mask) | value;
+    while (desired != expected && !_atomic_state.compare_exchange_weak(expected, desired, write, read)) {
+      desired = uint8_t(expected & mask) | value;
     }
     return expected;
   }

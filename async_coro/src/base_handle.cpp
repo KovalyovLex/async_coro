@@ -57,10 +57,8 @@ void base_handle::destroy_impl() noexcept {
 }
 
 void base_handle::dec_num_owners() noexcept {
-  if (_num_owners.fetch_sub(1, std::memory_order::release) == 1) {
-    if (_num_owners.load(std::memory_order::acquire) == 0) {
-      destroy_impl();
-    }
+  if (_num_owners.fetch_sub(1, std::memory_order::acq_rel) == 1) {
+    destroy_impl();
   }
 }
 
