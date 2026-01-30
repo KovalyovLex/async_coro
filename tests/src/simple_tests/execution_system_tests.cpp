@@ -133,10 +133,10 @@ TEST(execution_system, plan_execution_delayed_main) {
 TEST(execution_system, plan_execution_delayed_worker) {
   using namespace async_coro;
 
-  execution_system system{{.worker_configs = {{"worker", execution_queues::worker}}, .main_thread_allowed_tasks = execution_queues::main}};
-
   std::atomic_bool executed{false};
   const auto main_thread_id = std::this_thread::get_id();
+
+  execution_system system{{.worker_configs = {{"worker", execution_queues::worker}}, .main_thread_allowed_tasks = execution_queues::main}};
 
   system.plan_execution_after(
       [&](auto&) {
@@ -145,11 +145,12 @@ TEST(execution_system, plan_execution_delayed_worker) {
       },
       execution_queues::worker, std::chrono::steady_clock::now() + std::chrono::milliseconds{30});
 
-  std::this_thread::sleep_for(std::chrono::milliseconds{80});
+  std::this_thread::sleep_for(std::chrono::milliseconds{30});
 
   // wait a little bit more because we cant force system scheduler to schedule pur thread
-  for (int tries = 0; tries < 100 && !executed.load(std::memory_order::relaxed); ++tries) {
+  for (int tries = 0; tries < 200 && !executed.load(std::memory_order::relaxed); ++tries) {
     std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    system.update_from_main();
   }
 
   EXPECT_TRUE(executed);
