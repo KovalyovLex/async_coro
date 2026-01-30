@@ -49,7 +49,8 @@ void base_handle::destroy_impl() noexcept {
   // continuation can hold something from coro. So destroy continuation first
   continuation.reset();
 
-  while (_run_data.load(std::memory_order::relaxed) != nullptr) {
+  // Use barrier here as cancel or update can change state
+  while (_run_data.load(std::memory_order::acquire) != nullptr) {
     // wait for continuation finish
   }
 
@@ -57,8 +58,10 @@ void base_handle::destroy_impl() noexcept {
 }
 
 void base_handle::dec_num_owners() noexcept {
-  if (_num_owners.fetch_sub(1, std::memory_order::acq_rel) == 1) {
-    destroy_impl();
+  if (_num_owners.fetch_sub(1, std::memory_order::relaxed) == 1) {
+    if (_num_owners.load(std::memory_order::acquire) == 0) {
+      destroy_impl();
+    }
   }
 }
 

@@ -44,7 +44,7 @@ class handle_awaiter : public advanced_awaiter<handle_awaiter<TRes>> {
   [[nodiscard]] bool adv_await_ready() const noexcept { return _handle.done(); }
 
   void cancel_adv_await() {
-    // remove our continuation (but it can be continued after reset, thats why we clear _self_handle only in callback)
+    // remove our continuation (but it can be continued after reset, thats why we clear _continue_f only in callback)
     _handle.reset_continue();
 
     // cancel execution of task
