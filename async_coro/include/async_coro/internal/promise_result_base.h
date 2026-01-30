@@ -3,6 +3,8 @@
 #include <async_coro/base_handle.h>
 #include <async_coro/internal/store_type.h>
 
+#include <atomic>
+
 namespace async_coro::internal {
 
 template <typename T>
@@ -28,8 +30,8 @@ class promise_result_base : public base_handle, protected store_type<T> {
   promise_result_base& operator=(const promise_result_base&) = delete;
   promise_result_base& operator=(promise_result_base&&) = delete;
 
-  // Checks has result
-  [[nodiscard]] bool has_result() const noexcept { return is_initialized() && is_result(); }
+  // Checks has result and put memory barrier for the result
+  [[nodiscard]] bool has_result() const noexcept { return is_initialized() && is_result(std::memory_order::acquire); }
 
 #if ASYNC_CORO_COMPILE_WITH_EXCEPTIONS
   void unhandled_exception() noexcept {

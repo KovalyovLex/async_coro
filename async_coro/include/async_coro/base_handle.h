@@ -355,12 +355,12 @@ class base_handle {
     return (_atomic_state.load(std::memory_order::relaxed) & is_initialized_mask) != 0;
   }
 
-  [[nodiscard]] bool is_result() const noexcept {
-    return (_atomic_state.load(std::memory_order::relaxed) & is_result_mask) != 0;
+  [[nodiscard]] bool is_result(std::memory_order order = std::memory_order::relaxed) const noexcept {
+    return (_atomic_state.load(order) & is_result_mask) != 0;
   }
 
   void set_initialized(bool is_result) noexcept {
-    update_value(is_initialized_mask | (is_result ? is_result_mask : 0U), get_inverted_mask(is_initialized_mask | is_result_mask));
+    update_value(is_initialized_mask | (is_result ? is_result_mask : 0U), get_inverted_mask(is_initialized_mask | is_result_mask), std::memory_order::relaxed, std::memory_order::release);
   }
 
  private:

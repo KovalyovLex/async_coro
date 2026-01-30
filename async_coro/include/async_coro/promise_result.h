@@ -1,6 +1,7 @@
 #pragma once
 
 #include <async_coro/base_handle.h>
+#include <async_coro/config.h>
 #include <async_coro/internal/promise_result_base.h>
 #include <async_coro/internal/store_type.h>
 
@@ -20,21 +21,24 @@ class promise_result : public internal::promise_result_base<T> {
   // Returns result reference
   auto& get_result_ref() noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
     this->check_exception();
-    ASYNC_CORO_ASSERT(this->has_result());
+    ASYNC_CORO_ASSERT_VARIABLE auto has_result = this->has_result();
+    ASYNC_CORO_ASSERT(has_result);
     return this->result.get_ref();
   }
 
   // Returns result const reference
   const auto& get_result_cref() const noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
     this->check_exception();
-    ASYNC_CORO_ASSERT(this->has_result());
+    ASYNC_CORO_ASSERT_VARIABLE auto has_result = this->has_result();
+    ASYNC_CORO_ASSERT(has_result);
     return this->result.get_cref();
   }
 
   // Moves result
   decltype(auto) move_result() noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
     this->check_exception();
-    ASYNC_CORO_ASSERT(this->has_result());
+    ASYNC_CORO_ASSERT_VARIABLE auto has_result = this->has_result();
+    ASYNC_CORO_ASSERT(has_result);
     return this->result.move();
   }
 
@@ -65,19 +69,22 @@ class promise_result<void> : public internal::promise_result_base<void> {
   // Returns result reference (backward compatibility for void result)
   void get_result_ref() noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
     this->check_exception();
-    ASYNC_CORO_ASSERT(this->has_result());
+    ASYNC_CORO_ASSERT_VARIABLE auto has_result = this->has_result();
+    ASYNC_CORO_ASSERT(has_result);
   }
 
   // Returns result const reference (backward compatibility for void result)
   void get_result_cref() const noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
     this->check_exception();
-    ASYNC_CORO_ASSERT(this->has_result());
+    ASYNC_CORO_ASSERT_VARIABLE auto has_result = this->has_result();
+    ASYNC_CORO_ASSERT(has_result);
   }
 
   // Moves result (backward compatibility for void result)
   void move_result() noexcept(!ASYNC_CORO_WITH_EXCEPTIONS) {
     this->check_exception();
-    ASYNC_CORO_ASSERT(this->has_result());
+    ASYNC_CORO_ASSERT_VARIABLE auto has_result = this->has_result();
+    ASYNC_CORO_ASSERT(has_result);
   }
 
   using internal::promise_result_base<void>::has_result;

@@ -110,7 +110,7 @@ void scheduler::continue_execution_impl(base_handle& handle, std::thread::id cur
 
         auto* cont_handle = run_data.coroutine_to_run_next;
         if (cont_handle != nullptr) {
-          // cancel execution of next coroutine as it depends on currently cancelled or finished
+          // cancel execution of next coroutine as it depends on currently cancelled or finished (it is child coro)
           cont_handle->request_cancel();
         }
 
