@@ -13,10 +13,10 @@ class promise_result_holder : public async_coro::promise_result<T> {
   template <typename... TArgs>
     requires(std::is_constructible_v<T, TArgs...>)
   void return_value(TArgs&&... args) noexcept(std::is_nothrow_constructible_v<T, TArgs...>) {
-    ASYNC_CORO_ASSERT(!this->_is_initialized);
+    ASYNC_CORO_ASSERT(!this->is_initialized());
+
     this->result.inplace_init(std::forward<TArgs>(args)...);
-    this->_is_initialized = true;
-    this->_is_result = true;
+    this->set_initialized(true);
   }
 };
 
@@ -25,9 +25,9 @@ class promise_result_holder<void> : public async_coro::promise_result<void> {
  public:
   // C++ coroutine api
   void return_void() noexcept {
-    ASYNC_CORO_ASSERT(!_is_initialized);
-    _is_initialized = true;
-    _is_result = true;
+    ASYNC_CORO_ASSERT(!is_initialized());
+
+    set_initialized(true);
   }
 };
 

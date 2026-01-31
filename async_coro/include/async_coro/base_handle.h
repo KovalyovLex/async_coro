@@ -1,14 +1,15 @@
 #pragma once
 
-#include <async_coro/callback.h>
 #include <async_coro/config.h>
 #include <async_coro/execution_queue_mark.h>
+#include <async_coro/internal/base_handle_ptr.h>
 #include <async_coro/internal/coroutine_suspender.h>
+#include <async_coro/utils/callback_fwd.h>
+#include <async_coro/utils/callback_ptr.h>
 
 #include <atomic>
 #include <coroutine>
 #include <cstdint>
-#include <memory>
 #include <thread>
 
 namespace async_coro {
@@ -33,6 +34,8 @@ enum class coroutine_state : std::uint8_t {
 };
 
 class scheduler;
+class executor_data;
+
 namespace internal {
 class scheduled_run_data;
 }
@@ -63,14 +66,19 @@ class scheduled_run_data;
 class base_handle {
   friend scheduler;
   friend internal::coroutine_suspender;
+  friend base_handle_ptr;
 
   static constexpr uint8_t coroutine_state_mask = (1U << 0U) | (1U << 1U) | (1U << 2U);
   static constexpr uint8_t is_embedded_mask = (1U << 3U);
-  static constexpr uint8_t num_owners_step = (1U << 4U);
-  static constexpr uint8_t num_owners_mask = (1U << 4U) | (1U << 5U);  // can have 2 owners max (1 is scheduler and another is task_handle)
-  static constexpr uint8_t is_cancel_requested_mask = (1U << 6U);
+  static constexpr uint8_t is_cancel_requested_mask = (1U << 4U);
+  static constexpr uint8_t is_initialized_mask = (1U << 5U);
+  static constexpr uint8_t is_result_mask = (1U << 6U);
 
  public:
+  using cancel_callback_ptr = callback_ptr<void()>;
+  using cancel_callback_atomic_ptr = callback_atomic_ptr<void()>;
+  using cancel_callback = cancel_callback_ptr::callback_t;
+
   /**
    * @brief Default constructor
    *
@@ -145,8 +153,8 @@ class base_handle {
    * @note This method is useful for determining if immediate execution is safe
    * @note The result may change if the coroutine switches execution contexts
    */
-  [[nodiscard]] bool is_current_thread_same() const noexcept {
-    return _execution_thread == std::this_thread::get_id();
+  [[nodiscard]] bool is_execution_thread_same(std::thread::id thread_id) const noexcept {
+    return _execution_thread.load(std::memory_order::relaxed) == thread_id;
   }
 
   /**
@@ -235,9 +243,8 @@ class base_handle {
    * @note This method is noexcept and will not throw exceptions
    * @note After this method continue_after_sleep should be called
    */
-  void plan_sleep_on_queue(execution_queue_mark execution_queue, callback<void()>& on_cancel) noexcept {
-    ASYNC_CORO_ASSERT_VARIABLE auto* prev = this->_on_cancel.exchange(std::addressof(on_cancel), std::memory_order::relaxed);
-    ASYNC_CORO_ASSERT(prev == nullptr);
+  void plan_sleep_on_queue(execution_queue_mark execution_queue, cancel_callback_ptr on_cancel) noexcept {
+    this->_on_cancel.assign_to_no_init(std::move(on_cancel));
 
     set_coroutine_state(coroutine_state::suspended);
     _execution_queue = execution_queue;
@@ -248,7 +255,7 @@ class base_handle {
    *
    * @note Should be called from thread that fits execution_queue
    */
-  void continue_after_sleep();
+  void continue_after_sleep(std::thread::id current_thread = std::this_thread::get_id());
 
   /**
    * @brief Returns the current execution queue for this coroutine
@@ -275,9 +282,8 @@ class base_handle {
    *
    * @see `coroutine_suspender`
    */
-  auto suspend(std::uint32_t suspend_count, callback<void()>* on_cancel) noexcept {
-    ASYNC_CORO_ASSERT_VARIABLE auto* prev = this->_on_cancel.exchange(on_cancel, std::memory_order::relaxed);
-    ASYNC_CORO_ASSERT(prev == nullptr);
+  auto suspend(std::uint32_t suspend_count, cancel_callback_ptr on_cancel) noexcept {
+    this->_on_cancel.assign_to_no_init(std::move(on_cancel));
 
     return internal::coroutine_suspender{*this, suspend_count};
   }
@@ -308,50 +314,53 @@ class base_handle {
     return {static_cast<coroutine_state>(state & coroutine_state_mask), state & is_cancel_requested_mask};
   }
 
+  /**
+   * @brief Returns owning ptr to keep coroutine from destruction
+   */
+  base_handle_ptr get_owning_ptr();
+
  protected:
   // returns true if continuation was executed
-  virtual bool execute_continuation(bool cancelled, bool release_cancel) = 0;
+  virtual bool execute_continuation(bool cancelled) = 0;
 
 #if ASYNC_CORO_WITH_EXCEPTIONS
   // retrows exception if it was caught
   virtual void check_exception_base() = 0;
 #endif
 
-  void init_promise(std::coroutine_handle<> handle) noexcept { _handle = handle; }
-  std::coroutine_handle<> get_handle() noexcept { return _handle; }
+  [[nodiscard]] virtual std::coroutine_handle<> get_handle() noexcept = 0;
 
   void on_final_suspend() noexcept {
     set_coroutine_state(coroutine_state::finished, true);
   }
 
-  void on_task_freed_by_scheduler();
-
   void set_owning_by_task_handle(bool owning);
 
-  callback_base* release_continuation_functor() noexcept {
-    return is_embedded() ? nullptr : _continuation.exchange(nullptr, std::memory_order::acquire);
+  void set_owning_by_task(bool owning);
+
+  template <typename TSig>
+  callback_ptr<TSig> release_continuation_functor() noexcept {
+    using result_t = callback_ptr<TSig>;
+
+    if (is_embedded()) {
+      return result_t{nullptr};
+    }
+    auto* clb = static_cast<result_t::callback_t*>(_root_state.continuation.release(std::memory_order::acquire));
+    return result_t{clb};
   }
 
-  void set_continuation_functor(callback_base* func) noexcept;
+  void set_continuation_functor(callback_base_ptr<false> func) noexcept;
 
-  void release_cancel_lock() noexcept {
-    ASYNC_CORO_ASSERT_VARIABLE const auto was_inside = _is_inside_cancel.exchange(false, std::memory_order::release);
-    ASYNC_CORO_ASSERT(was_inside);
-
-    _is_inside_cancel.notify_one();
+  [[nodiscard]] bool is_initialized() const noexcept {
+    return (_atomic_state.load(std::memory_order::relaxed) & is_initialized_mask) != 0;
   }
 
- private:
-  void destroy_impl();
-
-  [[nodiscard]] base_handle* get_parent() const noexcept {
-    return is_embedded() ? _parent : nullptr;
+  [[nodiscard]] bool is_result(std::memory_order order = std::memory_order::relaxed) const noexcept {
+    return (_atomic_state.load(order) & is_result_mask) != 0;
   }
 
-  void set_parent(base_handle& parent) noexcept {
-    _parent = &parent;
-    parent._current_child = this;
-    set_embedded(true);
+  void set_initialized(bool is_result) noexcept {
+    update_value(is_initialized_mask | (is_result ? is_result_mask : 0U), get_inverted_mask(is_initialized_mask | is_result_mask), std::memory_order::relaxed, std::memory_order::release);
   }
 
  private:
@@ -359,9 +368,59 @@ class base_handle {
     return static_cast<uint8_t>(~mask);
   }
 
-  uint8_t dec_num_owners() noexcept;
+  void destroy_impl() noexcept;
+
+  void dec_num_owners() noexcept;
 
   void inc_num_owners() noexcept;
+
+  [[nodiscard]] base_handle* get_parent() const noexcept {
+    return is_embedded() ? _parent : nullptr;
+  }
+
+  void set_parent(base_handle& parent) noexcept {
+    _parent = &parent;
+    parent._current_child = this->get_owning_ptr();
+    set_embedded(true);
+  }
+
+  class defer_leave {
+   public:
+    defer_leave(const defer_leave&) = delete;
+    defer_leave(defer_leave&&) = delete;
+    defer_leave& operator=(const defer_leave&) = delete;
+    defer_leave& operator=(defer_leave&&) = delete;
+
+    defer_leave(base_handle* handle, bool was_exclusive_enterred) noexcept
+        : _handle(was_exclusive_enterred ? handle : nullptr),
+          _was_exclusive_enterred(was_exclusive_enterred) {}
+
+    ~defer_leave() noexcept {
+      leave();
+    }
+
+    void leave() noexcept {
+      if (_handle == nullptr) {
+        return;
+      }
+      _handle->leave_update_loop();
+      _handle = nullptr;
+    }
+
+    [[nodiscard]] bool was_exclusive_enterred() const noexcept {
+      return _was_exclusive_enterred;
+    }
+
+   private:
+    base_handle* _handle;
+    bool _was_exclusive_enterred;
+  };
+
+  // returns true if loop was exclusively locked
+  defer_leave enter_update_loop(internal::scheduled_run_data& run_data, internal::scheduled_run_data*& current_data, std::thread::id current_thread) noexcept;
+
+  // leaves update loop
+  void leave_update_loop() noexcept;
 
   [[nodiscard]] coroutine_state get_coroutine_state(std::memory_order order = std::memory_order::relaxed) const noexcept {
     return static_cast<coroutine_state>(_atomic_state.load(order) & coroutine_state_mask);
@@ -385,41 +444,49 @@ class base_handle {
   }
 
   void set_embedded(bool value) noexcept {
-    update_value(value ? is_embedded_mask : 0, get_inverted_mask(is_embedded_mask));
+    update_value(value ? is_embedded_mask : 0U, get_inverted_mask(is_embedded_mask));
   }
 
   // returns previous value of cancel requested
   std::pair<bool, coroutine_state> set_cancel_requested() noexcept {
-    const auto prev_state = update_value(is_cancel_requested_mask, get_inverted_mask(is_cancel_requested_mask));
+    const auto prev_state = update_value(is_cancel_requested_mask, get_inverted_mask(is_cancel_requested_mask), std::memory_order::relaxed, std::memory_order::release);
     return {prev_state & is_cancel_requested_mask, static_cast<coroutine_state>(prev_state & coroutine_state_mask)};
   }
 
   uint8_t update_value(const uint8_t value, const uint8_t mask, std::memory_order read = std::memory_order::relaxed, std::memory_order write = std::memory_order::relaxed) noexcept {
     uint8_t expected = _atomic_state.load(read);
-    while (!_atomic_state.compare_exchange_strong(expected, (expected & mask) | value, write, read)) {  // NOLINT(*-signed-bitwise)
+    uint8_t desired = uint8_t(expected & mask) | value;
+    while (desired != expected && !_atomic_state.compare_exchange_weak(expected, desired, write, read)) {
+      desired = uint8_t(expected & mask) | value;
     }
     return expected;
   }
 
  private:
-  std::atomic<internal::scheduled_run_data*> _run_data{nullptr};
-  union {
-    std::atomic<callback_base*> _continuation;
-    base_handle* _parent;
+  struct root_coro_state {
+    callback_base_atomic_ptr<false> continuation;
+    callback_base_ptr<false> start_function;  // we should store start function for all lifetime of the coroutine because it stores captured arguments
   };
-  std::coroutine_handle<> _handle;
-  scheduler* _scheduler = nullptr;
-  callback_base::ptr _start_function;
-  std::atomic<callback<void()>*> _on_cancel = nullptr;  // callback for our coroutine. It can be modified only inside our coroutine
-  base_handle* _current_child = nullptr;
-  std::thread::id _execution_thread;
-  execution_queue_mark _execution_queue = execution_queues::main;
-  std::atomic_uint8_t _atomic_state{num_owners_step};  // 1 owner by default
-  std::atomic_bool _is_inside_cancel{false};
 
- protected:
-  bool _is_initialized = false;  // NOLINT(*non-private-member*)
-  bool _is_result = false;       // NOLINT(*non-private-member*)
+  std::atomic_uint32_t _num_owners{0};
+  union {
+    root_coro_state _root_state;
+    base_handle* _parent;
+  };  // embedded coroutine cant have a continuation - continue can be assigned only for root coroutine
+  scheduler* _scheduler = nullptr;
+  // cancel_callback should be allocated on coroutine stack in suspension points.
+  // It can be executed and destroyed or just destroyed in case of no cancel
+  cancel_callback_atomic_ptr _on_cancel = nullptr;
+  // Currently awaiting child coroutine. Used for cancel notifications
+  base_handle_ptr _current_child = nullptr;
+  execution_queue_mark _execution_queue = execution_queues::any;
+  std::atomic_uint8_t _atomic_state{0};
+  // They get changed synchronously with state so no false sharing
+  std::atomic<internal::scheduled_run_data*> _run_data{nullptr};
+  std::atomic<std::thread::id> _execution_thread;
+
+  static_assert(decltype(_execution_thread)::is_always_lock_free, "Wrong platform/compiler?");
+  static_assert(decltype(_run_data)::is_always_lock_free, "Wrong platform/compiler?");
 };
 
 }  // namespace async_coro

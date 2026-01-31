@@ -368,7 +368,7 @@ TEST(task_op, mixed_result_with_parenthesis) {
     }
     {
       auto results = co_await (scheduler.start_task(routine1) && scheduler.start_task(routine_void) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)));
-      static_assert(std::is_same_v<decltype(results), std::variant<std::tuple<int>, std::variant<float, double>>>);
+      static_assert(std::is_same_v<decltype(results), std::variant<std::tuple<int>, float, double>>);
 
       const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);
@@ -382,7 +382,7 @@ TEST(task_op, mixed_result_with_parenthesis) {
     }
     {
       auto results = co_await ((scheduler.start_task(routine1) && scheduler.start_task(routine_void)) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)));
-      static_assert(std::is_same_v<decltype(results), std::variant<std::tuple<int>, std::variant<float, double>>>);
+      static_assert(std::is_same_v<decltype(results), std::variant<std::tuple<int>, float, double>>);
 
       const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);

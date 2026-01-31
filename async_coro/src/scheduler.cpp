@@ -1,5 +1,4 @@
 #include <async_coro/base_handle.h>
-#include <async_coro/callback.h>
 #include <async_coro/config.h>
 #include <async_coro/execution_system.h>
 #include <async_coro/internal/scheduled_run_data.h>
@@ -28,38 +27,36 @@ scheduler::~scheduler() {
   auto coros = std::move(_managed_coroutines);
   _is_destroying = true;
   lock.unlock();
-  _execution_system = nullptr;
 
-  for (auto* coro : coros) {
-    if (coro != nullptr) {
-      coro->on_task_freed_by_scheduler();
-    }
+  for (auto& coro : coros) {
+    coro->request_cancel();
   }
+  _execution_system = nullptr;
+  coros.clear();
 }
 
-bool scheduler::is_current_thread_fits(execution_queue_mark execution_queue) noexcept {
-  return _execution_system->is_current_thread_fits(execution_queue);
+bool scheduler::is_thread_fits(execution_queue_mark execution_queue, std::thread::id thread_id) noexcept {
+  return _execution_system->is_thread_fits(execution_queue, thread_id);
 }
 
-void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*complexity*)
+void scheduler::continue_execution_impl(base_handle& handle, std::thread::id current_thread) {  // NOLINT(*complexity*)
   base_handle* handle_to_run = std::addressof(handle);
 
+  internal::scheduled_run_data run_data{};
+  internal::scheduled_run_data* current_data = nullptr;
+
   while (handle_to_run != nullptr) {
-    internal::scheduled_run_data run_data{};
+    run_data.coroutine_to_run_next = nullptr;
 
-    {
-      internal::scheduled_run_data* curren_data{nullptr};
-
-      while (!handle_to_run->_run_data.compare_exchange_strong(curren_data, std::addressof(run_data), std::memory_order::acquire, std::memory_order::relaxed)) {
-        if (curren_data != nullptr && handle_to_run->is_current_thread_same()) {
-          // push this coro to q on run next
-          ASYNC_CORO_ASSERT(curren_data->coroutine_to_run_next == nullptr);
-          curren_data->coroutine_to_run_next = handle_to_run;
-          return;
-        }
-        curren_data = nullptr;
-      }
+    auto defer = handle_to_run->enter_update_loop(run_data, current_data, current_thread);
+    if (!defer.was_exclusive_enterred()) {
+      // push this coro to q on run next
+      ASYNC_CORO_ASSERT(current_data->coroutine_to_run_next == nullptr);
+      current_data->coroutine_to_run_next = handle_to_run;
+      return;
     }
+
+    ASYNC_CORO_ASSERT(current_data == std::addressof(run_data));
 
     bool was_cancelled = handle_to_run->set_coroutine_state_and_get_cancelled(coroutine_state::running);
 
@@ -83,23 +80,22 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
           parent->_current_child = nullptr;
         }
 
-        ASYNC_CORO_ASSERT(run_data.coroutine_to_run_next == nullptr);
+        // We should not have any coroutines to proceed on finish unless this coroutine was cancelled
+        ASYNC_CORO_ASSERT(run_data.coroutine_to_run_next == nullptr || was_cancelled);
 
         if (cancelled_without_finish) {
           // cancel current coro and parent
-          if (auto* on_cancel = handle_to_run->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
-            on_cancel->execute_and_destroy();
-          }
+          handle_to_run->_on_cancel.try_execute_and_destroy();
 
           parent->request_cancel();
 
-          handle_to_run->_run_data.store(nullptr, std::memory_order::release);
+          defer.leave();
         } else if (parent->get_coroutine_state() == coroutine_state::suspended) {
           // wake up parent coroutine as child coro finished normally
 
-          handle_to_run->_run_data.store(nullptr, std::memory_order::relaxed);
+          defer.leave();
 
-          if (parent->is_current_thread_same()) {
+          if (parent->is_execution_thread_same(current_thread)) {
             run_data.coroutine_to_run_next = parent;
           } else {
             plan_continue_on_thread(*parent, parent->_execution_queue);
@@ -109,24 +105,22 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
         // cleanup coroutine
 
         if (cancelled_without_finish) {
-          if (auto* on_cancel = handle_to_run->_on_cancel.exchange(nullptr, std::memory_order::relaxed)) {
-            on_cancel->execute_and_destroy();
-          }
+          handle_to_run->_on_cancel.try_execute_and_destroy();
         }
 
         auto* cont_handle = run_data.coroutine_to_run_next;
         if (cont_handle != nullptr) {
-          // cancel execution of next coroutine as it depends on currently cancelled or finished
+          // cancel execution of next coroutine as it depends on currently cancelled or finished (it is child coro)
           cont_handle->request_cancel();
         }
 
-        handle_to_run->_run_data.store(nullptr, std::memory_order::release);
-
-        cleanup_coroutine(*handle_to_run, cancelled_without_finish);
+        auto managed = cleanup_coroutine(*handle_to_run, cancelled_without_finish);
+        // leave crit section before destructor
+        defer.leave();
         break;
       }
     } else {
-      handle_to_run->_run_data.store(nullptr, std::memory_order::release);
+      defer.leave();
     }
 
     if (state == coroutine_state::waiting_switch) {
@@ -137,14 +131,16 @@ void scheduler::continue_execution_impl(base_handle& handle) {  // NOLINT(*compl
   }
 }
 
-void scheduler::cleanup_coroutine(base_handle& handle_impl, bool cancelled) {
-  bool was_managed = false;
+base_handle_ptr scheduler::cleanup_coroutine(base_handle& handle_impl, bool cancelled) {
+  ASYNC_CORO_ASSERT(handle_impl._run_data.load(std::memory_order::relaxed) != nullptr);
+
+  base_handle_ptr managed;
   {
     // remove from managed
     unique_lock lock{_mutex};
-    auto iter = std::ranges::find(_managed_coroutines, &handle_impl);
+    auto iter = std::ranges::find_if(_managed_coroutines, [handle = &handle_impl](const auto& ptr) { return ptr == handle; });
     if (iter != _managed_coroutines.end()) {
-      was_managed = true;
+      managed = std::move(*iter);
       if (*iter != _managed_coroutines.back()) {
         std::swap(*iter, _managed_coroutines.back());
       }
@@ -155,7 +151,7 @@ void scheduler::cleanup_coroutine(base_handle& handle_impl, bool cancelled) {
 #if ASYNC_CORO_WITH_EXCEPTIONS && ASYNC_CORO_COMPILE_WITH_EXCEPTIONS
   try {
     // try to handle exception by external api
-    if (!handle_impl.execute_continuation(cancelled, false)) {
+    if (!handle_impl.execute_continuation(cancelled)) {
       handle_impl.check_exception_base();
     }
   } catch (...) {
@@ -169,56 +165,53 @@ void scheduler::cleanup_coroutine(base_handle& handle_impl, bool cancelled) {
     }
   }
 #else
-  handle_impl.execute_continuation(cancelled, false);
+  handle_impl.execute_continuation(cancelled);
 #endif
 
-  if (was_managed) {
-    handle_impl.on_task_freed_by_scheduler();
-  }
+  return managed;
 }
 
 void scheduler::plan_continue_on_thread(base_handle& handle_impl, execution_queue_mark execution_queue) {
   ASYNC_CORO_ASSERT(handle_impl._scheduler == this);
 
   _execution_system->plan_execution(
-      [this, handle_base = &handle_impl, execution_queue]() {
-        handle_base->_execution_thread = std::this_thread::get_id();
+      [this, handle_base = &handle_impl, execution_queue](const executor_data& data) {
         handle_base->_execution_queue = execution_queue;
-        this->continue_execution_impl(*handle_base);
+        this->continue_execution_impl(*handle_base, data.get_owning_thread());
       },
       execution_queue);
 }
 
 void scheduler::add_coroutine(base_handle& handle_impl,
-                              callback_base::ptr start_function,
+                              callback_base_ptr<false> start_function,
                               execution_queue_mark execution_queue) {
-  ASYNC_CORO_ASSERT(handle_impl._execution_thread == std::thread::id{});
+  ASYNC_CORO_ASSERT(handle_impl._execution_thread.load(std::memory_order::relaxed) == std::thread::id{});
   ASYNC_CORO_ASSERT(handle_impl.get_coroutine_state() == coroutine_state::created);
-  ASYNC_CORO_ASSERT(handle_impl.get_handle());
 
-  handle_impl._start_function = std::move(start_function);
+  new (std::addressof(handle_impl._root_state)) base_handle::root_coro_state{.continuation{}, .start_function = std::move(start_function)};
+
+  auto managed = handle_impl.get_owning_ptr();
 
   {
     unique_lock lock{_mutex};
 
     if (_is_destroying) {
-      lock.unlock();
       // if we are in destructor no way to run this coroutine
-      handle_impl.on_task_freed_by_scheduler();
       return;
     }
 
-    _managed_coroutines.push_back(&handle_impl);
+    _managed_coroutines.push_back(std::move(managed));
   }
 
   handle_impl._scheduler = this;
 
-  if (is_current_thread_fits(execution_queue)) {
+  const auto current_thread = std::this_thread::get_id();
+
+  if (is_thread_fits(execution_queue, current_thread)) {
     // start execution immediately if we in right thread
 
-    handle_impl._execution_thread = std::this_thread::get_id();
     handle_impl._execution_queue = execution_queue;
-    continue_execution_impl(handle_impl);
+    continue_execution_impl(handle_impl, current_thread);
   } else {
     change_execution_queue(handle_impl, execution_queue);
   }
@@ -233,13 +226,13 @@ void scheduler::set_unhandled_exception_handler(unique_function<void(std::except
 }
 #endif
 
-void scheduler::continue_execution(base_handle& handle_impl, passkey_any<internal::coroutine_suspender, base_handle> /*key*/) {
-  ASYNC_CORO_ASSERT(handle_impl._execution_thread != std::thread::id{});
+void scheduler::continue_execution(base_handle& handle_impl, std::thread::id current_thread, passkey_any<internal::coroutine_suspender, base_handle> /*key*/) {
+  ASYNC_CORO_ASSERT(handle_impl._execution_thread.load(std::memory_order::relaxed) != std::thread::id{});
   ASYNC_CORO_ASSERT(handle_impl.get_coroutine_state() == coroutine_state::suspended);
 
-  if (handle_impl.is_current_thread_same()) {
+  if (handle_impl.is_execution_thread_same(current_thread)) {
     // start execution immediately if we in right thread
-    continue_execution_impl(handle_impl);
+    continue_execution_impl(handle_impl, current_thread);
   } else {
     plan_continue_on_thread(handle_impl, handle_impl._execution_queue);
   }
@@ -247,7 +240,7 @@ void scheduler::continue_execution(base_handle& handle_impl, passkey_any<interna
 
 void scheduler::change_execution_queue(base_handle& handle_impl,
                                        execution_queue_mark execution_queue) {
-  ASYNC_CORO_ASSERT(!is_current_thread_fits(execution_queue));
+  ASYNC_CORO_ASSERT(!is_thread_fits(execution_queue, std::this_thread::get_id()));
 
   plan_continue_on_thread(handle_impl, execution_queue);
 }
@@ -257,12 +250,11 @@ void scheduler::on_child_coro_added(base_handle& parent, base_handle& child, pas
   ASYNC_CORO_ASSERT(parent._scheduler == this);
   ASYNC_CORO_ASSERT(child._execution_thread == std::thread::id{});
   ASYNC_CORO_ASSERT(child.get_coroutine_state() == coroutine_state::created);
-  ASYNC_CORO_ASSERT(parent.is_current_thread_same());
 
   parent.set_coroutine_state(coroutine_state::suspended);
 
   child._scheduler = this;
-  child._execution_thread = parent._execution_thread;
+  child._execution_thread.store(parent._execution_thread.load(std::memory_order::relaxed), std::memory_order::relaxed);
   child._execution_queue = parent._execution_queue;
   child.set_parent(parent);
   child.set_coroutine_state(coroutine_state::suspended);

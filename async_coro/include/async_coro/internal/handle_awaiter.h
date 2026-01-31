@@ -1,9 +1,10 @@
 #pragma once
 
-#include <async_coro/callback.h>
 #include <async_coro/config.h>
+#include <async_coro/internal/advanced_awaiter.h>
 #include <async_coro/internal/continue_callback.h>
 #include <async_coro/internal/type_traits.h>
+#include <async_coro/utils/callback_on_stack.h>
 
 #include <atomic>
 #include <tuple>
@@ -19,127 +20,78 @@ class promise_result;
 
 namespace async_coro::internal {
 
-template <class... TAwaiters>
-class all_awaiter;
-
-template <class... TAwaiters>
-class any_awaiter;
-
 // wrapper for single task to await with operators || and &&
 template <class TRes>
-class handle_awaiter {
+class handle_awaiter : public advanced_awaiter<handle_awaiter<TRes>> {
  public:
   using result_type = TRes;
 
   explicit handle_awaiter(task_handle<TRes> handle) noexcept
-      : _handle(std::move(handle)),
-        _continue_callback(on_continue_callback{this}) {
+      : _handle(std::move(handle)) {
   }
 
   handle_awaiter(const handle_awaiter&) = delete;
   handle_awaiter(handle_awaiter&& other) noexcept
-      : _handle(std::move(other._handle)),
-        _continue_callback(on_continue_callback{this}) {
+      : _handle(std::move(other._handle)) {
     ASYNC_CORO_ASSERT(other._continue_f == nullptr);
   }
 
-  ~handle_awaiter() noexcept {
-    _can_be_freed.wait(false, std::memory_order::acquire);
-  }
+  ~handle_awaiter() noexcept = default;
 
   handle_awaiter& operator=(const handle_awaiter&) = delete;
   handle_awaiter& operator=(handle_awaiter&&) = delete;
 
-  template <class TRes2>
-  auto operator&&(task_handle<TRes2>&& other) && noexcept {
-    return all_awaiter{std::tuple<handle_awaiter<TRes>, handle_awaiter<TRes2>>{std::move(*this), handle_awaiter<TRes2>{std::move(other)}}};
-  }
+  [[nodiscard]] bool adv_await_ready() const noexcept { return _handle.done(); }
 
-  template <class TRes2>
-  auto operator||(task_handle<TRes2>&& other) && noexcept {
-    return any_awaiter{std::tuple<handle_awaiter<TRes>, handle_awaiter<TRes2>>{std::move(*this), handle_awaiter<TRes2>{std::move(other)}}};
-  }
-
-  [[nodiscard]] bool await_ready() const noexcept { return _handle.done(); }
-
-  void cancel_await() {
-    _handle.request_cancel();
+  void cancel_adv_await() {
+    // remove our continuation (but it can be continued after reset, thats why we clear _continue_f only in callback)
     _handle.reset_continue();
 
-    if (!_was_continued.exchange(true, std::memory_order::acquire)) {
-      continue_callback::ptr continuation{std::exchange(_continue_f, nullptr)};
-      bool cancel = true;
-
-      while (continuation) {
-        std::tie(continuation, cancel) = continuation.release()->execute_and_destroy(cancel);
-      }
-    }
+    // cancel execution of task
+    _handle.request_cancel();
   }
 
-  void continue_after_complete(continue_callback& continue_f) {
+  void adv_await_suspend(continue_callback_ptr continue_f, async_coro::base_handle& /*handle*/) {
     ASYNC_CORO_ASSERT(_continue_f == nullptr);
 
-    _continue_f = &continue_f;
-    _can_be_freed.store(false, std::memory_order::relaxed);
-    _was_continued.store(false, std::memory_order::release);
+    // barrier to prevent reordering
+    _continue_f.reset(continue_f.release(), std::memory_order::release);
 
-    _handle.continue_with(_continue_callback);
+    _handle.continue_with(_continue_callback.get_ptr());
   }
 
-  TRes await_resume() {
+  TRes adv_await_resume() {
     return std::move(_handle).get();
   }
 
  private:
-  void set_can_be_freed() noexcept {
-    if (!_can_be_freed.exchange(true, std::memory_order::release)) {
-      _can_be_freed.notify_one();
-    }
-  }
+  using callback_t = callback<void(promise_result<TRes>&, bool)>;
 
- private:
-  class on_continue_callback : public callback<void(promise_result<TRes>&, bool)> {
-    using super = callback<void(promise_result<TRes>&, bool)>;
-
+  class external_continue_callback : public callback_on_stack<external_continue_callback, callback_t> {
    public:
-    explicit on_continue_callback(handle_awaiter* awaiter) noexcept
-        : super(&executor, &deleter),
-          _awaiter(awaiter) {}
+    void on_destroy() {
+      auto& awaiter = this->get_owner(&handle_awaiter::_continue_callback);
 
-   private:
-    static void executor(callback_base* base, ASYNC_CORO_ASSERT_VARIABLE bool with_destroy, promise_result<TRes>& /*result*/, bool cancelled) {
-      ASYNC_CORO_ASSERT(with_destroy);
+      // destroy continuation
+      continue_callback_holder continuation{std::move(awaiter._continue_f)};
+    }
 
-      auto* clb = static_cast<on_continue_callback*>(base)->_awaiter;
+    void on_execute_and_destroy(promise_result<TRes>& /*result*/, bool cancelled) {
+      auto& awaiter = this->get_owner(&handle_awaiter::_continue_callback);
 
-      if (!clb->_was_continued.exchange(true, std::memory_order::relaxed)) {
-        continue_callback::ptr continuation{std::exchange(clb->_continue_f, nullptr)};
-        ASYNC_CORO_ASSERT(continuation != nullptr);
+      continue_callback_holder continuation{std::move(awaiter._continue_f)};
+      ASYNC_CORO_ASSERT(continuation);
 
-        clb->set_can_be_freed();
-
-        while (continuation) {
-          std::tie(continuation, cancelled) = continuation.release()->execute_and_destroy(cancelled);
-        }
-      } else {
-        clb->set_can_be_freed();
+      while (continuation) {
+        std::tie(continuation, cancelled) = continuation.execute_and_destroy(cancelled);
       }
     }
-
-    static void deleter(callback_base* base) noexcept {
-      static_cast<on_continue_callback*>(base)->_awaiter->set_can_be_freed();
-    }
-
-   private:
-    handle_awaiter* _awaiter;
   };
 
  private:
-  std::atomic_bool _can_be_freed{true};
   task_handle<TRes> _handle;
-  continue_callback* _continue_f = nullptr;
-  on_continue_callback _continue_callback;
-  std::atomic_bool _was_continued{false};
+  continue_callback_atomic_ptr _continue_f = nullptr;
+  external_continue_callback _continue_callback;
 };
 
 }  // namespace async_coro::internal
