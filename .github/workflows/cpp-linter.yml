@@ -49,7 +49,7 @@ jobs:
       contents: write
     steps:
       - name: Trigger gatekeeper for PR approval
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           event-type: check-finished
           client-payload: |
