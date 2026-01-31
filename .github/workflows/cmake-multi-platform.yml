@@ -77,7 +77,7 @@ jobs:
   
     - name: Archive run logs
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: gcc-run-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
@@ -153,7 +153,7 @@ jobs:
     
     - name: Archive run logs
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: ${{matrix.os}}-clang-run-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
@@ -217,7 +217,7 @@ jobs:
     
     - name: Archive run logs
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: msvc-run-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
@@ -308,7 +308,7 @@ jobs:
     
     - name: Archive run logs
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: ${{matrix.os}}-run-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
