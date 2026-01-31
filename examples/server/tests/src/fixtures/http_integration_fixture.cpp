@@ -6,6 +6,8 @@
 #include <server/http1/response.h>
 #include <server/tcp_server_config.h>
 
+#include <semaphore>
+
 void http_integration_fixture::SetUp() {
   setup_routes();
 

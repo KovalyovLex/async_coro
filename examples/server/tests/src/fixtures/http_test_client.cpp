@@ -45,7 +45,7 @@ http_test_client::http_test_client(std::string host, uint16_t port, std::chrono:
 
   sockaddr_in sa{};
   sa.sin_family = AF_INET;
-  sa.sin_port = ::htons(port);
+  sa.sin_port = htons(port);
   if (::inet_pton(AF_INET, _host.c_str(), &sa.sin_addr) != 1) {
     ::close(sock);
     return;
