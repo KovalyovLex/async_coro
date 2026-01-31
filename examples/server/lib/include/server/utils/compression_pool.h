@@ -219,7 +219,7 @@ class pooled_compressor {
 };
 
 // Pool for managing compressor/decompressor instances
-class compression_pool : std::enable_shared_from_this<compression_pool> {
+class compression_pool : public std::enable_shared_from_this<compression_pool> {
  public:
   using ptr = std::shared_ptr<compression_pool>;
 

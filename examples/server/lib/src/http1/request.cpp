@@ -282,7 +282,7 @@ struct request::parser {
     }
     if (state == parse_state::reading_body) {
       if (!is_chunked) {
-        if (req._bytes.size() - body_start >= *content_length) {
+        if (req._bytes.size() - body_start >= content_length.value_or(0)) {
           // finished read
           state = parse_state::finished;
         }

@@ -1,5 +1,7 @@
 #pragma once
 
+// NOLINTBEGIN(*macro-usage)
+
 #ifdef _WIN32
 
 #define WIN_SOCKET 1
@@ -37,6 +39,8 @@ static_assert(false, "Unsupported platform");
 #define NOMINMAX
 #include <WinSock2.h>
 #endif
+
+// NOLINTEND(*macro-usage)
 
 namespace server::socket_layer {
 

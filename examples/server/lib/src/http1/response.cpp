@@ -39,7 +39,7 @@ void response::set_status(status_code status) noexcept {
   _reason = as_string(status);
 }
 
-void response::set_status(http_error &&error) noexcept {
+void response::set_status(http_error &&error) {
   _status_code = error.status_code;
 
   std::visit(

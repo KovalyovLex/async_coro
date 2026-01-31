@@ -126,7 +126,7 @@ bool zstd_decompress::flush_impl(std::span<const std::byte>& data_in, std::span<
     return false;
   }
 
-  if (remaining == 0 || (_depleted && data_in.size() == 0)) {
+  if (remaining == 0 || (_depleted && data_in.empty())) {
     _depleted = true;
     finished = true;
   }

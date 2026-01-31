@@ -31,7 +31,7 @@ class response {
   // Sets status code and reason. Reason will be default explanation: as_string (status)
   void set_status(status_code status) noexcept;
   // Sets status code reason and body of message.
-  void set_status(http_error&& error) noexcept;
+  void set_status(http_error&& error);
   // Sets status code and reason as dynamic string
   void set_status(http_status_code status, std::string_view reason);
   // Sets status code and reason

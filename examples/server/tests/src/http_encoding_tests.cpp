@@ -168,7 +168,7 @@ class http_encoding_tests : public http_integration_fixture, public compression_
 
     std::string_view body = get_body(resp);
     auto cnt_len = get_content_length(resp);
-    ASSERT_TRUE(cnt_len);
+    ASSERT_TRUE(cnt_len.has_value());
     EXPECT_EQ(*cnt_len, body.size());
     EXPECT_NE(body, str_view);
 

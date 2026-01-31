@@ -292,7 +292,7 @@ async_coro::task<void> ws_session::run(const server::http1::request& handshake_r
 #if SERVER_HAS_ZLIB
     // Add Sec-WebSocket-Extensions header to response if permessage-deflate is enabled
     std::string deflate_ext;
-    if (is_permessage_deflate_used()) {
+    if (_used_config) {
       deflate_ext = _used_config->get_extension_string();
       res.add_header(static_string{"Sec-WebSocket-Extensions"}, static_string{deflate_ext});
     }
@@ -485,7 +485,7 @@ async_coro::task<void> ws_session::send_data_impl(const response_frame& res_fram
   std::vector<std::byte> compressed_data_buffer;
 
   // Compress only for data frames (not control frames) if compression is enabled
-  if (is_permessage_deflate_used() && dec_code < k_control_codes_begin) {
+  if (_used_config && dec_code < k_control_codes_begin) {
     auto compress_result = compress_frame_payload(compressed_data_buffer, _compressor, data, last_chunk, _used_config->server_no_context_takeover);
     if (!compress_result) {
       if (!_conn.is_closed()) {
