@@ -1,4 +1,6 @@
-#include <async_coro/callback.h>
+#include <async_coro/utils/allocate_callback.h>
+#include <async_coro/utils/callback_fwd.h>
+#include <async_coro/utils/callback_ptr.h>
 #include <gtest/gtest.h>
 
 namespace callback_tests {
@@ -12,7 +14,7 @@ struct destructor_checker {
 
 TEST(callback, create_and_execute) {
   int result{0};
-  auto* callback = async_coro::callback<int(int)>::allocate([&](int value) noexcept {
+  auto* callback = async_coro::callback_ptr<int(int)>::allocate([&](int value) noexcept {
                      result = value;
                      return value;
                    }).release();
@@ -29,7 +31,7 @@ TEST(callback, allocate_callback_deduced) {
     return value;
   });
 
-  callback->execute(10);
+  callback.execute_and_destroy(10);
   EXPECT_EQ(result, 10);
 }
 
@@ -40,7 +42,7 @@ TEST(callback, allocate_callback_deduced_noexcept) {
     return result;
   });
 
-  EXPECT_FLOAT_EQ(callback->execute(10), 10.0f);
+  EXPECT_FLOAT_EQ(callback.execute_and_destroy(10), 10.0f);
   EXPECT_FLOAT_EQ(result, 10.0f);
 }
 
@@ -73,7 +75,7 @@ TEST(callback, check_destructor_manual_destroy) {
 
   bool destructed = false;
 
-  auto* callback = async_coro::callback<void()>::allocate([c = destructor_checker{destructed}]() noexcept {}).release();
+  auto* callback = async_coro::callback_ptr<void()>::allocate([c = destructor_checker{destructed}]() noexcept {}).release();
   callback->destroy();
 
   EXPECT_TRUE(destructed);
@@ -91,7 +93,7 @@ TEST(callback, different_argument_types) {
         s = val3;
       });
 
-  cb->execute(42, 3.14, "hello");
+  cb.execute_and_destroy(42, 3.14, "hello");
 
   EXPECT_EQ(i, 42);
   EXPECT_DOUBLE_EQ(d, 3.14);
@@ -110,7 +112,7 @@ TEST(callback, different_argument_types_noexcept) {
         s = val3;
       });
 
-  cb->execute(42, 3.14, "hello");
+  cb.execute_and_destroy(42, 3.14, "hello");
 
   EXPECT_EQ(i, 42);
   EXPECT_DOUBLE_EQ(d, 3.14);
@@ -128,7 +130,7 @@ TEST(callback, different_captured_types) {
       });
 
   captured_by_ref = 30;  // Modify after capture
-  cb->execute(40);
+  cb.execute_and_destroy(40);
 
   EXPECT_EQ(result, 10 + 30 + 40);
 }
@@ -144,7 +146,7 @@ TEST(callback, different_captured_types_noexcept) {
       });
 
   captured_by_ref = 30;  // Modify after capture
-  cb->execute(40);
+  cb.execute_and_destroy(40);
 
   EXPECT_EQ(result, 10 + 30 + 40);
 }

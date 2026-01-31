@@ -1,26 +1,40 @@
 #pragma once
 
-#include <async_coro/callback.h>
 #include <async_coro/config.h>
+#include <async_coro/utils/callback_fwd.h>
+#include <async_coro/utils/callback_ptr.h>
 
+#include <cstddef>
 #include <tuple>
+#include <utility>
 
 namespace async_coro::internal {
 
-class continue_callback;
-
-using callback_sig = std::tuple<std::unique_ptr<continue_callback, callback_base::deleter>, bool>(bool);
+class continue_callback_holder;
 
 // Callback type to store on stack. For use in continue_after_complete method for advanced awaiters
-class continue_callback : public callback<callback_sig> {
-  using super = callback<callback_sig>;
+using continue_callback = callback<std::tuple<continue_callback_holder, bool>(bool)>;
 
+using continue_callback_ptr = callback_ptr<std::tuple<continue_callback_holder, bool>(bool)>;
+
+using continue_callback_atomic_ptr = callback_atomic_ptr<std::tuple<continue_callback_holder, bool>(bool)>;
+
+// RAII holder of callback
+class continue_callback_holder : public callback_ptr<std::tuple<continue_callback_holder, bool>(bool)> {
  public:
-  using ptr = std::unique_ptr<continue_callback, callback_base::deleter>;
-  using return_type = std::tuple<ptr, bool>;
+  using ptr = callback_ptr<std::tuple<continue_callback_holder, bool>(bool)>;
+  using atomic_ptr = callback_atomic_ptr<std::tuple<continue_callback_holder, bool>(bool)>;
 
-  explicit continue_callback(super::executor_t executor, super::deleter_t deleter = nullptr) noexcept
-      : super(executor, deleter) {}
+  continue_callback_holder() noexcept : ptr(nullptr) {}
+  continue_callback_holder(std::nullptr_t) noexcept : ptr(nullptr) {}  // NOLINT(*explicit*)
+
+  continue_callback_holder(ptr clb) noexcept  // NOLINT(*explicit*)
+      : ptr(std::move(clb)) {
+  }
+
+  continue_callback_holder(atomic_ptr clb) noexcept  // NOLINT(*explicit*)
+      : ptr(clb.release()) {
+  }
 };
 
 }  // namespace async_coro::internal
