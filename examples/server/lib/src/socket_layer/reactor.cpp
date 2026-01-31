@@ -15,7 +15,9 @@
 #include <wepoll.h>
 #else
 #include <sys/epoll.h>
-#endif
+#endif  // WIN_SOCKET
+#elif KQUEUE_SOCKET
+#include <sys/event.h>
 #endif
 
 namespace server::socket_layer {

@@ -332,7 +332,7 @@ std::pair<std::string, uint16_t> listener::get_address() {
   if (::getsockname(_opened_connection.get_platform_id(), reinterpret_cast<sockaddr*>(&sock_addr), &len) != 0) {  // NOLINT(*reinterpret-cast*)
     return {};
   }
-  uint16_t port = ::ntohs(sock_addr.sin_port);
+  uint16_t port = ntohs(sock_addr.sin_port);
 
   std::array<char, INET_ADDRSTRLEN> str{};
 

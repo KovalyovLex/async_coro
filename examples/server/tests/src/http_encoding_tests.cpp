@@ -1,4 +1,7 @@
+#include <async_coro/task.h>
+#include <async_coro/thread_safety/unique_lock.h>
 #include <gtest/gtest.h>
+#include <server/http1/response.h>
 
 #include <array>
 #include <charconv>
@@ -6,11 +9,8 @@
 #include <span>
 #include <string_view>
 
-#include "async_coro/task.h"
-#include "async_coro/thread_safety/unique_lock.h"
 #include "fixtures/compression_helper.h"
 #include "fixtures/http_integration_fixture.h"
-#include "server/http1/response.h"
 
 class http_encoding_tests : public http_integration_fixture, public compression_helper {
  protected:

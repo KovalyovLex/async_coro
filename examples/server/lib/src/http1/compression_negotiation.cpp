@@ -2,7 +2,6 @@
 
 #include <cctype>
 #include <charconv>
-#include <memory_resource>
 
 namespace server {
 
