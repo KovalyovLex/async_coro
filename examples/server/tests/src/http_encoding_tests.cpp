@@ -169,7 +169,7 @@ class http_encoding_tests : public http_integration_fixture, public compression_
     std::string_view body = get_body(resp);
     auto cnt_len = get_content_length(resp);
     ASSERT_TRUE(cnt_len.has_value());
-    EXPECT_EQ(*cnt_len, body.size());
+    EXPECT_EQ(*cnt_len, body.size());  // NOLINT(*unchecked-optional-access) bug, check happened earlier
     EXPECT_NE(body, str_view);
 
     auto decoder = compression_pool->acquire_decompressor(enc);

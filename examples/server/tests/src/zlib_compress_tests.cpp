@@ -441,7 +441,7 @@ TEST(zlib_compress, move_semantics_deflate) {
 
     // After move, compressor2 should be valid and have taken ownership
     EXPECT_TRUE(compressor2.is_valid());
-    EXPECT_FALSE(compressor1.is_valid());  // NOLINT(*use-after-move)
+    EXPECT_FALSE(compressor1.is_valid());  // NOLINT(*use-after-move, *access-moved)
 
     std::array<std::byte, 4096> buffer;  // NOLINT(*init)
     std::span<const std::byte> input_data(input);
