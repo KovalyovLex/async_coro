@@ -46,13 +46,19 @@ union non_initialised_value {
 #endif
   }
 
-  constexpr T& get_value() noexcept {
+  constexpr T& get_value() & noexcept {
     ASYNC_CORO_ASSERT(_val._initialized);
 
     return get_ref();
   }
 
-  constexpr const T& get_value() const noexcept {
+  constexpr T&& get_value() && noexcept {
+    ASYNC_CORO_ASSERT(_val._initialized);
+
+    return std::move(get_ref());
+  }
+
+  constexpr const T& get_value() const& noexcept {
     ASYNC_CORO_ASSERT(_val._initialized);
 
     return get_ref();
