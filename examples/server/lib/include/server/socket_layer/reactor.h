@@ -23,7 +23,7 @@ class reactor {
     closed,
   };
 
-  using continue_callback_t = async_coro::unique_function<void(connection_state), sizeof(async_coro::internal::await_callback_base<connection_state>::continue_callback_t)>;
+  using continue_callback_t = async_coro::unique_function<void(connection_state), sizeof(async_coro::internal::await_continue_callback<connection_state>)>;
 
   reactor() noexcept;
   reactor(const reactor&) = delete;
