@@ -185,6 +185,13 @@ static socket_type open_socket_impl(const std::string& ip_address, uint16_t port
     // ip address provided
     listen_socket = ::socket(AF_INET, SOCK_STREAM, 0);
 
+    if (listen_socket == -1) {
+      if (error_message != nullptr) {
+        *error_message = "Could not open socket";
+      }
+      return invalid_socket_id;
+    }
+
     // Use the user specified IP address
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
