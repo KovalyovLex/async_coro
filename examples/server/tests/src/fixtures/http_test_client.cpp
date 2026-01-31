@@ -132,7 +132,7 @@ std::string http_test_client::read_response() {
         std::string_view cnt_len_str;
         if (cnt_start_i != std::string_view::npos) {
           cnt_len_str = headers.substr(cnt_start_i + k_content_len.size());
-          cnt_len_str.substr(0, cnt_len_str.find('\n'));
+          cnt_len_str = cnt_len_str.substr(0, cnt_len_str.find('\n'));
           while (!cnt_len_str.empty() && cnt_len_str.front() == ' ') {
             cnt_len_str.remove_prefix(1);
           }
