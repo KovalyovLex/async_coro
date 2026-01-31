@@ -21,7 +21,7 @@ async_coro::task<expected<void, std::string>> request_frame::read_payload(socket
   std::span data{payload.get(), payload_length};
 
   if (!rest_data_in_buffer.empty()) {
-    const auto n_copy = std::min(payload_length, rest_data_in_buffer.size());
+    const auto n_copy = std::min<size_t>(payload_length, rest_data_in_buffer.size());
     std::memcpy(data.data(), rest_data_in_buffer.data(), n_copy);
     data = data.subspan(n_copy);
   }
