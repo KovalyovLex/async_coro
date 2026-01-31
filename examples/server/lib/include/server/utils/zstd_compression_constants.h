@@ -19,13 +19,13 @@ struct window_log {
 
 class compression_config {
  public:
-  compression_level compression_level = {};
-  window_log window_log = {};
+  compression_level compression = {};
+  window_log window = {};
 };
 
 class decompression_config {
  public:
-  window_log window_log = {};
+  window_log window = {};
 };
 
 }  // namespace server::zstd

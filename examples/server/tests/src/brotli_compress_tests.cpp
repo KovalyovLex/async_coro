@@ -17,7 +17,7 @@ namespace server {
 std::vector<std::byte> compress_data_brotli(std::span<const std::byte> input_data,
                                             brotli::compression_level level,
                                             brotli::window_bits window = {}) {
-  brotli_compress compressor(brotli::compression_config{.window_bits = window, .compression_level = level});
+  brotli_compress compressor(brotli::compression_config{.window = window, .compression = level});
   EXPECT_TRUE(compressor.is_valid());
 
   std::vector<std::byte> output;
@@ -524,7 +524,7 @@ TEST(brotli_compress, different_window_bits) {
 
   // Test different window sizes (brotli supports 10-24)
   for (uint8_t window_bits : {10, 16, 22}) {
-    brotli_compress compressor(brotli::compression_config{.window_bits = brotli::window_bits{window_bits}});
+    brotli_compress compressor(brotli::compression_config{.window = brotli::window_bits{window_bits}});
     EXPECT_TRUE(compressor.is_valid()) << "Failed at window_bits=" << static_cast<int>(window_bits);
 
     std::vector<std::byte> output;
@@ -591,7 +591,7 @@ TEST(brotli_compress, large_block_size) {
   std::vector<std::byte> input(text_span.begin(), text_span.end());
 
   // Test with larger block size (lgblock values typically 16-24, 0 = automatic)
-  brotli_compress compressor(brotli::compression_config{.lgblock = brotli::lgblock{18}});
+  brotli_compress compressor(brotli::compression_config{.block = brotli::lgblock{18}});
   EXPECT_TRUE(compressor.is_valid());
 
   std::vector<std::byte> output;

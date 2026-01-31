@@ -31,59 +31,59 @@ struct frame_base {
   uint8_t byte1 = 0;
   uint8_t byte2 = 0;
 
-  [[nodiscard]] bool is_final() const noexcept {
+  [[nodiscard]] constexpr bool is_final() const noexcept {
     return (byte1 & 0b10000000U) != 0;
   }
 
-  void set_final(bool value) noexcept {
+  constexpr void set_final(bool value) noexcept {
     byte1 = (byte1 & 0b01111111U) | uint8_t(uint8_t(value) << 7U);
   }
 
-  [[nodiscard]] bool is_rsv1() const noexcept {
+  [[nodiscard]] constexpr bool is_rsv1() const noexcept {
     return (byte1 & 0b01000000U) != 0;
   }
 
-  void set_rsv1(bool value) noexcept {
+  constexpr void set_rsv1(bool value) noexcept {
     byte1 = (byte1 & 0b10111111U) | uint8_t(uint8_t(value) << 6U);
   }
 
-  [[nodiscard]] bool is_rsv2() const noexcept {
+  [[nodiscard]] constexpr bool is_rsv2() const noexcept {
     return (byte1 & 0b00100000U) != 0;
   }
 
-  void set_rsv2(bool value) noexcept {
+  constexpr void set_rsv2(bool value) noexcept {
     byte1 = (byte1 & 0b11011111U) | uint8_t(uint8_t(value) << 5U);
   }
 
-  [[nodiscard]] bool is_rsv3() const noexcept {
+  [[nodiscard]] constexpr bool is_rsv3() const noexcept {
     return (byte1 & 0b00010000U) != 0;
   }
 
-  void set_rsv3(bool value) noexcept {
+  constexpr void set_rsv3(bool value) noexcept {
     byte1 = (byte1 & 0b11101111U) | uint8_t(uint8_t(value) << 4U);
   }
 
-  [[nodiscard]] uint8_t get_opcode() const noexcept {
+  [[nodiscard]] constexpr uint8_t get_opcode() const noexcept {
     return (byte1 & 0b00001111U);
   }
 
-  void set_opcode(uint8_t value) noexcept {
+  constexpr void set_opcode(uint8_t value) noexcept {
     byte1 = (byte1 & 0b11110000U) | (value & 0b00001111U);
   }
 
-  [[nodiscard]] bool is_masked() const noexcept {
+  [[nodiscard]] constexpr bool is_masked() const noexcept {
     return (byte2 & 0b10000000U) != 0;
   }
 
-  void set_masked(bool value) noexcept {
+  constexpr void set_masked(bool value) noexcept {
     byte2 = (byte2 & 0b01111111U) | uint8_t(uint8_t(value) << 7U);
   }
 
-  [[nodiscard]] uint8_t get_payload_len() const noexcept {
+  [[nodiscard]] constexpr uint8_t get_payload_len() const noexcept {
     return (byte2 & 0b01111111U);
   }
 
-  void set_payload_len(uint8_t value) noexcept {
+  constexpr void set_payload_len(uint8_t value) noexcept {
     byte2 = (byte2 & 0b10000000U) | (value & 0b01111111U);
   }
 };

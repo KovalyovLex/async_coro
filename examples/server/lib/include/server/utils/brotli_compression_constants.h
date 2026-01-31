@@ -35,9 +35,9 @@ struct lgblock {
 
 class compression_config {
  public:
-  window_bits window_bits = {};
-  compression_level compression_level{compression_quality::default_quality};
-  lgblock lgblock = {};
+  window_bits window = {};
+  compression_level compression{compression_quality::default_quality};
+  lgblock block = {};
 };
 
 class decompression_config {

@@ -78,7 +78,7 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
   // Helper: compress payload using zlib (permessage-deflate)
   std::vector<std::byte> compress_payload(std::string_view payload, const compressor_config& conf) {
     if (!compressor) {
-      compressor = server::zlib_compress{server::zlib::compression_config{.method = server::zlib::compression_method::deflate, .window_bits = conf.client_window}};
+      compressor = server::zlib_compress{server::zlib::compression_config{.method = server::zlib::compression_method::deflate, .window = conf.client_window}};
     }
 
     std::vector<std::byte> compressed_payload;
@@ -160,7 +160,7 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
   // Helper: decompress payload using zlib (permessage-deflate)
   std::string decompress_payload(const std::vector<std::byte>& payload, const compressor_config& conf) {
     if (!decompressor) {
-      decompressor = server::zlib_decompress{server::zlib::decompression_config{.method = server::zlib::compression_method::deflate, .window_bits = conf.server_window}};
+      decompressor = server::zlib_decompress{server::zlib::decompression_config{.method = server::zlib::compression_method::deflate, .window = conf.server_window}};
     }
 
     std::vector<std::byte> decompressed_response;

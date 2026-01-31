@@ -16,7 +16,7 @@ namespace server {
 // Helper function to compress data
 std::vector<std::byte> compress_data_zstd(std::span<const std::byte> input_data,
                                           zstd::compression_level level) {
-  zstd_compress compressor(zstd::compression_config{.compression_level = level});
+  zstd_compress compressor(zstd::compression_config{.compression = level});
   EXPECT_TRUE(compressor.is_valid());
 
   std::vector<std::byte> output;
@@ -372,7 +372,7 @@ TEST(zstd_compress, dictionary_roundtrip) {
   }
 
   // Compress with dictionary
-  zstd_compress compressor(std::span<const std::byte>(dict), zstd::compression_config{.compression_level = zstd::compression_level{5}});
+  zstd_compress compressor(std::span<const std::byte>(dict), zstd::compression_config{.compression = zstd::compression_level{5}});
   ASSERT_TRUE(compressor.is_valid());
 
   std::vector<std::byte> output;

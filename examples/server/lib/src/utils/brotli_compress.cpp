@@ -52,7 +52,7 @@ void brotli_compress::deleter::operator()(brotli_compress::impl* ptr) const noex
 brotli_compress::brotli_compress() noexcept = default;
 
 brotli_compress::brotli_compress(brotli::compression_config conf)
-    : _impl(impl::make_impl(conf.compression_level, conf.window_bits, conf.lgblock)) {
+    : _impl(impl::make_impl(conf.compression, conf.window, conf.block)) {
 }
 
 brotli_compress::brotli_compress(brotli_compress&&) noexcept = default;

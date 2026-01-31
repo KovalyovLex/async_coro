@@ -17,7 +17,7 @@ namespace server {
 std::vector<std::byte> compress_data(std::span<const std::byte> input_data,
                                      zlib::compression_method method,
                                      zlib::compression_level level) {
-  zlib_compress compressor(zlib::compression_config{.method = method, .compression_level = level});
+  zlib_compress compressor(zlib::compression_config{.method = method, .compression = level});
   EXPECT_TRUE(compressor.is_valid());
 
   std::vector<std::byte> output;

@@ -277,8 +277,8 @@ async_coro::task<void> ws_session::run(const server::http1::request& handshake_r
       });
 
       if (_used_config) {
-        _compressor = zlib_compress{zlib::compression_config{.method = zlib::compression_method::deflate, .window_bits = zlib::window_bits{_used_config->server_max_window_bits}}};
-        _decompressor = zlib_decompress{zlib::decompression_config{.method = zlib::compression_method::deflate, .window_bits = zlib::window_bits{_used_config->client_max_window_bits}}};
+        _compressor = zlib_compress{zlib::compression_config{.method = zlib::compression_method::deflate, .window = zlib::window_bits{_used_config->server_max_window_bits}}};
+        _decompressor = zlib_decompress{zlib::decompression_config{.method = zlib::compression_method::deflate, .window = zlib::window_bits{_used_config->client_max_window_bits}}};
       }
     }
 #endif
@@ -310,7 +310,7 @@ async_coro::task<void> ws_session::run(const server::http1::request& handshake_r
 #endif
 
   while (true) {
-    frame_begin frame_beg;
+    frame_begin frame_beg{.buffer = {}};
     auto res = co_await _conn.read_buffer(frame_beg.buffer);
     if (!res) {
       if (_conn.is_closed()) {

@@ -31,9 +31,9 @@ struct memory_level {
 class compression_config {
  public:
   compression_method method = compression_method::deflate;
-  window_bits window_bits = {};
-  compression_level compression_level = {};
-  memory_level memory_level = {};
+  window_bits window = {};
+  compression_level compression = {};
+  memory_level memory = {};
 };
 
 static constexpr auto k_default_gzip_compression = compression_config{.method = zlib::compression_method::gzip};
@@ -42,7 +42,7 @@ static constexpr auto k_default_deflate_compression = compression_config{.method
 class decompression_config {
  public:
   compression_method method = compression_method::deflate;
-  window_bits window_bits = {};
+  window_bits window = {};
 };
 
 static constexpr auto k_default_gzip_decompression = decompression_config{.method = zlib::compression_method::gzip};

@@ -66,7 +66,7 @@ auto request_frame::make_frame(const frame_begin& frame_beg, size_t buffer_len) 
 
   using result_t = expected<frame_result, web_socket::ws_error>;
 
-  frame_result res{.frame{frame_beg}, .rest_data_in_buffer = {}};
+  frame_result res{.frame = request_frame{frame_beg}, .rest_data_in_buffer = {}};
 
   if (buffer_len < 2) {
     return result_t{unexpect, ws_error{ws_status_code::policy_violation, "Too small buffer were read"}};
