@@ -132,6 +132,13 @@ if(SERVER_ENABLE_ZSTD)
         if(NOT TARGET zstd)
             message(STATUS "Going to fetch zstd from source")
 
+            set(ZSTD_BUILD_STATIC ON)
+            set(ZSTD_BUILD_SHARED OFF)
+            set(ZSTD_FRAMEWORK OFF)
+            set(ZSTD_BUILD_PROGRAMS OFF)
+            set(ZSTD_BUILD_TESTS OFF)
+            set(ZSTD_BUILD_CONTRIB OFF)
+            
             FetchContent_Declare(
                 zstd
                 GIT_REPOSITORY https://github.com/facebook/zstd.git
@@ -140,6 +147,8 @@ if(SERVER_ENABLE_ZSTD)
                 GIT_PROGRESS TRUE
             )
             FetchContent_MakeAvailable(zstd)
+
+            set(zlib_targets libzstd)
         else()
              message(STATUS "Using predefined zstd target")
         endif()
