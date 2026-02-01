@@ -52,7 +52,18 @@ endif()
 if(SERVER_ENABLE_DEFLATE_GZIP)
     target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_DEFLATE_GZIP=1)
 
+    FetchContent_Declare(
+        ZLIB
+        URL https://zlib.net/zlib-1.3.1.tar.gz
+        URL_HASH SHA-256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23
+        DOWNLOAD_EXTRACT_TIMESTAMP NO
+        FIND_PACKAGE_ARGS
+    )
+
+    FetchContent_MakeAvailable(ZLIB)
+
     find_package(ZLIB REQUIRED)
+
     target_link_libraries(server_lib PUBLIC ZLIB::ZLIB)
 else()
     target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_DEFLATE_GZIP=0)
@@ -62,11 +73,15 @@ if(SERVER_ENABLE_BROTLI)
     target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_BROTLI=1)
 
     if (TARGET brotli::brotlienc)
+        message(STATUS "Using predefined brotli::brotlienc/brotli::brotlidec targets")
+
         set(brotli_targets brotli::brotlienc brotli::brotlidec)
     else()
         set(brotli_targets brotlienc brotlidec)
 
         if(NOT TARGET brotlienc)
+            message(STATUS "Going to fetch brotli from source")
+
             if (NOT DEFINED BROTLI_BUILD_TOOLS)
                 set(BROTLI_BUILD_TOOLS OFF CACHE BOOL "Disable brotli tools build")
             endif()
@@ -86,6 +101,8 @@ if(SERVER_ENABLE_BROTLI)
             FetchContent_MakeAvailable(brotli)
             
             set(BUILD_SHARED_LIBS ${OLD_BUILD_SHARED_LIBS})
+        else()
+            message(STATUS "Using predefined brotlienc and brotlidec targets")
         endif()
     endif()
 
@@ -98,11 +115,15 @@ if(SERVER_ENABLE_ZSTD)
     target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_ZSTD=1)
 
     if (TARGET zstd::libzstd)
+        message(STATUS "Using predefined zstd::libzstd target")
+
         set(zlib_targets zstd::libzstd)
     else()
         set(zlib_targets zstd)
 
         if(NOT TARGET zstd)
+            message(STATUS "Going to fetch zstd from source")
+
             FetchContent_Declare(
                 zstd
                 GIT_REPOSITORY https://github.com/facebook/zstd.git
@@ -111,6 +132,8 @@ if(SERVER_ENABLE_ZSTD)
                 GIT_PROGRESS TRUE
             )
             FetchContent_MakeAvailable(zstd)
+        else()
+             message(STATUS "Using predefined zstd target")
         endif()
     endif()
 
