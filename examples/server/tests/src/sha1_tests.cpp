@@ -116,6 +116,7 @@ TEST(sha1_hash, test_slow) {
 ASYNC_CORO_WARNINGS_PUSH
 ASYNC_CORO_WARNINGS_CLANG_IGNORE("deprecated-declarations")
 ASYNC_CORO_WARNINGS_GCC_IGNORE("deprecated-declarations")
+ASYNC_CORO_WARNINGS_MSVC_IGNORE(4996)
 
 TEST(sha1_hash, test_slow_open_ssl) {
   // https://www.di-mgt.com.au/sha_testvectors.html

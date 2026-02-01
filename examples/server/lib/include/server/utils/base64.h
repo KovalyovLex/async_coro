@@ -222,7 +222,7 @@ class base64_decoder {
   // NOLINTEND(*pointer*, *magic*, *array-index*)
 
  public:
-  enum class decode_policy : u_int8_t {
+  enum class decode_policy : uint8_t {
     // Checks whole string on valid base64 alphabet. In case of invalid symbol in the base64 string found, length of the result buffer will be zero
     strict_base64,
     // Checks whole string on valid base64 URL Safe alphabet. In case of invalid symbol in the base64 string found, length of the result buffer will be zero

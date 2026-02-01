@@ -5,6 +5,7 @@
 
 #if SERVER_HAS_BROTLI
 
+#include <array>
 #include <cstring>
 #include <span>
 #include <string>
@@ -523,9 +524,9 @@ TEST(brotli_compress, different_window_bits) {
   std::vector<std::byte> input(text_span.begin(), text_span.end());
 
   // Test different window sizes (brotli supports 10-24)
-  for (uint8_t window_bits : {10, 16, 22}) {
-    brotli_compress compressor(brotli::compression_config{.window = brotli::window_bits{window_bits}});
-    EXPECT_TRUE(compressor.is_valid()) << "Failed at window_bits=" << static_cast<int>(window_bits);
+  for (auto window_bits : {10, 16, 22}) {
+    brotli_compress compressor(brotli::compression_config{.window = brotli::window_bits{static_cast<uint8_t>(window_bits)}});
+    EXPECT_TRUE(compressor.is_valid()) << "Failed at window_bits=" << window_bits;
 
     std::vector<std::byte> output;
     std::array<std::byte, 4096> buffer;  // NOLINT(*init)

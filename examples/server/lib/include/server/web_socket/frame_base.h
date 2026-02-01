@@ -12,11 +12,11 @@ namespace server::web_socket {
 // bit mapped structure of beginning of the frame. See https://datatracker.ietf.org/doc/html/rfc6455#section-5.2
 // NOLINTBEGIN(*magic*)
 struct frame_base {
-  static constexpr u_int8_t k_max_size_1_byte = 125U;
+  static constexpr uint8_t k_max_size_1_byte = 125U;
   static constexpr uint16_t k_max_size_2_bytes = std::numeric_limits<uint16_t>::max() - 1;
   static constexpr uint64_t k_max_size_8_bytes = std::numeric_limits<uint64_t>::max() - 1;
-  static constexpr u_int8_t k_payload_len_2_bytes = 126U;
-  static constexpr u_int8_t k_payload_len_8_bytes = 127U;
+  static constexpr uint8_t k_payload_len_2_bytes = 126U;
+  static constexpr uint8_t k_payload_len_8_bytes = 127U;
 
   constexpr frame_base() noexcept = default;
   constexpr frame_base(bool final, uint8_t op_code, bool is_rsv1 = false, bool is_rsv2 = false, bool is_rsv3 = false) noexcept

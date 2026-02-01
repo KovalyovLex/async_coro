@@ -5,6 +5,7 @@
 
 #if SERVER_HAS_ZLIB
 
+#include <array>
 #include <cstring>
 #include <span>
 #include <string>

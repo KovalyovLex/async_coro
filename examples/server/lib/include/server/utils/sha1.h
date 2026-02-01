@@ -162,7 +162,7 @@ class sha1_hash {
 
     while (true) {
       const auto n_copy = std::min(n_remaining_bytes, k_block_size_bytes - _buffer_length_bytes);
-      append_bytes(bytes_ptr, n_copy);
+      append_bytes(bytes_ptr, static_cast<uint32_t>(n_copy));
 
       bytes_ptr += n_copy;  // NOLINT(*pointer*)
       n_remaining_bytes -= n_copy;
@@ -179,7 +179,7 @@ class sha1_hash {
   }
 
   constexpr void finalize() noexcept {
-    constexpr auto padding = char(0x80);
+    constexpr auto padding = static_cast<char>(0x80);
 
     /* Total number of hashed bits */
     uint64_t total_bits = (_transforms * k_block_size_bytes + _buffer_length_bytes) * 8;
@@ -362,7 +362,7 @@ class sha1_hash {
     constexpr std::string_view digits{"0123456789abcdef"};
     static_assert(digits.size() >= 0x0FU);
 
-    for (uint32_t i = 0, j = (buffer.size() - 1) * sizeof(uint32_t); i < buffer.size(); ++i, j -= sizeof(uint32_t)) {
+    for (uint32_t i = 0, j = uint32_t(buffer.size() - 1) * sizeof(uint32_t); i < buffer.size(); ++i, j -= sizeof(uint32_t)) {
       buffer[i] = digits[(value >> j) & 0x0FU];
     }
   }

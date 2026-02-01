@@ -5,7 +5,7 @@
 
 namespace server::details {
 
-static inline constexpr uint32_t k_base64_invalid_sym = -1;
+static inline constexpr uint32_t k_base64_invalid_sym = static_cast<uint32_t>(-1);
 using base64_decode_table_t = std::array<uint32_t, 256>;  // NOLINT(*magic*)
 
 // rfc4648 Decoding table for Base 64 Encoding

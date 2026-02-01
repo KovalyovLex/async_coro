@@ -4,6 +4,11 @@
 #include <optional>
 #include <string_view>
 
+// windows.h has very strange defines. We need to avoid them
+#undef GET
+#undef PUT
+#undef DELETE
+
 namespace server::http1 {
 
 enum class http_method : uint8_t {

@@ -7,7 +7,9 @@
 #include <server/utils/has_zlib.h>
 #include <server/utils/has_zstd.h>
 
+#include <array>
 #include <cstdint>
+#include <initializer_list>
 #include <memory>
 #include <variant>
 #include <vector>
@@ -52,6 +54,8 @@ std::string_view as_string(compression_encoding enc) noexcept;
 struct compression_config {
   static constexpr uint32_t default_max_pool_size = 16;
 
+  explicit constexpr compression_config(compression_encoding enc) noexcept : encoding(enc) {}
+
   compression_encoding encoding = compression_encoding::none;
   uint32_t max_pool_size = default_max_pool_size;  // Max compressors/decompressors to keep per encoding
 };
@@ -60,16 +64,16 @@ struct compression_config {
 struct compression_pool_config {
   std::vector<compression_config> encodings;
 
-  static constexpr auto k_all_encodings = {
+  static constexpr std::initializer_list<compression_config> k_all_encodings = {
 #if SERVER_HAS_ZSTD
-      compression_config{.encoding = compression_encoding::zstd},
+      compression_config{compression_encoding::zstd},
 #endif
 #if SERVER_HAS_BROTLI
-      compression_config{.encoding = compression_encoding::br},
+      compression_config{compression_encoding::br},
 #endif
 #if SERVER_HAS_ZLIB
-      compression_config{.encoding = compression_encoding::gzip},
-      compression_config{.encoding = compression_encoding::deflate},
+      compression_config{compression_encoding::gzip},
+      compression_config{compression_encoding::deflate},
 #endif
   };
 };

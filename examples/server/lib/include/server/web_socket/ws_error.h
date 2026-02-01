@@ -14,7 +14,7 @@ class ws_error {
 
   constexpr ws_error(uint16_t code, std::string_view msg) noexcept  // NOLINT(*member-init*)
       : _code(code),
-        _buf_len(std::min(k_max_message_length, msg.size())) {
+        _buf_len(static_cast<uint16_t>(std::min(k_max_message_length, msg.size()))) {
     for (uint16_t i = 0; i < _buf_len; i++) {
       _message_buf[i] = msg[i];  // NOLINT(*array*)
     }

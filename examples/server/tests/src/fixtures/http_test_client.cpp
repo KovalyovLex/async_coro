@@ -1,11 +1,19 @@
 #include "http_test_client.h"
 
+#include <server/socket_layer/connection_id.h>
+#include <server/socket_layer/socket_config.h>
+
+#if WIN_SOCKET
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <server/socket_layer/connection_id.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#endif
 
+#include <array>
 #include <charconv>
 #include <span>
 #include <string>
@@ -22,12 +30,13 @@ bool set_socket_timeouts(server::socket_layer::socket_type sock, std::chrono::mi
 
   const auto second = std::chrono::duration_cast<std::chrono::seconds>(timeout);
   timeval tv{};
-  tv.tv_sec = second.count();
-  tv.tv_usec = std::chrono::duration_cast<std::chrono::microseconds>(timeout - second).count();
-  if (::setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) != 0) {
+  tv.tv_sec = static_cast<long>(second.count());
+  tv.tv_usec = static_cast<long>(std::chrono::duration_cast<std::chrono::microseconds>(timeout - second).count());
+
+  if (::setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv)) != 0) {
     return false;
   }
-  if (::setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) != 0) {
+  if (::setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&tv), sizeof(tv)) != 0) {
     return false;
   }
   return true;
@@ -47,12 +56,12 @@ http_test_client::http_test_client(std::string host, uint16_t port, std::chrono:
   sa.sin_family = AF_INET;
   sa.sin_port = htons(port);
   if (::inet_pton(AF_INET, _host.c_str(), &sa.sin_addr) != 1) {
-    ::close(sock);
+    server::socket_layer::close_socket(sock);
     return;
   }
 
   if (::connect(sock, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) != 0) {
-    ::close(sock);
+    server::socket_layer::close_socket(sock);
     return;
   }
 
@@ -82,7 +91,7 @@ void http_test_client::try_send_all(std::span<const std::byte>& bytes) noexcept 
   }
 
   while (!bytes.empty()) {
-    ssize_t s = ::send(_connection.get_platform_id(), bytes.data(), bytes.size(), 0);
+    auto s = ::send(_connection.get_platform_id(), reinterpret_cast<const char*>(bytes.data()), static_cast<int>(bytes.size()), 0);
     if (s <= 0) {
       return;
     }
@@ -96,7 +105,7 @@ bool http_test_client::recv_bytes(std::span<std::byte>& bytes) noexcept {
   }
 
   if (!bytes.empty()) {
-    ssize_t r = ::recv(_connection.get_platform_id(), bytes.data(), bytes.size(), 0);
+    auto r = ::recv(_connection.get_platform_id(), reinterpret_cast<char*>(bytes.data()), static_cast<int>(bytes.size()), 0);
     if (r <= 0) {
       return false;
     }
