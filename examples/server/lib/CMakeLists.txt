@@ -64,7 +64,15 @@ if(SERVER_ENABLE_DEFLATE_GZIP)
 
     find_package(ZLIB REQUIRED)
 
-    target_link_libraries(server_lib PUBLIC ZLIB::ZLIB)
+    if (TARGET ZLIB::ZLIB)
+        message(STATUS "Using predefined ZLIB::ZLIB target")
+
+        set(zlib_targets ZLIB::ZLIB)
+    else()
+        set(zlib_targets zlib)
+    endif()
+
+    target_link_libraries(server_lib PUBLIC ${zlib_targets})
 else()
     target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_DEFLATE_GZIP=0)
 endif()
