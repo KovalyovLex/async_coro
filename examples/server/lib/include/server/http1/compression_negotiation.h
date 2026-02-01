@@ -31,6 +31,11 @@ class compression_negotiator {
   // Parses and add encoding preference to vector
   static void parse_accept_encoding(std::string_view header, std::pmr::vector<encoding_preference>& preferences) noexcept;
 
+  // Parse float of quality (q=x).
+  // It parses only numbers in range [0, 1] and 3 decimal digits long.
+  // q_value should start with q and contain = after with possible spaces between.
+  static std::optional<float> parse_quality_float(std::string_view q_value) noexcept;
+
  private:
   // Parse individual encoding preference token (e.g., "gzip;q=0.8")
   [[nodiscard]] static std::optional<encoding_preference> parse_token(std::string_view token) noexcept;

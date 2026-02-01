@@ -2,6 +2,9 @@
 
 #include <cctype>
 #include <charconv>
+#include <cstdint>
+#include <memory_resource>
+#include <string_view>
 
 namespace server {
 
@@ -75,39 +78,108 @@ std::optional<encoding_preference> compression_negotiator::parse_token(std::stri
     return pref;
   }
 
-  std::string_view after_q = q_part.substr(q_pos + 1);
+  const auto quality = parse_quality_float(q_part.substr(q_pos));
+  pref.quality = quality.value_or(1.0F);
+
+  return pref;
+}
+
+std::optional<float> compression_negotiator::parse_quality_float(std::string_view q_value) noexcept {
+  if (q_value.empty() || q_value.front() != 'q') {
+    return {};
+  }
+
+  std::string_view after_q = q_value.substr(1);
   // Skip whitespace after 'q'
   while (!after_q.empty() && after_q.front() == ' ') {
     after_q.remove_prefix(1);
   }
 
   if (after_q.empty() || after_q.front() != '=') {
-    return pref;
+    return {};
   }
 
-  after_q.remove_prefix(1);  // Skip '='
-  // Skip whitespace after '='
+  // remove first '='
+  after_q = after_q.substr(1);
+
+  // Skip whitespaces
   while (!after_q.empty() && after_q.front() == ' ') {
     after_q.remove_prefix(1);
   }
 
   if (after_q.empty()) {
-    return pref;
+    return {};
   }
 
-  std::string_view q_value = after_q;
-  // Remove trailing whitespace
-  while (!q_value.empty() && q_value.back() == ' ') {
-    q_value.remove_suffix(1);
+  // not all compilers still have support of float std::from_chars thats why we parse it manually
+
+  std::string_view decimal_part;
+  bool is_one = false;
+
+  switch (after_q.front()) {
+    case '1': {
+      if (after_q.size() == 1) {
+        return 1.0F;
+      }
+
+      is_one = true;
+      if (after_q[1] == '.') {
+        // '1.xxx' format
+        decimal_part = after_q.substr(2);
+      }
+      // wrong format
+      break;
+    }
+    case '0': {
+      if (after_q.size() == 1) {
+        return 0.0F;
+      }
+
+      if (after_q[1] == '.') {
+        // '0.xxx' format
+        decimal_part = after_q.substr(2);
+      }
+      // wrong format
+      break;
+    }
+    case '.': {
+      // '.xxx' format
+      decimal_part = after_q.substr(1);
+    }
+    default:
+      // wrong format
+      break;
   }
 
-  float quality = 1.0F;
-  const auto [ptr, ec] = std::from_chars(q_value.data(), q_value.data() + q_value.size(), quality);  // NOLINT(*-pointer-arithmetic)
-  if (ec == std::errc{} && quality >= 0.0F && quality <= 1.0F) {
-    pref.quality = quality;
+  if (decimal_part.empty()) {
+    return {};
   }
 
-  return pref;
+  if (decimal_part.size() > 3) {
+    // shrink decimal part to 3 numbers
+    decimal_part = decimal_part.substr(0, 3);
+  }
+
+  uint32_t dec_value = 0;
+  const auto [ptr, ec] = std::from_chars(decimal_part.data(), decimal_part.data() + decimal_part.size(), dec_value);  // NOLINT(*pointer-arithmetic)
+  if (ec != std::errc{}) {
+    return {};
+  }
+
+  if (is_one) {
+    if (dec_value > 0) {
+      // wrong format '1.x' where x > 0
+      return {};
+    }
+    return 1.0F;
+  }
+
+  const auto num_decs = static_cast<uint32_t>(ptr - decimal_part.data());
+  uint32_t delimiter = 1;
+  for (uint32_t i = 0; i < num_decs; i++) {
+    delimiter *= 10U;  // NOLINT(*magic-number*)
+  }
+  return float(dec_value) / float(delimiter);
 }
 
 void compression_negotiator::parse_accept_encoding(std::string_view header, std::pmr::vector<encoding_preference>& preferences) noexcept {
@@ -120,7 +192,7 @@ void compression_negotiator::parse_accept_encoding(std::string_view header, std:
     std::string_view token = header.substr(pos, end_pos - pos);
     auto pref = parse_token(token);
 
-    if (pref && pref->encoding != compression_encoding::none) {
+    if (pref) {
       preferences.push_back(*pref);
     }
 
@@ -163,7 +235,7 @@ compression_encoding compression_negotiator::negotiate(std::span<const encoding_
       // Client accepts any encoding with this quality
       // Find the highest priority server encoding
       const auto& encodings = _pool->get_config().encodings;
-      if (!encodings.empty()) {
+      if (!encodings.empty() && pref.quality >= best_quality) {
         best_encoding = encodings.back().encoding;
         best_quality = pref.quality;
         best_priority = encodings.size();
