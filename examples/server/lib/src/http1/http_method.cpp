@@ -3,6 +3,8 @@
 #include <optional>
 #include <string_view>
 
+#include "async_coro/config.h"
+
 namespace server::http1 {
 
 std::string_view as_string(http_method method) noexcept {
@@ -26,6 +28,8 @@ std::string_view as_string(http_method method) noexcept {
     case http_method::PATCH:
       return "PATCH";
   }
+  ASYNC_CORO_ASSERT(false && "Unhandled enum value of http_method");  // NOLINT(*static-assert)
+  return "";
 }
 
 std::optional<http_method> as_method(std::string_view str) noexcept {
