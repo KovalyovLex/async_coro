@@ -283,10 +283,11 @@ listener::connection_result listener::process_loop(std::span<char>* host_name_bu
   while (true) {
     const auto accept_sock = ::accept(_opened_connection.get_platform_id(), reinterpret_cast<sockaddr*>(&in_addr_storage), &in_len);  // NOLINT(*-reinterpret-cast)
     if (accept_sock == invalid_socket_id) {
-      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      const auto err = errno;
+      if (err == EAGAIN || err == EWOULDBLOCK) {
         return {.connection = invalid_connection, .type = listen_result_type::wait_for_connections};
       }
-      continue;
+      return {.connection = invalid_connection, .type = listen_result_type::try_again};
     }
 
     // set non blocking mode in case of error just silently close the socket

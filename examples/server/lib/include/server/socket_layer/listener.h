@@ -14,7 +14,8 @@ class listener {
  public:
   enum class listen_result_type : uint8_t {
     connected,
-    wait_for_connections
+    wait_for_connections,
+    try_again
   };
 
   struct connection_result {
