@@ -27,6 +27,8 @@ class compression_negotiator_tests : public ::testing::Test, public compression_
 
 // ==================== Tests for parse_quality_float ====================
 
+// NOLINTBEGIN(*unchecked-optional*)
+
 TEST_F(compression_negotiator_tests, parse_quality_float_valid_q_equals_1) {
   auto result = server::compression_negotiator::parse_quality_float("q=1");
   ASSERT_TRUE(result.has_value());
@@ -126,6 +128,8 @@ TEST_F(compression_negotiator_tests, parse_quality_float_truncates_many_decimals
   ASSERT_TRUE(result.has_value());
   EXPECT_FLOAT_EQ(*result, 0.999F);
 }
+
+// NOLINTEND(*unchecked-optional*)
 
 // Invalid inputs tests
 TEST_F(compression_negotiator_tests, parse_quality_float_empty_string) {
