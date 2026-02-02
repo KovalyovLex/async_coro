@@ -3,6 +3,7 @@
 #include <array>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 
 namespace server {

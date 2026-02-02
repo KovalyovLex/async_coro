@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <span>
+#include <string>
 #include <utility>
 
 namespace server::socket_layer {
