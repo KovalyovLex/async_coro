@@ -128,7 +128,7 @@ std::string http_test_client::read_response() {
   while (true) {
     auto bytes = std::as_writable_bytes(std::span<char>{buf});
     if (!recv_bytes(bytes)) {
-      break;
+      continue;
     }
     out.append(buf.data(), buf.data() + buf.size() - bytes.size());
 

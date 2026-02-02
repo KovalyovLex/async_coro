@@ -114,7 +114,7 @@ class sha1_hash {
     str_buffer_t buffer_str;
     uint32_t start_index = 0;
     for (auto val : digest) {
-      const auto bytes = std::span<char, 2>(&buffer_str[start_index], k_hex_len);
+      const auto bytes = std::span<char, 2>(&buffer_str[start_index], 2);
       byte_to_hex(bytes, val);
       start_index += 2;
     }
@@ -126,7 +126,7 @@ class sha1_hash {
     str_buffer_t buffer_str;
     uint32_t start_index = 0;
     for (auto val : digest) {
-      const auto bytes = std::span<char, 2>(&buffer_str[start_index], k_hex_len);
+      const auto bytes = std::span<char, 2>(&buffer_str[start_index], 2);
       byte_to_hex(bytes, val);
       start_index += 2;
     }
