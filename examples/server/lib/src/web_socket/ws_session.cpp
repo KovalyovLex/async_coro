@@ -1,3 +1,4 @@
+#include <async_coro/config.h>
 #include <server/http1/response.h>
 #include <server/utils/base64.h>
 #include <server/utils/has_zlib.h>
@@ -14,8 +15,6 @@
 #include <cstddef>
 #include <cstring>
 #include <memory>
-
-#include "async_coro/config.h"
 
 #if SERVER_HAS_ZLIB
 #include <server/utils/zlib_compress.h>
