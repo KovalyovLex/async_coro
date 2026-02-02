@@ -69,6 +69,10 @@ if(SERVER_ENABLE_DEFLATE_GZIP)
 
         set(zlib_targets ZLIB::ZLIB)
     else()
+        if (NOT TARGET zlib)
+            message(FATAL_ERROR "Unable to find zlib target")
+        endif()
+        
         set(zlib_targets zlib)
     endif()
 
@@ -107,8 +111,12 @@ if(SERVER_ENABLE_BROTLI)
             set(BUILD_SHARED_LIBS OFF)
             
             FetchContent_MakeAvailable(brotli)
-            
+
             set(BUILD_SHARED_LIBS ${OLD_BUILD_SHARED_LIBS})
+
+            if (NOT TARGET brotlienc)
+                message(FATAL_ERROR "Unable to find brotlienc target")
+            endif()
         else()
             message(STATUS "Using predefined brotlienc and brotlidec targets")
         endif()
@@ -138,19 +146,25 @@ if(SERVER_ENABLE_ZSTD)
             set(ZSTD_BUILD_PROGRAMS OFF)
             set(ZSTD_BUILD_TESTS OFF)
             set(ZSTD_BUILD_CONTRIB OFF)
-            
+            set(ZSTD_LEGACY_SUPPORT OFF)
+
             FetchContent_Declare(
                 zstd
                 GIT_REPOSITORY https://github.com/facebook/zstd.git
                 GIT_TAG v1.5.7
                 GIT_SHALLOW TRUE
                 GIT_PROGRESS TRUE
+                SOURCE_SUBDIR build/cmake
             )
             FetchContent_MakeAvailable(zstd)
 
+            if (NOT TARGET libzstd)
+                message(FATAL_ERROR "Unable to find libzstd target")
+            endif()
+
             set(zlib_targets libzstd)
         else()
-             message(STATUS "Using predefined zstd target")
+            message(STATUS "Using predefined zstd target")
         endif()
     endif()
 
