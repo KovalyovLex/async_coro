@@ -9,6 +9,7 @@
 #include <server/utils/static_string.h>
 #include <server/utils/string_storage.h>
 
+#include <string>
 #include <string_view>
 #include <vector>
 
