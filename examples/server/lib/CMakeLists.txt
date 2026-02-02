@@ -52,6 +52,8 @@ endif()
 if(SERVER_ENABLE_DEFLATE_GZIP)
     target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_DEFLATE_GZIP=1)
 
+    set(ZLIB_BUILD_EXAMPLES OFF)
+
     FetchContent_Declare(
         ZLIB
         URL https://zlib.net/zlib-1.3.1.tar.gz
@@ -69,11 +71,11 @@ if(SERVER_ENABLE_DEFLATE_GZIP)
 
         set(zlib_targets ZLIB::ZLIB)
     else()
-        if (NOT TARGET zlib)
-            message(FATAL_ERROR "Unable to find zlib target")
+        if (NOT TARGET zlibstatic)
+            message(FATAL_ERROR "Unable to find zlibstatic target")
         endif()
         
-        set(zlib_targets zlib)
+        set(zlib_targets zlibstatic)
     endif()
 
     target_link_libraries(server_lib PUBLIC ${zlib_targets})
