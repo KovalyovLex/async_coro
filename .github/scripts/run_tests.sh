@@ -13,18 +13,23 @@ echo "STDOUT: $STDOUT_LOG" >&2
 echo "STDERR: $STDERR_LOG" >&2
 
 # Run ctest with output redirected to files
-# stdout and stderr both go to files so they're preserved after cancellation
+# Both stdout and stderr are combined to stderr log to ensure we capture signal handler output
 ctest --output-on-failure >"$STDOUT_LOG" 2>"$STDERR_LOG"
 EXIT_CODE=$?
 
-# Also print to console for live visibility during test runs
+# Flush file buffers to disk
+sync "$STDOUT_LOG" "$STDERR_LOG" 2>/dev/null || true
+
+# Print to console for live visibility (last part only)
 if [ -f "$STDOUT_LOG" ]; then
-    tail -100 "$STDOUT_LOG"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] === Last 50 lines of STDOUT ===" >&2
+    tail -50 "$STDOUT_LOG" >&2
 fi
 
 echo "[$(date +'%Y-%m-%d %H:%M:%S')] ctest exited with code: $EXIT_CODE" >&2
+
 if [ -f "$STDERR_LOG" ]; then
-    echo "=== STDERR output ===" >&2
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] === STDERR output ===" >&2
     tail -50 "$STDERR_LOG" >&2
 fi
 
