@@ -75,9 +75,8 @@ jobs:
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
-        trap 'echo "[$(date +'"'"'%Y-%m-%d %H:%M:%S'"'"')] SIGTERM received by bash, killing ctest process..." >&2; kill %1 2>/dev/null; exit 143' TERM
-        ctest --output-on-failure &
-        wait $!
+        chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
+        ${{ github.workspace }}/.github/scripts/run_tests.sh
   
     - name: Archive run logs
       if: always()
@@ -155,9 +154,8 @@ jobs:
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
-        trap 'echo "[$(date +'"'"'%Y-%m-%d %H:%M:%S'"'"')] SIGTERM received by bash, killing ctest process..." >&2; kill %1 2>/dev/null; exit 143' TERM
-        ctest --output-on-failure &
-        wait $!
+        chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
+        ${{ github.workspace }}/.github/scripts/run_tests.sh
     
     - name: Archive run logs
       if: always()
@@ -315,9 +313,8 @@ jobs:
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
-        trap 'echo "[$(date +'"'"'%Y-%m-%d %H:%M:%S'"'"')] SIGTERM received by bash, killing ctest process..." >&2; kill %1 2>/dev/null; exit 143' TERM
-        ctest --output-on-failure &
-        wait $!
+        chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
+        ${{ github.workspace }}/.github/scripts/run_tests.sh
     
     - name: Archive run logs
       if: always()
