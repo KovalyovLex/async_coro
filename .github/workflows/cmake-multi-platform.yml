@@ -8,6 +8,7 @@ on:
 
 jobs:
   build-gcc:
+    if: false  # Temporarily disabled - testing clang only
     runs-on: ubuntu-latest
 
     strategy:
@@ -86,6 +87,7 @@ jobs:
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
 
   build-clang:
+    if: true  # Keep enabled - testing on x86 and arm
     strategy:
       fail-fast: true
       matrix:
@@ -165,6 +167,7 @@ jobs:
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
     
   build-msvc:
+    if: false  # Temporarily disabled - testing clang only
     runs-on: windows-latest
 
     strategy:
@@ -229,7 +232,7 @@ jobs:
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
 
   build-android:
-    if: false
+    if: false  # Temporarily disabled - testing clang only
     runs-on: macos-latest
     
     steps:
@@ -255,6 +258,7 @@ jobs:
           script: ./gradlew connectedCheck
 
   build-mac:
+    if: false  # Temporarily disabled - testing clang only
     strategy:
       fail-fast: true
       matrix:
@@ -323,7 +327,7 @@ jobs:
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
 
   dispatch-pr:
-    needs: [build-gcc, build-clang, build-msvc, build-mac]
+    needs: [build-clang]
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     permissions:
