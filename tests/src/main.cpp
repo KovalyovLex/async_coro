@@ -18,9 +18,9 @@
 
 // NOLINTBEGIN(*array-index*, *vararg)
 
-static void write_all(int fd, const char *buf, size_t len) {
+static void write_all(const char *buf, size_t len) {
   while (len > 0) {
-    ssize_t n = write(fd, buf, len);
+    ssize_t n = write(STDOUT_FILENO, buf, len);
     if (n <= 0) {
       break;
     }
@@ -40,7 +40,7 @@ static void log_message(const char *msg) {
   const auto tid = (pid_t)syscall(SYS_gettid);
   snprintf(full_msg.data(), full_msg.size(), "[%s] PID=%d TID=%d: %s\n",
            timestamp_buf.data(), (int)pid, (int)tid, msg);
-  write_all(STDERR_FILENO, full_msg.data(), strlen(full_msg.data()));
+  write_all(full_msg.data(), strlen(full_msg.data()));
 }
 
 static void print_backtrace_to_stderr() {
@@ -62,13 +62,13 @@ static void print_backtrace_to_stderr() {
                        i, frames[i], info.dli_fname != nullptr ? info.dli_fname : "?",
                        (unsigned long)offset, symname);
       if (n > 0) {
-        write_all(STDERR_FILENO, buf.data(), (size_t)n);
+        write_all(buf.data(), (size_t)n);
       }
       free(dem);
     } else {
       if (symbols != nullptr && symbols[i] != nullptr) {
-        write_all(STDERR_FILENO, symbols[i], strlen(symbols[i]));
-        write_all(STDERR_FILENO, "\n", 1);
+        write_all(symbols[i], strlen(symbols[i]));
+        write_all("\n", 1);
       }
     }
   }
@@ -81,9 +81,9 @@ static void sigusr2_handler(int /*signo*/, siginfo_t * /*info*/, void * /*uconte
   const auto tid = (pid_t)syscall(SYS_gettid);
   int n = snprintf(hdr.data(), hdr.size(), "=== [RECEIVED SIGUSR2] Backtrace for thread %d ===", (int)tid);
   if (n > 0) {
-    write_all(STDERR_FILENO, "\n", 1);
-    write_all(STDERR_FILENO, hdr.data(), (size_t)n);
-    write_all(STDERR_FILENO, "\n", 1);
+    write_all("\n", 1);
+    write_all(hdr.data(), (size_t)n);
+    write_all("\n", 1);
   }
   print_backtrace_to_stderr();
 }
