@@ -75,7 +75,7 @@ jobs:
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
-        trap 'kill %1 2>/dev/null; exit 143' TERM
+        trap 'echo "[$(date +'"'"'%Y-%m-%d %H:%M:%S'"'"')] SIGTERM received by bash, killing ctest process..." >&2; kill %1 2>/dev/null; exit 143' TERM
         ctest --output-on-failure &
         wait $!
   
@@ -155,7 +155,7 @@ jobs:
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
-        trap 'kill %1 2>/dev/null; exit 143' TERM
+        trap 'echo "[$(date +'"'"'%Y-%m-%d %H:%M:%S'"'"')] SIGTERM received by bash, killing ctest process..." >&2; kill %1 2>/dev/null; exit 143' TERM
         ctest --output-on-failure &
         wait $!
     
@@ -315,7 +315,7 @@ jobs:
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
-        trap 'kill %1 2>/dev/null; exit 143' TERM
+        trap 'echo "[$(date +'"'"'%Y-%m-%d %H:%M:%S'"'"')] SIGTERM received by bash, killing ctest process..." >&2; kill %1 2>/dev/null; exit 143' TERM
         ctest --output-on-failure &
         wait $!
     
