@@ -73,7 +73,10 @@ jobs:
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
-      run: ctest --output-on-failure
+      run: |
+        trap 'kill %1 2>/dev/null; exit 143' TERM
+        ctest --output-on-failure &
+        wait $!
   
     - name: Archive run logs
       if: always()
@@ -149,7 +152,10 @@ jobs:
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
-      run: ctest --output-on-failure
+      run: |
+        trap 'kill %1 2>/dev/null; exit 143' TERM
+        ctest --output-on-failure &
+        wait $!
     
     - name: Archive run logs
       if: always()
@@ -304,7 +310,10 @@ jobs:
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
-      run: ctest --output-on-failure
+      run: |
+        trap 'kill %1 2>/dev/null; exit 143' TERM
+        ctest --output-on-failure &
+        wait $!
     
     - name: Archive run logs
       if: always()
