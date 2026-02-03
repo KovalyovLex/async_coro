@@ -181,7 +181,10 @@ void execution_system::plan_execution(task_function func, execution_queue_mark e
   task_q.queue.push(std::move(func));
 
   for (auto* worker : task_q.workers_data) {
-    worker->notifier.notify();
+    if (worker->notifier.notify()) {
+      // leave others in sleeping state
+      return;
+    }
   }
 }
 
@@ -200,7 +203,10 @@ void execution_system::execute_or_plan_execution(task_function func, execution_q
   task_q.queue.push(std::move(func));
 
   for (auto* worker : task_q.workers_data) {
-    worker->notifier.notify();
+    if (worker->notifier.notify()) {
+      // leave others in sleeping state
+      return;
+    }
   }
 }
 
@@ -313,7 +319,10 @@ void execution_system::timer_loop() {
     target_task_q.queue.push(std::move(func));
 
     for (auto* worker : target_task_q.workers_data) {
-      worker->notifier.notify();
+      if (worker->notifier.notify()) {
+        // leave others in sleeping state
+        break;
+      }
     }
 
     lock.lock();
