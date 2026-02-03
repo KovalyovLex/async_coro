@@ -78,12 +78,41 @@ jobs:
         chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
         ${{ github.workspace }}/.github/scripts/run_tests.sh
   
+    - name: Cleanup on cancel (kill any orphaned processes)
+      if: cancelled()
+      run: |
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] Job cancelled - cleaning up orphaned processes..." >&2
+        pkill -9 ctest 2>/dev/null || true
+        pkill -9 async_coro_tests 2>/dev/null || true
+        sleep 1
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] Cleanup complete" >&2
+  
     - name: Archive run logs
       if: always()
       uses: actions/upload-artifact@v6
       with:
         name: gcc-run-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
+        if-no-files-found: ignore
+    
+    - name: Fallback archive ctest output
+      if: always()
+      run: |
+        if [ -f "${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log" ]; then
+          cat "${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log" >> "${{ github.workspace }}/test-output.log"
+        fi
+        find "${{ steps.strings.outputs.build-output-dir }}/Testing" -name "*.log" 2>/dev/null | head -5 | while read f; do
+          echo "=== $f ===" >> "${{ github.workspace }}/test-output.log"
+          tail -100 "$f" >> "${{ github.workspace }}/test-output.log"
+        done
+    
+    - name: Upload fallback logs
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: gcc-logs-fallback${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
+        path: ${{ github.workspace }}/test-output.log
+        if-no-files-found: ignore
 
   build-clang:
     if: true  # Keep enabled - testing on x86 and arm
@@ -157,12 +186,41 @@ jobs:
         chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
         ${{ github.workspace }}/.github/scripts/run_tests.sh
     
+    - name: Cleanup on cancel (kill any orphaned processes)
+      if: cancelled()
+      run: |
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] Job cancelled - cleaning up orphaned processes..." >&2
+        pkill -9 ctest 2>/dev/null || true
+        pkill -9 async_coro_tests 2>/dev/null || true
+        sleep 1
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] Cleanup complete" >&2
+    
     - name: Archive run logs
       if: always()
       uses: actions/upload-artifact@v6
       with:
         name: ${{matrix.os}}-clang-run-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
+        if-no-files-found: ignore
+    
+    - name: Fallback archive ctest output
+      if: always()
+      run: |
+        if [ -f "${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log" ]; then
+          cat "${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log" >> "${{ github.workspace }}/test-output.log"
+        fi
+        find "${{ steps.strings.outputs.build-output-dir }}/Testing" -name "*.log" 2>/dev/null | head -5 | while read f; do
+          echo "=== $f ===" >> "${{ github.workspace }}/test-output.log"
+          tail -100 "$f" >> "${{ github.workspace }}/test-output.log"
+        done
+    
+    - name: Upload fallback logs
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: ${{matrix.os}}-clang-logs-fallback${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
+        path: ${{ github.workspace }}/test-output.log
+        if-no-files-found: ignore
     
   build-msvc:
     if: false  # Temporarily disabled - testing clang only
