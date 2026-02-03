@@ -14,7 +14,7 @@ echo "STDERR: $STDERR_LOG" >&2
 
 # Run ctest with output redirected to files
 # Both stdout and stderr are combined to stderr log to ensure we capture signal handler output
-ctest --output-on-failure >"$STDOUT_LOG" 2>"$STDERR_LOG"
+./async_coro_tests --gtest_repeat=30 >"$STDOUT_LOG" 2>"$STDERR_LOG"
 EXIT_CODE=$?
 
 # Flush file buffers to disk
