@@ -25,18 +25,44 @@ if (TSAN_ENABLED AND NOT WIN32)
   endif()
 endif()
 
+# keep debug symbols in binary for dladdr resolution
+if (NOT WIN32)
+  add_compile_options(-g3 -fno-omit-frame-pointer)
+  add_link_options(-g3)
+endif()
+
+include(FetchContent)
+
+# setup googletest
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG v1.17.0
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+    FIND_PACKAGE_ARGS
+)
+
 set(gtest_force_shared_crt ON CACHE BOOL "Force use dynamic libs in tests" FORCE)
-add_subdirectory(googletest)
+
+FetchContent_MakeAvailable(googletest)
 
 include(CTest)
 include(GoogleTest)
 
+if (TARGET gtest_main)
+  set_target_properties(gtest_main PROPERTIES EXCLUDE_FROM_ALL TRUE)
+endif()
+if (TARGET gmock_main)
+  set_target_properties(gmock_main PROPERTIES EXCLUDE_FROM_ALL TRUE)
+endif()
+
+# setup main lib project
 add_subdirectory(async_coro)
 
 file(GLOB_RECURSE tests_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "tests/src/**.h" "tests/src/**.cpp")
 
 if (ANDROID)
-  find_package(googletest REQUIRED CONFIG)
   find_package(junit-gtest REQUIRED CONFIG)
   find_library(
         # Sets the name of the path variable.
@@ -48,10 +74,10 @@ if (ANDROID)
 
   add_library(async_coro_tests SHARED ${tests_src})
 
-  target_link_libraries(async_coro_tests async_coro googletest::gtest junit-gtest::junit-gtest ${log-lib})
+  target_link_libraries(async_coro_tests async_coro gmock junit-gtest::junit-gtest ${log-lib})
 else()
   add_executable(async_coro_tests ${tests_src})
-  target_link_libraries(async_coro_tests async_coro gtest)
+  target_link_libraries(async_coro_tests async_coro gmock)
 endif()
 
 target_include_directories(async_coro_tests PRIVATE "tests/src")

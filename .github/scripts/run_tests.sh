@@ -8,6 +8,8 @@ BUILD_DIR="${1:-.}"
 PID_FILE="$BUILD_DIR/test_process.pid"
 LOG_FILE="$BUILD_DIR/test_output.log"
 
+rm -f "$LOG_FILE"
+
 echo "[$(date +'%Y-%m-%d %H:%M:%S')] Starting tests in foreground (PID: $$)..."
 echo "[$(date +'%Y-%m-%d %H:%M:%S')] Writing PID to $PID_FILE"
 echo "[$(date +'%Y-%m-%d %H:%M:%S')] Logging output to $LOG_FILE"
