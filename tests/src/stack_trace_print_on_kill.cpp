@@ -8,7 +8,6 @@
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <unwind.h>
 
 #include <array>
 #include <csignal>
@@ -41,47 +40,11 @@ struct stack_write_buffer {  // NOLINT(*member-init*)
   std::array<char, 20UL * 1024U> _buffer;
 };
 
-struct backtrace_state {
-  void **current = nullptr;
-  void **end = nullptr;
-};
-
-static _Unwind_Reason_Code unwind_callback(struct _Unwind_Context *context, void *arg) {
-  auto *state = reinterpret_cast<backtrace_state *>(arg);
-
-  const uintptr_t pc = _Unwind_GetIP(context);
-  if (pc != 0) {
-    if (state->current == state->end) {
-      return _URC_END_OF_STACK;
-    }
-    *state->current++ = reinterpret_cast<void *>(pc);  // NOLINT(*int-to-ptr*)
-  }
-
-  return _URC_NO_REASON;
-}
-
-static int get_backtrace(void **buffer, size_t buffer_size) {
-  backtrace_state state = {.current = buffer, .end = buffer + buffer_size};
-  _Unwind_Backtrace(unwind_callback, &state);
-
-  size_t frame_count = 0;
-  while (frame_count < buffer_size) {
-    if (buffer[frame_count] == nullptr) {
-      break;
-    }
-    frame_count++;
-  }
-
-  return (int)frame_count;
-}
-
 static void print_backtrace(stack_write_buffer &buffer) {
   std::array<void *, 64> frames{};
   std::array<char, 1300> buf;  // NOLINT(*init*)
 
-  // int frame_count = backtrace(frames.data(), frames.size());
-
-  int frame_count = get_backtrace(frames.data(), frames.size());
+  int frame_count = backtrace(frames.data(), frames.size());
 
   for (int i = 0; i < frame_count; ++i) {
     Dl_info info;
