@@ -82,10 +82,8 @@ jobs:
       if: cancelled()
       run: |
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] Force cleanup - killing test processes..." >&2
-        pkill -9 async_coro_tests 2>/dev/null || true
-        sleep 0.2
-        pkill -9 ctest 2>/dev/null || true
-        sleep 0.5
+        pkill async_coro_tests 2>/dev/null || true
+        sleep 1
         
         BUILD_DIR="${{ steps.strings.outputs.build-output-dir }}"
         STDOUT_LOG="$BUILD_DIR/ctest-stdout.log"
@@ -109,16 +107,6 @@ jobs:
         fi
         
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] Force cleanup complete" >&2
-  
-    - name: Upload ctest logs
-      if: always()
-      uses: actions/upload-artifact@v6
-      with:
-        name: gcc-ctest-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
-        path: |
-          ${{ steps.strings.outputs.build-output-dir }}/ctest-stdout.log
-          ${{ steps.strings.outputs.build-output-dir }}/ctest-stderr.log
-        if-no-files-found: ignore
     
     - name: Archive run logs
       if: always()
@@ -204,10 +192,8 @@ jobs:
       if: cancelled()
       run: |
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] Force cleanup - killing test processes..." >&2
-        pkill -9 async_coro_tests 2>/dev/null || true
-        sleep 0.2
-        pkill -9 ctest 2>/dev/null || true
-        sleep 0.5
+        pkill async_coro_tests 2>/dev/null || true
+        sleep 1
         
         BUILD_DIR="${{ steps.strings.outputs.build-output-dir }}"
         STDOUT_LOG="$BUILD_DIR/ctest-stdout.log"
@@ -232,42 +218,12 @@ jobs:
         
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] Force cleanup complete" >&2
     
-    - name: Upload ctest logs
-      if: always()
-      uses: actions/upload-artifact@v6
-      with:
-        name: ${{matrix.os}}-clang-ctest-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
-        path: |
-          ${{ steps.strings.outputs.build-output-dir }}/ctest-stdout.log
-          ${{ steps.strings.outputs.build-output-dir }}/ctest-stderr.log
-        if-no-files-found: ignore
-    
     - name: Archive run logs
       if: always()
       uses: actions/upload-artifact@v6
       with:
         name: ${{matrix.os}}-clang-run-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
-        if-no-files-found: ignore
-    
-    - name: Fallback archive ctest output
-      if: always()
-      run: |
-        if [ -f "${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log" ]; then
-          cat "${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log" >> "${{ github.workspace }}/test-output.log"
-        fi
-        find "${{ steps.strings.outputs.build-output-dir }}/Testing" -name "*.log" 2>/dev/null | head -5 | while read f; do
-          echo "=== $f ===" >> "${{ github.workspace }}/test-output.log"
-          tail -100 "$f" >> "${{ github.workspace }}/test-output.log"
-        done
-    
-    - name: Upload fallback logs
-      if: always()
-      uses: actions/upload-artifact@v6
-      with:
-        name: ${{matrix.os}}-clang-logs-fallback${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
-        path: ${{ github.workspace }}/test-output.log
-        if-no-files-found: ignore
     
   build-msvc:
     if: false  # Temporarily disabled - testing clang only
