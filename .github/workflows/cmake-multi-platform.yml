@@ -76,7 +76,13 @@ jobs:
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
         chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
-        ${{ github.workspace }}/.github/scripts/run_tests.sh
+        ${{ github.workspace }}/.github/scripts/run_tests.sh "${{ steps.strings.outputs.build-output-dir }}"
+  
+    - name: Signal cleanup on job cancellation
+      if: cancelled()
+      run: |
+        chmod +x ${{ github.workspace }}/.github/scripts/signal_cleanup.sh
+        ${{ github.workspace }}/.github/scripts/signal_cleanup.sh "${{ steps.strings.outputs.build-output-dir }}"
   
     - name: Archive run logs
       if: always()
@@ -156,7 +162,13 @@ jobs:
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
         chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
-        ${{ github.workspace }}/.github/scripts/run_tests.sh
+        ${{ github.workspace }}/.github/scripts/run_tests.sh "${{ steps.strings.outputs.build-output-dir }}"
+    
+    - name: Signal cleanup on job cancellation
+      if: cancelled()
+      run: |
+        chmod +x ${{ github.workspace }}/.github/scripts/signal_cleanup.sh
+        ${{ github.workspace }}/.github/scripts/signal_cleanup.sh "${{ steps.strings.outputs.build-output-dir }}"
     
     - name: Archive run logs
       if: always()
@@ -316,7 +328,13 @@ jobs:
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
         chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
-        ${{ github.workspace }}/.github/scripts/run_tests.sh
+        ${{ github.workspace }}/.github/scripts/run_tests.sh "${{ steps.strings.outputs.build-output-dir }}"
+    
+    - name: Signal cleanup on job cancellation
+      if: cancelled()
+      run: |
+        chmod +x ${{ github.workspace }}/.github/scripts/signal_cleanup.sh
+        ${{ github.workspace }}/.github/scripts/signal_cleanup.sh "${{ steps.strings.outputs.build-output-dir }}"
     
     - name: Archive run logs
       if: always()
