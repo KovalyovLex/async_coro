@@ -16,29 +16,35 @@ jobs:
       matrix:
         exceptions: [
           {
+            job_name: "Exept",
             name: "",
             cmake: -DASYNC_CORO_NO_EXCEPTIONS=FALSE
           },
           {
+            job_name: "No_exept",
             name: "-noexcept",
             cmake: -DASYNC_CORO_NO_EXCEPTIONS=TRUE
           },
         ]
         sanitizers: [
           {
+            job_name: "",
             name: "",
             cmake: -DASAN_ENABLED=FALSE
           },
           {
+            job_name: "TSAN, ",
             name: "-tsan",
             cmake: -DTSAN_ENABLED=TRUE
           },
           {
+            job_name: "ASAN, ",
             name: "-asan",
             cmake: -DASAN_ENABLED=TRUE
           }
         ]
 
+    name: GCC (x86) [${{matrix.sanitizers.job_name}}${{matrix.exceptions.job_name}}]
 
     steps:
     - uses: actions/checkout@v6
@@ -97,33 +103,49 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm]
+        os: [
+          {
+            job_name: "x86",
+            name: ubuntu-latest
+          },
+          {
+            job_name: "arm",
+            name: ubuntu-24.04-arm
+          }
+        ]
         exceptions: [
           {
+            job_name: "Exept",
             name: "",
             cmake: -DASYNC_CORO_NO_EXCEPTIONS=FALSE
           },
           {
+            job_name: "No_exept",
             name: "-noexcept",
             cmake: -DASYNC_CORO_NO_EXCEPTIONS=TRUE
           },
         ]
         sanitizers: [
           {
+            job_name: "",
             name: "",
             cmake: -DASAN_ENABLED=FALSE
           },
           {
+            job_name: "TSAN, ",
             name: "-tsan",
             cmake: -DTSAN_ENABLED=TRUE
           },
           {
+            job_name: "ASAN, ",
             name: "-asan",
             cmake: -DASAN_ENABLED=TRUE
           }
         ]
     
-    runs-on: ${{matrix.os}}
+    runs-on: ${{matrix.os.name}}
+
+    name: Clang (${{matrix.os.job_name}}) [${{matrix.sanitizers.job_name}}${{matrix.exceptions.job_name}}]
 
     steps:
     - uses: actions/checkout@v6
@@ -174,7 +196,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: ${{matrix.os}}-clang-run-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
+        name: ${{matrix.os.name}}-clang-run-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
         if-no-files-found: ignore
     
@@ -187,20 +209,25 @@ jobs:
       matrix:
         exceptions: [
           {
+            job_name: "Exept",
             name: "",
             cmake: -DASYNC_CORO_NO_EXCEPTIONS=FALSE
           },
           {
+            job_name: "No_exept",
             name: "-noexcept",
             cmake: -DASYNC_CORO_NO_EXCEPTIONS=TRUE
           },
         ]
         sanitizers: [
           {
+            job_name: "",
             name: "",
             cmake: -DASAN_ENABLED=FALSE
           }
         ]
+
+    name: MsBuild (x86) [${{matrix.sanitizers.job_name}}${{matrix.exceptions.job_name}}]
 
     steps:
     - uses: actions/checkout@v6
@@ -274,29 +301,44 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [macos-15-intel, macos-26]
+        os: [
+          {
+            job_name: "x86",
+            name: macos-15-intel
+          },
+          {
+            job_name: "arm",
+            name: macos-26
+          }
+        ]
         exceptions: [
           {
+            job_name: "Exept",
             name: "",
             cmake: -DASYNC_CORO_NO_EXCEPTIONS=FALSE
           },
           {
+            job_name: "No_exept",
             name: "-noexcept",
             cmake: -DASYNC_CORO_NO_EXCEPTIONS=TRUE
           },
         ]
         sanitizers: [
           {
+            job_name: "",
             name: "",
             cmake: -DASAN_ENABLED=FALSE
           },
           {
+            job_name: "ASAN, ",
             name: "-asan",
             cmake: -DASAN_ENABLED=TRUE
           }
         ]
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os.name }}
+
+    name: Xcode (${{matrix.os.job_name}}) [${{matrix.sanitizers.job_name}}${{matrix.exceptions.job_name}}]
 
     steps:
     - uses: actions/checkout@v6
