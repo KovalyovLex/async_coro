@@ -1,5 +1,4 @@
-
-project(async_coro_tests)
+cmake_minimum_required(VERSION 3.31)
 
 # keep debug symbols in binary for dladdr resolution
 if (NOT WIN32)
@@ -15,15 +14,12 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/google/googletest.git
     GIT_TAG v1.17.0
     GIT_SHALLOW TRUE
-    GIT_PROGRESS TRUE
-    FIND_PACKAGE_ARGS
 )
 
 set(gtest_force_shared_crt ON CACHE BOOL "Force use dynamic libs in tests" FORCE)
 
 FetchContent_MakeAvailable(googletest)
 
-include(CTest)
 include(GoogleTest)
 
 if (TARGET gtest_main)
@@ -34,9 +30,9 @@ if (TARGET gmock_main)
 endif()
 
 # configure tests by different lists
-file(GLOB_RECURSE common_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "src/common/**.cpp" "src/common/**.h")
-file(GLOB_RECURSE simple_tests_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "src/simple_tests/**.cpp" "src/simple_tests/**.h")
-file(GLOB_RECURSE long_tests_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "src/long_runnung_tests/**.cpp" "src/long_runnung_tests/**.h")
+file(GLOB_RECURSE common_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "src/common/*")
+file(GLOB_RECURSE simple_tests_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "src/simple_tests/*")
+file(GLOB_RECURSE long_tests_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "src/long_runnung_tests/*")
 
 set(all_targets)
 
@@ -55,7 +51,6 @@ if (ANDROID)
   target_link_libraries(async_coro_tests junit-gtest::junit-gtest ${log-lib})
 
   target_include_directories(async_coro_tests PRIVATE "src/common" "src/simple_tests" "src/long_runnung_tests")
-  set_property(TARGET async_coro_tests PROPERTY CXX_STANDARD 20)
 
   set(all_targets async_coro_tests)
 
@@ -83,12 +78,14 @@ endforeach()
 
 if (NOT ANDROID)
   gtest_add_tests(TARGET      tests_simple
+                  SOURCES     ${simple_tests_src}
                   TEST_LIST   simple_tests_list
                   EXTRA_ARGS  "--gtest_repeat=10"
   )
   gtest_add_tests(TARGET      tests_long
+                  SOURCES     ${long_tests_src}
                   TEST_LIST   long_tests_list
   )
-  
+
   set_tests_properties(${long_tests_list} PROPERTIES TIMEOUT 120)
 endif()
