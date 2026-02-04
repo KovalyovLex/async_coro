@@ -27,8 +27,8 @@ endif()
 
 # keep debug symbols in binary for dladdr resolution
 if (NOT WIN32)
-  add_compile_options(-g3 -fno-omit-frame-pointer)
-  add_link_options(-g3)
+  add_compile_options(-g -fno-omit-frame-pointer -fvisibility=default)
+  add_link_options(-g -fvisibility=default -rdynamic)
 endif()
 
 include(FetchContent)

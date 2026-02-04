@@ -49,7 +49,7 @@ static void print_backtrace(stack_write_buffer &buffer) {
   for (int i = 0; i < frame_count; ++i) {
     Dl_info info;
     if (dladdr(frames[i], &info) != 0) {
-      const auto offset = (static_cast<const char *>(frames[i]) - static_cast<const char *>(info.dli_fbase));
+      const size_t offset = (static_cast<const char *>(frames[i]) - static_cast<const char *>(info.dli_fbase));
 
       if (info.dli_sname != nullptr) {
         int status = 0;
@@ -60,7 +60,7 @@ static void print_backtrace(stack_write_buffer &buffer) {
 
         int n = snprintf(buf.data(), buf.size(), "  %02d: %p  %s + 0x%lx (%s)\n",
                          i, frames[i], info.dli_fname != nullptr ? info.dli_fname : "?",
-                         (unsigned long)offset, symname);
+                         offset, symname);
         if (n > 0) {
           std::string_view str{buf.data(), (size_t)n};
           buffer.append_string(str);
@@ -73,7 +73,7 @@ static void print_backtrace(stack_write_buffer &buffer) {
       } else {
         int n = snprintf(buf.data(), buf.size(), "  %02d: %p  %s + 0x%lx (unknown)\n",
                          i, frames[i], info.dli_fname != nullptr ? info.dli_fname : "?",
-                         (unsigned long)offset);
+                         offset);
         if (n > 0) {
           std::string_view str{buf.data(), (size_t)n};
           buffer.append_string(str);
