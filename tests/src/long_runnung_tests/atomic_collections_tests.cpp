@@ -1,12 +1,11 @@
 #include <async_coro/atomic_queue.h>
 #include <gtest/gtest.h>
+#include <utils/memory_hooks.h>
 
 #include <atomic>
 #include <chrono>
 #include <thread>
 #include <vector>
-
-#include "memory_hooks.h"
 
 // NOLINTBEGIN(*-narrowing-*)
 

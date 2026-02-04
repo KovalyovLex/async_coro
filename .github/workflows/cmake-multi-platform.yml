@@ -30,17 +30,17 @@ jobs:
           {
             job_name: "",
             name: "",
-            cmake: -DASAN_ENABLED=FALSE
+            cmake: -DASYNC_CORO_ASAN_ENABLED=FALSE
           },
           {
             job_name: "TSAN, ",
             name: "-tsan",
-            cmake: -DTSAN_ENABLED=TRUE
+            cmake: -DASYNC_CORO_TSAN_ENABLED=TRUE
           },
           {
             job_name: "ASAN, ",
             name: "-asan",
-            cmake: -DASAN_ENABLED=TRUE
+            cmake: -DASYNC_CORO_ASAN_ENABLED=TRUE
           }
         ]
 
@@ -71,6 +71,7 @@ jobs:
         -DCMAKE_CXX_COMPILER=g++
         -DCMAKE_C_COMPILER=gcc
         -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        -DASYNC_CORO_TESTS_ENABLED=TRUE
         ${{ matrix.exceptions.cmake }}
         ${{ matrix.sanitizers.cmake }}
         -S ${{ github.workspace }}
@@ -80,6 +81,7 @@ jobs:
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
+      timeout-minutes: 10
       run: |
         chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
         ${{ github.workspace }}/.github/scripts/run_tests.sh "${{ steps.strings.outputs.build-output-dir }}"
@@ -129,17 +131,17 @@ jobs:
           {
             job_name: "",
             name: "",
-            cmake: -DASAN_ENABLED=FALSE
+            cmake: -DASYNC_CORO_ASAN_ENABLED=FALSE
           },
           {
             job_name: "TSAN, ",
             name: "-tsan",
-            cmake: -DTSAN_ENABLED=TRUE
+            cmake: -DASYNC_CORO_TSAN_ENABLED=TRUE
           },
           {
             job_name: "ASAN, ",
             name: "-asan",
-            cmake: -DASAN_ENABLED=TRUE
+            cmake: -DASYNC_CORO_ASAN_ENABLED=TRUE
           }
         ]
     
@@ -173,6 +175,7 @@ jobs:
         -DCMAKE_CXX_COMPILER=clang++-20
         -DCMAKE_C_COMPILER=clang-20
         -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        -DASYNC_CORO_TESTS_ENABLED=TRUE
         ${{ matrix.sanitizers.cmake }}
         ${{ matrix.exceptions.cmake }}
         -S ${{ github.workspace }}
@@ -181,6 +184,7 @@ jobs:
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --parallel
 
     - name: Test
+      timeout-minutes: 10
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
         chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
@@ -223,7 +227,7 @@ jobs:
           {
             job_name: "",
             name: "",
-            cmake: -DASAN_ENABLED=FALSE
+            cmake: -DASYNC_CORO_ASAN_ENABLED=FALSE
           }
         ]
 
@@ -249,6 +253,7 @@ jobs:
         -DCMAKE_CXX_COMPILER=cl
         -DCMAKE_C_COMPILER=cl
         -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        -DASYNC_CORO_TESTS_ENABLED=TRUE
         ${{ matrix.exceptions.cmake }}
         ${{ matrix.sanitizers.cmake }}
         -S ${{ github.workspace }}
@@ -258,6 +263,7 @@ jobs:
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config RelWithDebInfo --parallel
 
     - name: Test
+      timeout-minutes: 10
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
@@ -327,12 +333,12 @@ jobs:
           {
             job_name: "",
             name: "",
-            cmake: -DASAN_ENABLED=FALSE
+            cmake: -DASYNC_CORO_ASAN_ENABLED=FALSE
           },
           {
             job_name: "ASAN, ",
             name: "-asan",
-            cmake: -DASAN_ENABLED=TRUE
+            cmake: -DASYNC_CORO_ASAN_ENABLED=TRUE
           }
         ]
 
@@ -358,7 +364,7 @@ jobs:
       run: >
         cmake -B ${{ steps.strings.outputs.build-output-dir }}
         -DCMAKE_BUILD_TYPE=RelWithDebInfo
-        -DASAN_ENABLED=TRUE
+        -DASYNC_CORO_TESTS_ENABLED=TRUE
         ${{ matrix.exceptions.cmake }}
         ${{ matrix.sanitizers.cmake }}
         -S ${{ github.workspace }}
@@ -367,6 +373,7 @@ jobs:
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --parallel
 
     - name: Test
+      timeout-minutes: 10
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
         chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
