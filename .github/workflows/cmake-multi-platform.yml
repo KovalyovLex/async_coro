@@ -21,7 +21,7 @@ jobs:
             cmake: -DASYNC_CORO_NO_EXCEPTIONS=FALSE
           },
           {
-            job_name: "No_exept",
+            job_name: "NoExept",
             name: "-noexcept",
             cmake: -DASYNC_CORO_NO_EXCEPTIONS=TRUE
           },
@@ -122,7 +122,7 @@ jobs:
             cmake: -DASYNC_CORO_NO_EXCEPTIONS=FALSE
           },
           {
-            job_name: "No_exept",
+            job_name: "NoExept",
             name: "-noexcept",
             cmake: -DASYNC_CORO_NO_EXCEPTIONS=TRUE
           },
@@ -218,7 +218,7 @@ jobs:
             cmake: -DASYNC_CORO_NO_EXCEPTIONS=FALSE
           },
           {
-            job_name: "No_exept",
+            job_name: "NoExept",
             name: "-noexcept",
             cmake: -DASYNC_CORO_NO_EXCEPTIONS=TRUE
           },
@@ -324,7 +324,7 @@ jobs:
             cmake: -DASYNC_CORO_NO_EXCEPTIONS=FALSE
           },
           {
-            job_name: "No_exept",
+            job_name: "NoExept",
             name: "-noexcept",
             cmake: -DASYNC_CORO_NO_EXCEPTIONS=TRUE
           },
