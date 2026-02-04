@@ -76,38 +76,8 @@ jobs:
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
         chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
-        ${{ github.workspace }}/.github/scripts/run_tests.sh "${{ steps.strings.outputs.build-output-dir }}"
+        ${{ github.workspace }}/.github/scripts/run_tests.sh
   
-    - name: Cleanup on cancel (kill any orphaned processes)
-      if: cancelled()
-      run: |
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')] Force cleanup - killing test processes..." >&2
-        pkill async_coro_tests 2>/dev/null || true
-        sleep 1
-        
-        BUILD_DIR="${{ steps.strings.outputs.build-output-dir }}"
-        STDOUT_LOG="$BUILD_DIR/ctest-stdout.log"
-        STDERR_LOG="$BUILD_DIR/ctest-stderr.log"
-        
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')] Checking log files..." >&2
-        
-        if [ -f "$STDOUT_LOG" ]; then
-          echo "=== STDOUT LOG ===" >&2
-          cat "$STDOUT_LOG" >&2
-        else
-          echo "[WARNING] $STDOUT_LOG not found" >&2
-        fi
-        
-        if [ -f "$STDERR_LOG" ]; then
-          echo "" >&2
-          echo "=== STDERR LOG ===" >&2
-          cat "$STDERR_LOG" >&2
-        else
-          echo "[WARNING] $STDERR_LOG not found" >&2
-        fi
-        
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')] Force cleanup complete" >&2
-    
     - name: Archive run logs
       if: always()
       uses: actions/upload-artifact@v6
@@ -186,37 +156,7 @@ jobs:
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
         chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
-        ${{ github.workspace }}/.github/scripts/run_tests.sh "${{ steps.strings.outputs.build-output-dir }}"
-    
-    - name: Cleanup on cancel (kill any orphaned processes)
-      if: cancelled()
-      run: |
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')] Force cleanup - killing test processes..." >&2
-        pkill async_coro_tests 2>/dev/null || true
-        sleep 1
-        
-        BUILD_DIR="${{ steps.strings.outputs.build-output-dir }}"
-        STDOUT_LOG="$BUILD_DIR/ctest-stdout.log"
-        STDERR_LOG="$BUILD_DIR/ctest-stderr.log"
-        
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')] Checking log files..." >&2
-        
-        if [ -f "$STDOUT_LOG" ]; then
-          echo "=== STDOUT LOG ===" >&2
-          cat "$STDOUT_LOG" >&2
-        else
-          echo "[WARNING] $STDOUT_LOG not found" >&2
-        fi
-        
-        if [ -f "$STDERR_LOG" ]; then
-          echo "" >&2
-          echo "=== STDERR LOG ===" >&2
-          cat "$STDERR_LOG" >&2
-        else
-          echo "[WARNING] $STDERR_LOG not found" >&2
-        fi
-        
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')] Force cleanup complete" >&2
+        ${{ github.workspace }}/.github/scripts/run_tests.sh
     
     - name: Archive run logs
       if: always()
@@ -224,6 +164,7 @@ jobs:
       with:
         name: ${{matrix.os}}-clang-run-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
+        if-no-files-found: ignore
     
   build-msvc:
     if: false  # Temporarily disabled - testing clang only
@@ -383,6 +324,7 @@ jobs:
       with:
         name: ${{matrix.os}}-run-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
         path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
+        if-no-files-found: ignore
 
   dispatch-pr:
     needs: [build-clang]

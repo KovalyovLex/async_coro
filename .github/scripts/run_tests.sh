@@ -1,36 +1,15 @@
 #!/usr/bin/env bash
-# Test runner with output redirection to files
-# Output is written to files so it's preserved even if job is cancelled
+# Simple test runner - run tests directly in foreground
+# Signals will propagate naturally to child processes (ctest or async_coro_tests)
 
-set +e  # Don't exit on failures
+set +e  # Don't exit on errors
 
-LOG_DIR="${1:-.}"
-STDOUT_LOG="$LOG_DIR/ctest-stdout.log"
-STDERR_LOG="$LOG_DIR/ctest-stderr.log"
+echo "[$(date +'%Y-%m-%d %H:%M:%S')] Starting tests in foreground (PID: $$)..." >&2
 
-echo "[$(date +'%Y-%m-%d %H:%M:%S')] Starting ctest, redirecting output to files..." >&2
-echo "STDOUT: $STDOUT_LOG" >&2
-echo "STDERR: $STDERR_LOG" >&2
+# Run async_coro_tests directly - no backgrounding, no redirection tricks
+# When GitHub sends SIGTERM, it will be delivered to the process group
+./async_coro_tests --gtest_repeat=30
 
-# Run ctest with output redirected to files
-# Both stdout and stderr are combined to stderr log to ensure we capture signal handler output
-./async_coro_tests --gtest_repeat=30 >"$STDOUT_LOG" 2>"$STDERR_LOG"
 EXIT_CODE=$?
-
-# Flush file buffers to disk
-sync "$STDOUT_LOG" "$STDERR_LOG" 2>/dev/null || true
-
-# Print to console for live visibility (last part only)
-if [ -f "$STDOUT_LOG" ]; then
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] === Last 50 lines of STDOUT ===" >&2
-    tail -50 "$STDOUT_LOG" >&2
-fi
-
-echo "[$(date +'%Y-%m-%d %H:%M:%S')] ctest exited with code: $EXIT_CODE" >&2
-
-if [ -f "$STDERR_LOG" ]; then
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] === STDERR output ===" >&2
-    tail -50 "$STDERR_LOG" >&2
-fi
-
+echo "[$(date +'%Y-%m-%d %H:%M:%S')] tests exited with code: $EXIT_CODE" >&2
 exit "$EXIT_CODE"
