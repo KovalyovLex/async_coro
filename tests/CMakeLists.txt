@@ -80,8 +80,9 @@ if (NOT ANDROID)
   gtest_add_tests(TARGET      tests_simple
                   SOURCES     ${simple_tests_src}
                   TEST_LIST   simple_tests_list
-                  EXTRA_ARGS  "--gtest_repeat=10"
+                  EXTRA_ARGS  "--gtest_repeat=30"
   )
+  
   gtest_add_tests(TARGET      tests_long
                   SOURCES     ${long_tests_src}
                   TEST_LIST   long_tests_list
