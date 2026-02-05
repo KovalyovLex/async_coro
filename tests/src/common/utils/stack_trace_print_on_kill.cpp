@@ -49,7 +49,7 @@ struct backtrace_state {
 static _Unwind_Reason_Code unwind_callback(struct _Unwind_Context *context, void *arg) {
   auto *state = reinterpret_cast<backtrace_state *>(arg);
 
-  const uintptr_t pc = _Unwind_GetIP(context);
+  const auto pc = _Unwind_GetIP(context);
   if (pc != 0) {
     if (state->current == state->end) {
       return _URC_END_OF_STACK;
