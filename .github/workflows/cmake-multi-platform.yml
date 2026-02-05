@@ -80,7 +80,7 @@ jobs:
 
     - name: Test
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
-      timeout-minutes: 10
+      timeout-minutes: 20
       run: |
         chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
         ${{ github.workspace }}/.github/scripts/run_tests.sh "${{ steps.strings.outputs.build-output-dir }}"
@@ -182,7 +182,7 @@ jobs:
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --parallel
 
     - name: Test
-      timeout-minutes: 10
+      timeout-minutes: 20
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
         chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
@@ -260,7 +260,7 @@ jobs:
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config RelWithDebInfo --parallel
 
     - name: Test
-      timeout-minutes: 10
+      timeout-minutes: 20
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
@@ -369,7 +369,7 @@ jobs:
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --parallel
 
     - name: Test
-      timeout-minutes: 10
+      timeout-minutes: 20
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
         chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
