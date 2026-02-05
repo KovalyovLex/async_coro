@@ -19,6 +19,7 @@ echo "$$" > "$PID_FILE"
 
 # Maintainable list of commands to run sequentially (each element is a full command string)
 TEST_COMMANDS=(
+    "./tests/tests_simple --gtest_repeat=500 --gtest_filter=*.multiple_workers*"
     "./tests/tests_simple --gtest_repeat=30"
     "./tests/tests_long"
 )
