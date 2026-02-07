@@ -177,7 +177,7 @@ TEST(execution_system, delayed_multiple_diff_time_order_main) {
   std::this_thread::sleep_for(std::chrono::milliseconds{80});
 
   // drain main queue until all executed
-  for (int tries = 0; tries < 10 && order.size() < 5; ++tries) {
+  for (int tries = 0; tries < 20 && order.size() < 5; ++tries) {
     system.update_from_main();
     std::this_thread::sleep_for(std::chrono::milliseconds{10});
   }

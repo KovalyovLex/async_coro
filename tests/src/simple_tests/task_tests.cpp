@@ -8,6 +8,7 @@
 #include <async_coro/task_launcher.h>
 #include <async_coro/utils/unique_function.h>
 #include <gtest/gtest.h>
+#include <utils/memory_hooks.h>
 
 #include <atomic>
 #include <chrono>
@@ -17,8 +18,6 @@
 #include <thread>
 #include <type_traits>
 #include <variant>
-
-#include "memory_hooks.h"
 
 namespace task_tests {
 struct coro_runner {

@@ -54,6 +54,9 @@ void base_handle::destroy_impl() noexcept {
     // wait for continuation finish
   }
 
+  // Synchronizing cancel state (set_cancel_requested releases value)
+  (void)get_coroutine_state(std::memory_order::acquire);
+
   get_handle().destroy();
 }
 
