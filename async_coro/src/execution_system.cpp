@@ -267,17 +267,18 @@ void execution_system::worker_loop(worker_thread_data& data) {
         func(data.data);
         func = nullptr;
 
-        if (_is_stopping.load(std::memory_order::relaxed)) {
+        if (_is_stopping.load(std::memory_order::relaxed)) [[unlikely]] {
           break;
         }
       }
     }
 
-    if (is_empty_loop) {
-      if (++num_empty_loops > data.num_loops_before_sleep) {
-        data.notifier.sleep();
-        num_empty_loops = 0;
+    if (is_empty_loop && ++num_empty_loops > data.num_loops_before_sleep) {
+      if (_is_stopping.load(std::memory_order::relaxed)) [[unlikely]] {
+        break;
       }
+      data.notifier.sleep();
+      num_empty_loops = 0;
     }
   }
 }
