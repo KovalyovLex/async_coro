@@ -1,7 +1,10 @@
 cmake_minimum_required(VERSION 3.31)
 
+option(ASYNC_CORO_TEST_KEEP_DEBUG_SYMBOLS "Option to keep debug symbols in binary for dladdr resolution" OFF)
+
+
 # keep debug symbols in binary for dladdr resolution
-if (NOT WIN32)
+if (NOT WIN32 AND ASYNC_CORO_TEST_KEEP_DEBUG_SYMBOLS)
   add_compile_options(-g -fno-omit-frame-pointer -fvisibility=default)
   add_link_options(-g -fvisibility=default -rdynamic)
 endif()
