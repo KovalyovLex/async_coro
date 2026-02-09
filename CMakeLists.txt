@@ -36,12 +36,12 @@ endif()
 # setup main lib project
 add_subdirectory(async_coro)
 
-if(EXAMPLES_ENABLED)
-  add_subdirectory(examples)
-endif()
-
 if (ASYNC_CORO_TESTS_ENABLED)
   include(CTest)
 
   add_subdirectory(tests)
+endif()
+
+if(ASYNC_CORO_EXAMPLES_ENABLED)
+  add_subdirectory(examples)
 endif()
