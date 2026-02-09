@@ -1,9 +1,6 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.31)
  
-project(async_coro)
-
-option(ASYNC_CORO_NO_EXCEPTIONS "Disable exceptions support for async_coro library" FALSE)
-
+project(async_coro_lib)
 
 file(GLOB_RECURSE async_coro_src LIST_DIRECTORIES false CONFIGURE_DEPENDS "src/**.h" "src/**.cpp")
 

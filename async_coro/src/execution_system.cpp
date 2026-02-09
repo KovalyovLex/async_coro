@@ -181,7 +181,10 @@ void execution_system::plan_execution(task_function func, execution_queue_mark e
   task_q.queue.push(std::move(func));
 
   for (auto* worker : task_q.workers_data) {
-    worker->notifier.notify();
+    if (worker->notifier.notify()) {
+      // leave others in sleeping state
+      return;
+    }
   }
 }
 
@@ -200,7 +203,10 @@ void execution_system::execute_or_plan_execution(task_function func, execution_q
   task_q.queue.push(std::move(func));
 
   for (auto* worker : task_q.workers_data) {
-    worker->notifier.notify();
+    if (worker->notifier.notify()) {
+      // leave others in sleeping state
+      return;
+    }
   }
 }
 
@@ -261,17 +267,18 @@ void execution_system::worker_loop(worker_thread_data& data) {
         func(data.data);
         func = nullptr;
 
-        if (_is_stopping.load(std::memory_order::relaxed)) {
+        if (_is_stopping.load(std::memory_order::relaxed)) [[unlikely]] {
           break;
         }
       }
     }
 
-    if (is_empty_loop) {
-      if (++num_empty_loops > data.num_loops_before_sleep) {
-        data.notifier.sleep();
-        num_empty_loops = 0;
+    if (is_empty_loop && ++num_empty_loops > data.num_loops_before_sleep) {
+      if (_is_stopping.load(std::memory_order::relaxed)) [[unlikely]] {
+        break;
       }
+      data.notifier.sleep();
+      num_empty_loops = 0;
     }
   }
 }
@@ -313,7 +320,10 @@ void execution_system::timer_loop() {
     target_task_q.queue.push(std::move(func));
 
     for (auto* worker : target_task_q.workers_data) {
-      worker->notifier.notify();
+      if (worker->notifier.notify()) {
+        // leave others in sleeping state
+        break;
+      }
     }
 
     lock.lock();

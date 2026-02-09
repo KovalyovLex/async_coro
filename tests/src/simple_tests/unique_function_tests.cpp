@@ -1,11 +1,10 @@
 #include <async_coro/utils/unique_function.h>
 #include <gtest/gtest.h>
+#include <utils/memory_hooks.h>
 
 #include <chrono>
 #include <iostream>
 #include <stdexcept>
-
-#include "memory_hooks.h"
 
 template <bool is_noexcept>
 static auto test_small_f() {
