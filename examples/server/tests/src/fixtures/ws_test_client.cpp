@@ -73,7 +73,7 @@ std::string ws_test_client::generate_handshake_request(const http_test_client& c
     sec_key = "dGhlIHNhbXBsZSBub25jZQ==";  // default sample
   }
 
-  std::string req = client.generate_req_head(server::http1::http_method::GET, path);
+  std::string req = client.generate_req_head(server::http1::http_method::Get, path);
   req += "Upgrade: websocket\r\n";
   req += "Connection: Upgrade\r\n";
   req += "Sec-WebSocket-Key: ";

@@ -153,7 +153,7 @@ class http_encoding_tests : public http_integration_fixture, public compression_
     }
     open_connection();
 
-    std::string req = test_client.generate_req_head(server::http1::http_method::GET, "/test");
+    std::string req = test_client.generate_req_head(server::http1::http_method::Get, "/test");
     req += "Accept-Encoding: ";
     req += enc_str;
     req += "\r\n";

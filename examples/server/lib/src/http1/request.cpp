@@ -54,7 +54,7 @@ struct headers_comparator {
 };
 
 request::request() noexcept
-    : _method(http_method::TRACE),
+    : _method(http_method::Trace),
       _version(http_version::http_0_9) {}
 
 const std::pair<ci_string_view, std::string_view>* request::find_header(std::string_view name) const noexcept {

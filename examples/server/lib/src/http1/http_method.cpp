@@ -8,23 +8,23 @@ namespace server::http1 {
 
 std::string_view as_string(http_method method) noexcept {
   switch (method) {
-    case http_method::GET:
+    case http_method::Get:
       return "GET";
-    case http_method::HEAD:
+    case http_method::Head:
       return "HEAD";
-    case http_method::POST:
+    case http_method::Post:
       return "POST";
-    case http_method::PUT:
+    case http_method::Put:
       return "PUT";
-    case http_method::DELETE:
+    case http_method::Delete:
       return "DELETE";
-    case http_method::CONNECT:
+    case http_method::Connect:
       return "CONNECT";
-    case http_method::OPTIONS:
+    case http_method::Options:
       return "OPTIONS";
-    case http_method::TRACE:
+    case http_method::Trace:
       return "TRACE";
-    case http_method::PATCH:
+    case http_method::Patch:
       return "PATCH";
   }
   ASYNC_CORO_ASSERT(false && "Unhandled enum value of http_method");  // NOLINT(*static-assert)
@@ -35,31 +35,31 @@ std::optional<http_method> as_method(std::string_view str) noexcept {
   using namespace std::string_view_literals;
 
   if (str == "GET"sv) {
-    return http_method::GET;
+    return http_method::Get;
   }
   if (str == "HEAD"sv) {
-    return http_method::HEAD;
+    return http_method::Head;
   }
   if (str == "POST"sv) {
-    return http_method::POST;
+    return http_method::Post;
   }
   if (str == "PUT"sv) {
-    return http_method::PUT;
+    return http_method::Put;
   }
   if (str == "DELETE"sv) {
-    return http_method::DELETE;
+    return http_method::Delete;
   }
   if (str == "CONNECT"sv) {
-    return http_method::CONNECT;
+    return http_method::Connect;
   }
   if (str == "OPTIONS"sv) {
-    return http_method::OPTIONS;
+    return http_method::Options;
   }
   if (str == "TRACE"sv) {
-    return http_method::TRACE;
+    return http_method::Trace;
   }
   if (str == "PATCH"sv) {
-    return http_method::PATCH;
+    return http_method::Patch;
   }
 
   return std::nullopt;

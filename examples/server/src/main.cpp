@@ -90,13 +90,13 @@ int main(int argc, char** argv) {
     });
   };
 
-  server.get_router().add_route(server::http1::http_method::GET, "/", say_hello);
-  server.get_router().add_route(server::http1::http_method::HEAD, "/", say_hello);
+  server.get_router().add_route(server::http1::http_method::Get, "/", say_hello);
+  server.get_router().add_route(server::http1::http_method::Head, "/", say_hello);
 
-  server.get_router().add_route(server::http1::http_method::GET, "/hello.html", send_html);
-  server.get_router().add_route(server::http1::http_method::HEAD, "/hello.html", send_html);
+  server.get_router().add_route(server::http1::http_method::Get, "/hello.html", send_html);
+  server.get_router().add_route(server::http1::http_method::Head, "/hello.html", send_html);
 
-  server.get_router().add_advanced_route(server::http1::http_method::GET, "/chat", web_socket_communication);
+  server.get_router().add_advanced_route(server::http1::http_method::Get, "/chat", web_socket_communication);
 
   server.serve(conf, {}, [](const auto& addr, auto port) {
     std::cout << "Server started listening on: " << addr << ":" << port;

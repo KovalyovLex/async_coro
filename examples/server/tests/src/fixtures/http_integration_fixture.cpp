@@ -34,7 +34,7 @@ void http_integration_fixture::open_connection() {
 
 void http_integration_fixture::setup_routes() {
   // register route that mirrors example server behavior
-  server.get_router().add_route(server::http1::http_method::GET, "/test", [this](const server::http1::request& req, server::http1::response& resp) -> async_coro::task<> {  // NOLINT(*reference*)
+  server.get_router().add_route(server::http1::http_method::Get, "/test", [this](const server::http1::request& req, server::http1::response& resp) -> async_coro::task<> {  // NOLINT(*reference*)
     using namespace server::http1;
 
     decltype(get_test_handler) session_handler;
@@ -53,7 +53,7 @@ void http_integration_fixture::setup_routes() {
     co_return;
   });
 
-  server.get_router().add_route(server::http1::http_method::POST, "/test", [this](const server::http1::request& req, server::http1::response& resp) -> async_coro::task<> {  // NOLINT(*reference*)
+  server.get_router().add_route(server::http1::http_method::Post, "/test", [this](const server::http1::request& req, server::http1::response& resp) -> async_coro::task<> {  // NOLINT(*reference*)
     using namespace server::http1;
 
     decltype(post_test_handler) session_handler;
@@ -72,7 +72,7 @@ void http_integration_fixture::setup_routes() {
     co_return;
   });
 
-  server.get_router().add_route(server::http1::http_method::HEAD, "/test", [this](const server::http1::request& req, server::http1::response& resp) -> async_coro::task<> {  // NOLINT(*reference*)
+  server.get_router().add_route(server::http1::http_method::Head, "/test", [this](const server::http1::request& req, server::http1::response& resp) -> async_coro::task<> {  // NOLINT(*reference*)
     using namespace server::http1;
 
     decltype(head_test_handler) session_handler;

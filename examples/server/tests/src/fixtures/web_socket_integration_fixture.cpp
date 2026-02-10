@@ -6,7 +6,7 @@
 
 void web_socket_integration_tests::SetUp() {
   // register route that mirrors example server behavior
-  server.get_router().add_advanced_route(server::http1::http_method::GET, "/chat", [this](const auto& request, server::http1::session& http_session) -> async_coro::task<> {  // NOLINT(*reference*)
+  server.get_router().add_advanced_route(server::http1::http_method::Get, "/chat", [this](const auto& request, server::http1::session& http_session) -> async_coro::task<> {  // NOLINT(*reference*)
     using namespace server::web_socket;
 
     ws_session session{std::move(http_session.get_connection())};
