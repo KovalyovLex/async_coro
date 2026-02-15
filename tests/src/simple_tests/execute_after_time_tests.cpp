@@ -27,7 +27,7 @@ TEST(execute_after_time_tests, executes_function_after_sleep_duration) {
     result.store(res, std::memory_order::relaxed);
   };
 
-  auto handle = scheduler.start_task(t());
+  auto handle = scheduler.start_task(t(), async_coro::execution_queues::main);
 
   // wait for completion with a timeout
   for (int i = 0; i < 2000 && !handle.done(); ++i) {
@@ -53,7 +53,7 @@ TEST(execute_after_time_tests, executes_function_returning_void) {
     co_await async_coro::execute_after_time([&]() { function_executed.store(true, std::memory_order::relaxed); }, sleep_dur);
   };
 
-  auto handle = scheduler.start_task(t());
+  auto handle = scheduler.start_task(t(), async_coro::execution_queues::main);
 
   // wait for completion with a timeout
   for (int i = 0; i < 2000 && !handle.done(); ++i) {
@@ -80,7 +80,7 @@ TEST(execute_after_time_tests, resumes_on_parent_queue) {
   };
 
   auto main_tid = std::this_thread::get_id();
-  auto handle = scheduler.start_task(t());
+  auto handle = scheduler.start_task(t(), async_coro::execution_queues::main);
 
   // wait for completion with a timeout
   for (int i = 0; i < 2000 && !handle.done(); ++i) {
@@ -110,7 +110,7 @@ TEST(execute_after_time_tests, multiple_executions_in_sequence) {
     EXPECT_EQ(res3, 3);
   };
 
-  auto handle = scheduler.start_task(t());
+  auto handle = scheduler.start_task(t(), async_coro::execution_queues::main);
 
   // wait for completion with a timeout (need more time for 3 sequential waits)
   for (int i = 0; i < 3000 && !handle.done(); ++i) {
@@ -137,7 +137,7 @@ TEST(execute_after_time_tests, returns_multiple_values_with_tuple) {
     second_val.store(b.data(), std::memory_order::relaxed);  // NOLINT(*data*)
   };
 
-  auto handle = scheduler.start_task(t());
+  auto handle = scheduler.start_task(t(), async_coro::execution_queues::main);
 
   // wait for completion with a timeout
   for (int i = 0; i < 2000 && !handle.done(); ++i) {
@@ -168,7 +168,7 @@ TEST(execute_after_time_tests, when_any_with_start_task) {
     result.store(std::visit([](int r) { return r; }, res), std::memory_order::relaxed);
   };
 
-  auto handle = scheduler.start_task(parent());
+  auto handle = scheduler.start_task(parent(), async_coro::execution_queues::main);
 
   // wait for completion with a timeout
   for (int i = 0; i < 2000 && !handle.done(); ++i) {
@@ -198,7 +198,7 @@ TEST(execute_after_time_tests, when_any_execute_after_time_wins) {
     result.store(std::visit([](int r) { return r; }, res), std::memory_order::relaxed);
   };
 
-  auto handle = scheduler.start_task(parent());
+  auto handle = scheduler.start_task(parent(), async_coro::execution_queues::main);
 
   // wait for completion with a timeout
   for (int i = 0; i < 2000 && !handle.done(); ++i) {
@@ -224,7 +224,7 @@ TEST(execute_after_time_tests, lambda_captures_work_correctly) {
     result.store(res, std::memory_order::relaxed);
   };
 
-  auto handle = scheduler.start_task(t());
+  auto handle = scheduler.start_task(t(), async_coro::execution_queues::main);
 
   // wait for completion with a timeout
   for (int i = 0; i < 2000 && !handle.done(); ++i) {

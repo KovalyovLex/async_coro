@@ -12,8 +12,8 @@ struct http_server_config {
   server::tcp_server_config tcp_config;
 
   // Optional keep-alive timeout for sessions created by HTTP server
-  // If empty, no explicit keep-alive timeout is configured (5 min default used)
-  std::optional<std::chrono::seconds> keep_alive_timeout;
+  // If empty, no explicit keep-alive timeout is configured (30 sec default used)
+  std::optional<std::chrono::seconds> keep_alive_timeout = std::chrono::minutes{5};  // NOLINT(*magic*)
 
   // Optional max requests per keep-alive connection. If empty, unlimited.
   std::optional<std::uint32_t> max_requests;

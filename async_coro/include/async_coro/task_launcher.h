@@ -34,12 +34,12 @@ class task_launcher {
         _execution_queue(execution_queue) {}
 
   /**
-   * @brief Constructs a task launcher with a callback function on the main execution queue.
+   * @brief Constructs a task launcher with a callback function on any execution queue.
    *
    * @param start_function A callback function that returns a task<R> when executed
    */
   explicit task_launcher(callback_ptr<task<R>()> start_function) noexcept
-      : task_launcher(std::move(start_function), execution_queues::main) {}
+      : task_launcher(std::move(start_function), execution_queues::any) {}
 
   /**
    * @brief Constructs a task launcher with a noexcept callback function and execution queue.
@@ -53,12 +53,12 @@ class task_launcher {
         _execution_queue(execution_queue) {}
 
   /**
-   * @brief Constructs a task launcher with a noexcept callback function on the main execution queue.
+   * @brief Constructs a task launcher with a noexcept callback function on any execution queue.
    *
    * @param start_function A noexcept callback function that returns a task<R> when executed
    */
   explicit task_launcher(callback_ptr<task<R>() noexcept> start_function) noexcept
-      : task_launcher(std::move(start_function), execution_queues::main) {}
+      : task_launcher(std::move(start_function), execution_queues::any) {}
 
   /**
    * @brief Constructs a task launcher with any callable that returns a task<R> and execution queue.
@@ -88,7 +88,7 @@ class task_launcher {
       : task_launcher(start_function(), execution_queue) {}
 
   /**
-   * @brief Constructs a task launcher with any callable that returns a task<R> on the main execution queue.
+   * @brief Constructs a task launcher with any callable that returns a task<R> on any execution queue.
    *
    * This constructor accepts any callable object (function, lambda, member function, etc.)
    * that returns a task<R> when invoked.
@@ -98,7 +98,7 @@ class task_launcher {
   template <typename T>
     requires(std::is_invocable_r_v<task<R>, T>)
   explicit task_launcher(T&& start_function)
-      : task_launcher(std::forward<T>(start_function), execution_queues::main) {}
+      : task_launcher(std::forward<T>(start_function), execution_queues::any) {}
 
   /**
    * @brief Constructs a task launcher with an existing task and execution queue.
@@ -110,12 +110,12 @@ class task_launcher {
       : _coro(std::move(coro)), _execution_queue(execution_queue) {}
 
   /**
-   * @brief Constructs a task launcher with an existing task on the main execution queue.
+   * @brief Constructs a task launcher with an existing task on any execution queue.
    *
    * @param coro An existing task<R> object to be launched
    */
   explicit task_launcher(task<R> coro) noexcept
-      : task_launcher(std::move(coro), execution_queues::main) {}
+      : task_launcher(std::move(coro), execution_queues::any) {}
 
   /**
    * @brief Launches the task and returns it.
