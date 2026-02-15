@@ -164,7 +164,7 @@ TEST(execute_after_time_tests, when_any_with_start_task) {
 
   auto parent = [&]() -> async_coro::task<> {
     // The quick_task should complete before execute_after_time's 100ms delay
-    auto res = co_await (co_await async_coro::start_task(quick_task()) || async_coro::execute_after_time([]() { return 42; }, 100ms));
+    auto res = co_await (co_await async_coro::start_task(quick_task(), async_coro::execution_queues::main) || async_coro::execute_after_time([]() { return 42; }, 100ms));
     result.store(std::visit([](int r) { return r; }, res), std::memory_order::relaxed);
   };
 
@@ -194,7 +194,7 @@ TEST(execute_after_time_tests, when_any_execute_after_time_wins) {
 
   auto parent = [&]() -> async_coro::task<> {
     // execute_after_time should win with 20ms vs 300ms sleep of slow_task
-    auto res = co_await (co_await async_coro::start_task(slow_task()) || async_coro::execute_after_time([]() { return 42; }, 20ms));
+    auto res = co_await (co_await async_coro::start_task(slow_task(), async_coro::execution_queues::main) || async_coro::execute_after_time([]() { return 42; }, 20ms));
     result.store(std::visit([](int r) { return r; }, res), std::memory_order::relaxed);
   };
 
