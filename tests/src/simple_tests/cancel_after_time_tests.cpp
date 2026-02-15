@@ -25,14 +25,14 @@ TEST(cancel_after_time, when_any_triggers_cancel_on_main) {
 
   auto parent = [&]() -> async_coro::task<int> {
     // cancel_after_time should fire and cancel the group
-    co_await (co_await async_coro::start_task(infinite()) || async_coro::cancel_after_time(20ms));
+    co_await (co_await async_coro::start_task(infinite(), async_coro::execution_queues::main) || async_coro::cancel_after_time(20ms));
 
     // should not reach here
     ADD_FAILURE();
     co_return 0;
   };
 
-  auto handle = scheduler.start_task(parent());
+  auto handle = scheduler.start_task(parent(), async_coro::execution_queues::main);
 
   for (int i = 0; i < 100 && !(handle.done() || handle.is_cancelled()); ++i) {
     std::this_thread::sleep_for(1ms);
@@ -69,14 +69,14 @@ TEST(cancel_after_time, timer_scheduled_on_worker_queue) {
 
   auto parent = [&]() -> async_coro::task<int> {
     // schedule timer on worker so cancellation logic runs there
-    co_await (co_await async_coro::start_task(long_on_worker()) || async_coro::cancel_after_time(5ms, async_coro::execution_queues::main));
+    co_await (co_await async_coro::start_task(long_on_worker(), async_coro::execution_queues::main) || async_coro::cancel_after_time(5ms, async_coro::execution_queues::main));
 
     // should not reach here
     ADD_FAILURE();
     co_return 0;
   };
 
-  auto handle = scheduler.start_task(parent());
+  auto handle = scheduler.start_task(parent(), async_coro::execution_queues::main);
 
   for (int i = 0; i < 100 && !(handle.done() || handle.is_cancelled()); ++i) {
     std::this_thread::sleep_for(1ms);

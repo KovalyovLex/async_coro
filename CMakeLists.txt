@@ -7,6 +7,7 @@ option(ASYNC_CORO_ASAN_ENABLED "Enable address sanitizer for all async_coro targ
 option(ASYNC_CORO_TSAN_ENABLED "Enable thread sanitizer for all async_coro targets" OFF)
 option(ASYNC_CORO_NO_EXCEPTIONS "Disable exceptions support for async_coro library" FALSE)
 option(ASYNC_CORO_TESTS_ENABLED "Enable async_coro tests in config" ON)
+option(ASYNC_CORO_EXAMPLES_ENABLED "Enable async_coro examples" ON)
 
 
 if (ASYNC_CORO_ASAN_ENABLED)
@@ -39,4 +40,8 @@ if (ASYNC_CORO_TESTS_ENABLED)
   include(CTest)
 
   add_subdirectory(tests)
+endif()
+
+if(ASYNC_CORO_EXAMPLES_ENABLED)
+  add_subdirectory(examples)
 endif()

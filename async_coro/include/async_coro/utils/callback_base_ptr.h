@@ -32,7 +32,7 @@ class callback_base_ptr {
       : _clb(std::exchange(other._clb, nullptr)) {}
 
   callback_base_ptr& operator=(const callback_base_ptr&) = delete;
-  callback_base_ptr& operator=(callback_base_ptr&& other) {  // NOLINT(*noexcept*)
+  callback_base_ptr& operator=(callback_base_ptr&& other) noexcept {
     if (&other == this) {
       return *this;
     }
@@ -62,7 +62,7 @@ class callback_base_ptr {
     return callback_base_atomic_ptr<Noexcept>(this->release());
   }
 
-  ~callback_base_ptr() noexcept(Noexcept) {
+  ~callback_base_ptr() noexcept {
     reset();
   }
 
@@ -80,13 +80,13 @@ class callback_base_ptr {
     _clb = std::exchange(other._clb, nullptr);
   }
 
-  void reset(callback_base<Noexcept>* clb = nullptr) noexcept(Noexcept) {
+  void reset(callback_base<Noexcept>* clb = nullptr) noexcept {
     if (auto* old = std::exchange(_clb, clb)) {
       old->destroy();
     }
   }
 
-  void reset(callback_base<true>* clb) noexcept(Noexcept)
+  void reset(callback_base<true>* clb) noexcept
     requires(!Noexcept)
   {
     if (auto* old = std::exchange(_clb, clb)) {
@@ -121,7 +121,7 @@ class callback_base_atomic_ptr {
       : _clb(other._clb.exchange(nullptr, std::memory_order::relaxed)) {}
 
   callback_base_atomic_ptr& operator=(const callback_base_atomic_ptr&) = delete;
-  callback_base_atomic_ptr& operator=(callback_base_atomic_ptr&& other) {  // NOLINT(*noexcept*)
+  callback_base_atomic_ptr& operator=(callback_base_atomic_ptr&& other) noexcept {
     if (&other == this) {
       return *this;
     }
@@ -149,7 +149,7 @@ class callback_base_atomic_ptr {
     return _clb.load(std::memory_order::relaxed) != nullptr;
   }
 
-  ~callback_base_atomic_ptr() noexcept(Noexcept) {
+  ~callback_base_atomic_ptr() noexcept {
     reset();
   }
 
@@ -167,13 +167,13 @@ class callback_base_atomic_ptr {
     ASYNC_CORO_ASSERT(clb == nullptr);
   }
 
-  void reset(callback_base<Noexcept>* clb = nullptr, std::memory_order order = std::memory_order::relaxed) noexcept(Noexcept) {
+  void reset(callback_base<Noexcept>* clb = nullptr, std::memory_order order = std::memory_order::relaxed) noexcept {
     if (auto* old = _clb.exchange(clb, order)) {
       old->destroy();
     }
   }
 
-  void reset(callback_base<true>* clb, std::memory_order order = std::memory_order::relaxed) noexcept(Noexcept)
+  void reset(callback_base<true>* clb, std::memory_order order = std::memory_order::relaxed) noexcept
     requires(!Noexcept)
   {
     if (auto* old = _clb.exchange(clb, order)) {

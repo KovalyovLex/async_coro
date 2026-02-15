@@ -28,7 +28,7 @@ TEST(await_callback, resume_on_callback_deep) {
   async_coro::scheduler scheduler;
 
   ASSERT_FALSE(routine.done());
-  auto handle = scheduler.start_task(std::move(routine));
+  auto handle = scheduler.start_task(std::move(routine), async_coro::execution_queues::main);
   ASSERT_FALSE(handle.done());
   ASSERT_TRUE(continue_f);
   continue_f();
@@ -47,7 +47,7 @@ TEST(await_callback, resume_on_callback) {
   async_coro::scheduler scheduler;
 
   ASSERT_FALSE(routine.done());
-  auto handle = scheduler.start_task(std::move(routine));
+  auto handle = scheduler.start_task(std::move(routine), async_coro::execution_queues::main);
   ASSERT_FALSE(handle.done());
   ASSERT_TRUE(continue_f);
   continue_f();
@@ -70,7 +70,7 @@ TEST(await_callback, callback_arg_int) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(routine_2);
+  auto handle = scheduler.start_task(routine_2, async_coro::execution_queues::main);
   ASSERT_FALSE(handle.done());
 
   ASSERT_TRUE(continue_f);
@@ -94,7 +94,7 @@ TEST(await_callback, callback_arg_string) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(routine_2);
+  auto handle = scheduler.start_task(routine_2, async_coro::execution_queues::main);
   ASSERT_FALSE(handle.done());
 
   ASSERT_TRUE(continue_f);
@@ -102,7 +102,7 @@ TEST(await_callback, callback_arg_string) {
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), "Looooooong StriiiinnnGgg!");
 
-  handle = scheduler.start_task(routine_2);
+  handle = scheduler.start_task(routine_2, async_coro::execution_queues::main);
   ASSERT_FALSE(handle.done());
 
   ASSERT_TRUE(continue_f);
