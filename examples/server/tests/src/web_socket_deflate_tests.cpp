@@ -26,8 +26,8 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
     using namespace server::web_socket;
 
     server.get_router().add_advanced_route(server::http1::http_method::Get, "/chat-deflate",
-                                           [this](const server::http1::request& request, server::http1::session& http_session) -> async_coro::task<> {  // NOLINT(*reference*)
-                                             ws_session session{std::move(http_session.get_connection())};
+                                           [this](const server::http1::request& request, server::socket_layer::connection& connection) -> async_coro::task<> {  // NOLINT(*reference*)
+                                             ws_session session{std::move(connection)};
                                              {
                                                async_coro::unique_lock lock{mutex};
                                                session.set_permessage_deflate(deflate_config);

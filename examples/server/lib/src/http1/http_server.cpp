@@ -13,15 +13,21 @@ http_server::http_server()
 http_server::http_server(async_coro::i_execution_system::ptr execution_system) noexcept
     : _scheduler(std::move(execution_system)) {}
 
-void http_server::serve(const tcp_server_config& conf, std::optional<ssl_config> ssl_conf, listener_connection_opened_t on_listener_open) {
+void http_server::serve(const http_server_config& conf, std::optional<ssl_config> ssl_conf, listener_connection_opened_t on_listener_open) {
+  session_config session_conf{
+      .router_ref = _router,
+      .compression = _compression_pool,
+      .keep_alive_timeout = conf.keep_alive_timeout,
+      .max_requests = conf.max_requests};
+
   _server.serve(
-      conf,
+      conf.tcp_config,
       std::move(ssl_conf),
-      [this](auto conn) { _scheduler.start_task(
-                              [ses = session{std::move(conn), _router, _compression_pool}]() mutable {
-                                return ses.run();
-                              },
-                              async_coro::execution_queues::worker); },
+      [this, &session_conf](auto conn) mutable {
+        _scheduler.start_task(
+            start_session(std::move(conn), session_conf),
+            async_coro::execution_queues::worker);
+      },
       on_listener_open);
 }
 

@@ -10,9 +10,14 @@ struct tcp_server_config {
   std::string ip_address;
   uint16_t port;
 
-  // number of threads than will serve epoll\kqueue events
+  // Number of threads that will serve epoll\kqueue events
   std::uint32_t num_reactors = 2;
-  std::chrono::nanoseconds reactor_sleep = std::chrono::milliseconds{200};  // NOLINT(*-magic*)
+
+  // Max number of seconds that reactor thread will sleep while awaiting io events
+  std::chrono::nanoseconds reactor_sleep = std::chrono::seconds{2};
+
+  // Disable Nagle's algorithm for all connections
+  bool disable_delay = true;
 };
 
 }  // namespace server

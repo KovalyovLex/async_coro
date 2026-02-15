@@ -5,6 +5,7 @@
 #include <async_coro/task.h>
 #include <server/http1/http_method.h>
 #include <server/http1/http_server.h>
+#include <server/http1/http_server_config.h>
 #include <server/http1/response.h>
 #include <server/http1/session.h>
 #include <server/tcp_server_config.h>
@@ -13,6 +14,7 @@
 #include <server/web_socket/ws_op_code.h>
 #include <server/web_socket/ws_session.h>
 
+#include <chrono>
 #include <csignal>
 #include <iostream>
 #include <memory>
@@ -32,9 +34,11 @@ int main(int argc, char** argv) {
                                  {"worker2"}},
               .main_thread_allowed_tasks = async_coro::execution_thread_mask{}})};
 
-  server::tcp_server_config conf{
-      .port = static_cast<uint16_t>(port),
-  };
+  server::http1::http_server_config conf{
+      .tcp_config = {
+          .port = static_cast<uint16_t>(port),
+      },
+      .keep_alive_timeout = std::chrono::minutes(2)};
 
   const auto send_html = [](const auto& request, auto& resp) -> async_coro::task<> {
     std::string_view html_body = R"(<!doctype html>
@@ -59,10 +63,10 @@ int main(int argc, char** argv) {
     co_return;
   };
 
-  const auto web_socket_communication = [](const auto& request, server::http1::session& http_session) -> async_coro::task<> {
+  const auto web_socket_communication = [](const auto& request, server::socket_layer::connection& connection) -> async_coro::task<> {
     using namespace server::web_socket;
 
-    ws_session session{std::move(http_session.get_connection())};
+    ws_session session{std::move(connection)};
 
     co_await session.run(request, "", [](const request_frame& req_frame, auto& this_session) -> async_coro::task<> {
       if (req_frame.get_op_code() == ws_op_code::text_frame) {

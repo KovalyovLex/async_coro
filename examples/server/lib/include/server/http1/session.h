@@ -6,38 +6,19 @@
 #include <server/socket_layer/connection.h>
 #include <server/utils/compression_pool.h>
 
+#include <chrono>
+#include <cstdint>
+
 namespace server::http1 {
 
-class session {
+class session_config {
  public:
-  session(server::socket_layer::connection conn, const router& router, compression_pool::ptr compression_pool = {}) noexcept;
-
-  session(const session&) = delete;
-  session(session&&) noexcept = default;
-
-  ~session() noexcept = default;
-
-  session& operator=(const session&) = delete;
-  session& operator=(session&&) noexcept = default;
-
-  // Runs request->response loop until connection closed or handler signals close.
-  [[nodiscard]] async_coro::task<void> run();
-
-  [[nodiscard]] bool is_keep_alive() const noexcept { return _keep_alive; }
-  void set_keep_alive(bool value) noexcept { _keep_alive = value; }
-
-  [[nodiscard]] auto& get_connection() noexcept { return _conn; }
-  [[nodiscard]] const auto& get_connection() const noexcept { return _conn; }
-
-  // Get compression pool for encoding negotiation
-  [[nodiscard]] const compression_pool::ptr& get_compression_pool() const noexcept { return _compression_pool; }
-
- private:
-  server::socket_layer::connection _conn;
-  const router* _router;
-  bool _keep_alive = true;
-  compression_pool::ptr _compression_pool;
-  compression_negotiator _negotiator;
+  const router& router_ref;  // NOLINT(*ref-data*)
+  compression_pool::ptr compression;
+  std::optional<std::chrono::seconds> keep_alive_timeout;
+  std::optional<std::uint32_t> max_requests;
 };
+
+async_coro::task<void> start_session(server::socket_layer::connection conn, const session_config& config);
 
 }  // namespace server::http1

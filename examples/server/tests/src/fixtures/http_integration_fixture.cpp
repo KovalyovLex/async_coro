@@ -2,6 +2,7 @@
 
 #include <async_coro/thread_safety/unique_lock.h>
 #include <server/http1/http_error.h>
+#include <server/http1/http_server_config.h>
 #include <server/http1/http_status_code.h>
 #include <server/http1/response.h>
 #include <server/tcp_server_config.h>
@@ -96,10 +97,10 @@ void http_integration_fixture::start_server() {
   std::binary_semaphore sem{0};
 
   server_thread = std::thread([this, &sem] {
-    server::tcp_server_config conf;
-    conf.ip_address = "127.0.0.1";
-    conf.port = 0;
-    conf.num_reactors = 1;
+    server::http1::http_server_config conf;
+    conf.tcp_config.ip_address = "127.0.0.1";
+    conf.tcp_config.port = 0;
+    conf.tcp_config.num_reactors = 1;
 
     server.serve(conf, {}, [this, &sem](const auto&, auto port) {
       this->port = port;

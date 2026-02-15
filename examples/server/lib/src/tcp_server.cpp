@@ -121,6 +121,11 @@ void tcp_server::serve(const tcp_server_config& conf, std::optional<ssl_config> 
           reactor_index = 0;
         }
 
+        if (conf.disable_delay) {
+          // Disable Nagle's algorithm for this connection
+          conn.set_no_delay(true);
+        }
+
         on_connected(std::move(conn));
       } else if (result.type == socket_layer::listener::listen_result_type::wait_for_connections && !_has_connections.load(std::memory_order::relaxed)) {
         listener_reactor.continue_after_receive_data(listener_connection.get_connection_id(), listener_connection.get_subscription_index(), [this](auto) {

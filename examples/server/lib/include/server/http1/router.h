@@ -8,9 +8,12 @@
 #include <variant>
 #include <vector>
 
+namespace server::socket_layer {
+class connection;
+}
+
 namespace server::http1 {
 
-class session;
 class request;
 class response;
 
@@ -18,7 +21,7 @@ class response;
 class router {
  public:
   using simple_handler_t = async_coro::unique_function<async_coro::task<void>(const request&, response&) const>;
-  using advanced_handler_t = async_coro::unique_function<async_coro::task<void>(const request&, http1::session&) const>;
+  using advanced_handler_t = async_coro::unique_function<async_coro::task<void>(const request&, socket_layer::connection&) const>;
   using handler_t = std::variant<simple_handler_t, advanced_handler_t>;
 
   router() noexcept = default;
