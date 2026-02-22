@@ -24,6 +24,8 @@ class http_integration_fixture : public ::testing::Test {
   std::function<async_coro::task<>(const server::http1::request&, server::http1::response&)> head_test_handler CORO_THREAD_GUARDED_BY(mutex);
   std::function<async_coro::task<>(const server::http1::request&, server::http1::response&)> post_test_handler CORO_THREAD_GUARDED_BY(mutex);
   server::http1::http_server server;
+  // configuration used when starting the server; tests can modify before SetUp
+  server::http1::http_server_config server_config;
   std::thread server_thread;
   uint16_t port = 0;
   http_test_client test_client;

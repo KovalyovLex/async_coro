@@ -98,7 +98,8 @@ void http_integration_fixture::start_server() {
   std::binary_semaphore sem{0};
 
   server_thread = std::thread([this, &sem] {
-    server::http1::http_server_config conf;
+    // copy preconfigured settings from fixture (allows tests to override)
+    auto conf = server_config;  // copy so modifications won't affect later
     conf.tcp_config.ip_address = "127.0.0.1";
     conf.tcp_config.port = 0;
     conf.tcp_config.num_reactors = 1;

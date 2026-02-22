@@ -167,6 +167,12 @@ async_coro::task<void> start_session(server::socket_layer::connection conn, cons
     }
     res.clear();
   }
+
+  // loop ended because either connection closed already or keep_alive became false
+  if (!conn.is_closed()) {
+    // make sure we don't leave socket open if we intentionally stopped keeping alive
+    conn.close_connection();
+  }
 }
 
 }  // namespace server::http1
