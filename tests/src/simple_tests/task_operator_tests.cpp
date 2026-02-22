@@ -58,7 +58,7 @@ TEST(task_op, and_result_pair) {
   auto routine = [&]() -> async_coro::task<int> {
     auto& scheduler = co_await async_coro::get_scheduler();
 
-    auto results = co_await (scheduler.start_task(routine1) && scheduler.start_task(routine2));
+    auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) && scheduler.start_task(routine2, async_coro::execution_queues::main));
 
     static_assert(std::is_same_v<decltype(results), std::tuple<int, float>>);
 
@@ -72,7 +72,7 @@ TEST(task_op, and_result_pair) {
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(async_coro::execution_system_config{})};
 
-  auto handle = scheduler.start_task(routine());
+  auto handle = scheduler.start_task(routine(), async_coro::execution_queues::main);
   ASSERT_TRUE(handle.done());
 
   EXPECT_EQ(handle.get(), 4);
@@ -94,21 +94,21 @@ TEST(task_op, and_result_triple_with_void) {
   auto routine = [&]() -> async_coro::task<int> {
     auto& scheduler = co_await async_coro::get_scheduler();
     {
-      auto results = co_await (scheduler.start_task(routine3) && scheduler.start_task(routine1) && scheduler.start_task(routine2));
+      auto results = co_await (scheduler.start_task(routine3, async_coro::execution_queues::main) && scheduler.start_task(routine1, async_coro::execution_queues::main) && scheduler.start_task(routine2, async_coro::execution_queues::main));
       static_assert(std::is_same_v<decltype(results), std::tuple<int, float>>);
     }
 
     {
-      auto results = co_await (scheduler.start_task(routine1) && scheduler.start_task(routine3) && scheduler.start_task(routine2));
+      auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) && scheduler.start_task(routine3, async_coro::execution_queues::main) && scheduler.start_task(routine2, async_coro::execution_queues::main));
       static_assert(std::is_same_v<decltype(results), std::tuple<int, float>>);
     }
 
     {
-      auto results = co_await (scheduler.start_task(routine2) && scheduler.start_task(routine1) && scheduler.start_task(routine3));
+      auto results = co_await (scheduler.start_task(routine2, async_coro::execution_queues::main) && scheduler.start_task(routine1, async_coro::execution_queues::main) && scheduler.start_task(routine3, async_coro::execution_queues::main));
       static_assert(std::is_same_v<decltype(results), std::tuple<float, int>>);
     }
 
-    auto results = co_await (scheduler.start_task(routine1) && scheduler.start_task(routine2) && scheduler.start_task(routine3));
+    auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) && scheduler.start_task(routine2, async_coro::execution_queues::main) && scheduler.start_task(routine3, async_coro::execution_queues::main));
 
     static_assert(std::is_same_v<decltype(results), std::tuple<int, float>>);
 
@@ -122,7 +122,7 @@ TEST(task_op, and_result_triple_with_void) {
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(async_coro::execution_system_config{})};
 
-  auto handle = scheduler.start_task(routine());
+  auto handle = scheduler.start_task(routine(), async_coro::execution_queues::main);
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), 4);
 }
@@ -148,28 +148,28 @@ TEST(task_op, and_result_with_parenthesis) {
     auto& scheduler = co_await async_coro::get_scheduler();
 
     {
-      auto results = co_await (scheduler.start_task(routine1) && (scheduler.start_task(routine2) && scheduler.start_task(routine3)) && scheduler.start_task(routine_void));
+      auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) && (scheduler.start_task(routine2, async_coro::execution_queues::main) && scheduler.start_task(routine3, async_coro::execution_queues::main)) && scheduler.start_task(routine_void, async_coro::execution_queues::main));
       static_assert(std::is_same_v<decltype(results), std::tuple<int, float, double>>);
 
       const auto sum = std::apply([&](auto... num) { return (int(num) + ...); }, results);
       EXPECT_EQ(sum, 6);
     }
     {
-      auto results = co_await (scheduler.start_task(routine1) && scheduler.start_task(routine_void) && (scheduler.start_task(routine2) && scheduler.start_task(routine3)));
+      auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) && scheduler.start_task(routine_void, async_coro::execution_queues::main) && (scheduler.start_task(routine2, async_coro::execution_queues::main) && scheduler.start_task(routine3, async_coro::execution_queues::main)));
       static_assert(std::is_same_v<decltype(results), std::tuple<int, float, double>>);
 
       const auto sum = std::apply([&](auto... num) { return (int(num) + ...); }, results);
       EXPECT_EQ(sum, 6);
     }
     {
-      auto results = co_await ((scheduler.start_task(routine1) && scheduler.start_task(routine_void)) && (scheduler.start_task(routine2) && scheduler.start_task(routine3)));
+      auto results = co_await ((scheduler.start_task(routine1, async_coro::execution_queues::main) && scheduler.start_task(routine_void, async_coro::execution_queues::main)) && (scheduler.start_task(routine2, async_coro::execution_queues::main) && scheduler.start_task(routine3, async_coro::execution_queues::main)));
       static_assert(std::is_same_v<decltype(results), std::tuple<int, float, double>>);
 
       const auto sum = std::apply([&](auto... num) { return (int(num) + ...); }, results);
       EXPECT_EQ(sum, 6);
     }
 
-    auto results = co_await (scheduler.start_task(routine1) && scheduler.start_task(routine2) && scheduler.start_task(routine3) && scheduler.start_task(routine_void));
+    auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) && scheduler.start_task(routine2, async_coro::execution_queues::main) && scheduler.start_task(routine3, async_coro::execution_queues::main) && scheduler.start_task(routine_void, async_coro::execution_queues::main));
 
     static_assert(std::is_same_v<decltype(results), std::tuple<int, float, double>>);
 
@@ -179,7 +179,7 @@ TEST(task_op, and_result_with_parenthesis) {
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(async_coro::execution_system_config{})};
 
-  auto handle = scheduler.start_task(routine());
+  auto handle = scheduler.start_task(routine(), async_coro::execution_queues::main);
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), 6);
 }
@@ -196,7 +196,7 @@ TEST(task_op, or_result_pair) {
   auto routine = [&]() -> async_coro::task<int> {
     auto& scheduler = co_await async_coro::get_scheduler();
 
-    auto results = co_await (scheduler.start_task(routine1) || scheduler.start_task(routine2));
+    auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) || scheduler.start_task(routine2, async_coro::execution_queues::main));
 
     static_assert(std::is_same_v<decltype(results), std::variant<int, float>>);
 
@@ -213,7 +213,7 @@ TEST(task_op, or_result_pair) {
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(async_coro::execution_system_config{})};
 
-  auto handle = scheduler.start_task(routine());
+  auto handle = scheduler.start_task(routine(), async_coro::execution_queues::main);
   ASSERT_TRUE(handle.done());
 
   EXPECT_EQ(handle.get(), 1);
@@ -236,7 +236,7 @@ TEST(task_op, or_result_triple_with_void) {
     auto& scheduler = co_await async_coro::get_scheduler();
 
     {
-      auto results = co_await (scheduler.start_task(routine3) || scheduler.start_task(routine1) || scheduler.start_task(routine2));
+      auto results = co_await (scheduler.start_task(routine3, async_coro::execution_queues::main) || scheduler.start_task(routine1, async_coro::execution_queues::main) || scheduler.start_task(routine2, async_coro::execution_queues::main));
       static_assert(std::is_same_v<decltype(results), std::variant<std::monostate, int, float>>);
 
       const auto res = std::visit(test_utils::int_visitor, results);
@@ -244,7 +244,7 @@ TEST(task_op, or_result_triple_with_void) {
     }
 
     {
-      auto results = co_await (scheduler.start_task(routine1) || scheduler.start_task(routine3) || scheduler.start_task(routine2));
+      auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) || scheduler.start_task(routine3, async_coro::execution_queues::main) || scheduler.start_task(routine2, async_coro::execution_queues::main));
       static_assert(std::is_same_v<decltype(results), std::variant<int, std::monostate, float>>);
 
       const auto res = std::visit(test_utils::int_visitor, results);
@@ -252,14 +252,14 @@ TEST(task_op, or_result_triple_with_void) {
     }
 
     {
-      auto results = co_await (scheduler.start_task(routine2) || scheduler.start_task(routine1) || scheduler.start_task(routine3));
+      auto results = co_await (scheduler.start_task(routine2, async_coro::execution_queues::main) || scheduler.start_task(routine1, async_coro::execution_queues::main) || scheduler.start_task(routine3, async_coro::execution_queues::main));
       static_assert(std::is_same_v<decltype(results), std::variant<float, int, std::monostate>>);
 
       const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 3);
     }
 
-    auto results = co_await (scheduler.start_task(routine1) || scheduler.start_task(routine2) || scheduler.start_task(routine3));
+    auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) || scheduler.start_task(routine2, async_coro::execution_queues::main) || scheduler.start_task(routine3, async_coro::execution_queues::main));
 
     static_assert(std::is_same_v<decltype(results), std::variant<int, float, std::monostate>>);
 
@@ -268,7 +268,7 @@ TEST(task_op, or_result_triple_with_void) {
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(async_coro::execution_system_config{})};
 
-  auto handle = scheduler.start_task(routine());
+  auto handle = scheduler.start_task(routine(), async_coro::execution_queues::main);
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), 1);
 }
@@ -294,28 +294,28 @@ TEST(task_op, or_result_with_parenthesis) {
     auto& scheduler = co_await async_coro::get_scheduler();
 
     {
-      auto results = co_await (scheduler.start_task(routine1) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)) || scheduler.start_task(routine_void));
+      auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) || (scheduler.start_task(routine2, async_coro::execution_queues::main) || scheduler.start_task(routine3, async_coro::execution_queues::main)) || scheduler.start_task(routine_void, async_coro::execution_queues::main));
       static_assert(std::is_same_v<decltype(results), std::variant<int, float, double, std::monostate>>);
 
       const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);
     }
     {
-      auto results = co_await (scheduler.start_task(routine1) || scheduler.start_task(routine_void) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)));
+      auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) || scheduler.start_task(routine_void, async_coro::execution_queues::main) || (scheduler.start_task(routine2, async_coro::execution_queues::main) || scheduler.start_task(routine3, async_coro::execution_queues::main)));
       static_assert(std::is_same_v<decltype(results), std::variant<int, std::monostate, float, double>>);
 
       const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);
     }
     {
-      auto results = co_await ((scheduler.start_task(routine1) || scheduler.start_task(routine_void)) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)));
+      auto results = co_await ((scheduler.start_task(routine1, async_coro::execution_queues::main) || scheduler.start_task(routine_void, async_coro::execution_queues::main)) || (scheduler.start_task(routine2, async_coro::execution_queues::main) || scheduler.start_task(routine3, async_coro::execution_queues::main)));
       static_assert(std::is_same_v<decltype(results), std::variant<int, std::monostate, float, double>>);
 
       const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);
     }
 
-    auto results = co_await (scheduler.start_task(routine1) || scheduler.start_task(routine2) || scheduler.start_task(routine3) || scheduler.start_task(routine_void));
+    auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) || scheduler.start_task(routine2, async_coro::execution_queues::main) || scheduler.start_task(routine3, async_coro::execution_queues::main) || scheduler.start_task(routine_void, async_coro::execution_queues::main));
 
     static_assert(std::is_same_v<decltype(results), std::variant<int, float, double, std::monostate>>);
 
@@ -324,7 +324,7 @@ TEST(task_op, or_result_with_parenthesis) {
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(async_coro::execution_system_config{})};
 
-  auto handle = scheduler.start_task(routine());
+  auto handle = scheduler.start_task(routine(), async_coro::execution_queues::main);
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), 1);
 }
@@ -353,42 +353,42 @@ TEST(task_op, mixed_result_with_parenthesis) {
     ASYNC_CORO_WARNINGS_GCC_IGNORE("parentheses")
 
     {
-      auto results = co_await (scheduler.start_task(routine1) && (scheduler.start_task(routine2) || scheduler.start_task(routine3)) || scheduler.start_task(routine_void));
+      auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) && (scheduler.start_task(routine2, async_coro::execution_queues::main) || scheduler.start_task(routine3, async_coro::execution_queues::main)) || scheduler.start_task(routine_void, async_coro::execution_queues::main));
       static_assert(std::is_same_v<decltype(results), std::variant<std::tuple<int, std::variant<float, double>>, std::monostate>>);
 
       const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 4);
     }
     {
-      auto results = co_await (scheduler.start_task(routine1) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)) && scheduler.start_task(routine_void));
+      auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) || (scheduler.start_task(routine2, async_coro::execution_queues::main) || scheduler.start_task(routine3, async_coro::execution_queues::main)) && scheduler.start_task(routine_void, async_coro::execution_queues::main));
       static_assert(std::is_same_v<decltype(results), std::variant<int, std::tuple<std::variant<float, double>>>>);
 
       const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);
     }
     {
-      auto results = co_await (scheduler.start_task(routine1) && scheduler.start_task(routine_void) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)));
+      auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) && scheduler.start_task(routine_void, async_coro::execution_queues::main) || (scheduler.start_task(routine2, async_coro::execution_queues::main) || scheduler.start_task(routine3, async_coro::execution_queues::main)));
       static_assert(std::is_same_v<decltype(results), std::variant<std::tuple<int>, float, double>>);
 
       const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);
     }
     {
-      auto results = co_await (scheduler.start_task(routine1) || scheduler.start_task(routine_void) && (scheduler.start_task(routine2) || scheduler.start_task(routine3)));
+      auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) || scheduler.start_task(routine_void, async_coro::execution_queues::main) && (scheduler.start_task(routine2, async_coro::execution_queues::main) || scheduler.start_task(routine3, async_coro::execution_queues::main)));
       static_assert(std::is_same_v<decltype(results), std::variant<int, std::tuple<std::variant<float, double>>>>);
 
       const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);
     }
     {
-      auto results = co_await ((scheduler.start_task(routine1) && scheduler.start_task(routine_void)) || (scheduler.start_task(routine2) || scheduler.start_task(routine3)));
+      auto results = co_await ((scheduler.start_task(routine1, async_coro::execution_queues::main) && scheduler.start_task(routine_void, async_coro::execution_queues::main)) || (scheduler.start_task(routine2, async_coro::execution_queues::main) || scheduler.start_task(routine3, async_coro::execution_queues::main)));
       static_assert(std::is_same_v<decltype(results), std::variant<std::tuple<int>, float, double>>);
 
       const auto res = std::visit(test_utils::int_visitor, results);
       EXPECT_EQ(res, 1);
     }
     {
-      auto results = co_await ((scheduler.start_task(routine1) || scheduler.start_task(routine_void)) || (scheduler.start_task(routine2) && scheduler.start_task(routine3)));
+      auto results = co_await ((scheduler.start_task(routine1, async_coro::execution_queues::main) || scheduler.start_task(routine_void, async_coro::execution_queues::main)) || (scheduler.start_task(routine2, async_coro::execution_queues::main) && scheduler.start_task(routine3, async_coro::execution_queues::main)));
       static_assert(std::is_same_v<decltype(results), std::variant<int, std::monostate, std::tuple<float, double>>>);
 
       const auto res = std::visit(test_utils::int_visitor, results);
@@ -396,7 +396,7 @@ TEST(task_op, mixed_result_with_parenthesis) {
     }
 
     {
-      auto results = co_await (scheduler.start_task(routine1) || scheduler.start_task(routine2) && scheduler.start_task(routine3) || scheduler.start_task(routine_void));
+      auto results = co_await (scheduler.start_task(routine1, async_coro::execution_queues::main) || scheduler.start_task(routine2, async_coro::execution_queues::main) && scheduler.start_task(routine3, async_coro::execution_queues::main) || scheduler.start_task(routine_void, async_coro::execution_queues::main));
       static_assert(std::is_same_v<decltype(results), std::variant<int, std::tuple<float, double>, std::monostate>>);
 
       const auto res = std::visit(test_utils::int_visitor, results);
@@ -410,7 +410,7 @@ TEST(task_op, mixed_result_with_parenthesis) {
 
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(async_coro::execution_system_config{})};
 
-  auto handle = scheduler.start_task(routine());
+  auto handle = scheduler.start_task(routine(), async_coro::execution_queues::main);
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), 1);
 }
@@ -468,11 +468,11 @@ TEST(task_op, mixed_void_and_value_operators) {
     auto& scheduler = co_await async_coro::get_scheduler();
 
     // Test void && int - void result should be filtered out
-    auto result = co_await (scheduler.start_task(void_routine) && scheduler.start_task(int_routine));
+    auto result = co_await (scheduler.start_task(void_routine, async_coro::execution_queues::main) && scheduler.start_task(int_routine, async_coro::execution_queues::main));
     EXPECT_EQ(std::get<0>(result), 42);
 
     // Test int || void
-    auto result2 = co_await (scheduler.start_task(int_routine) || scheduler.start_task(void_routine));
+    auto result2 = co_await (scheduler.start_task(int_routine, async_coro::execution_queues::main) || scheduler.start_task(void_routine, async_coro::execution_queues::main));
     EXPECT_TRUE(std::holds_alternative<int>(result2));
     EXPECT_EQ(std::get<int>(result2), 42);
 
@@ -482,7 +482,7 @@ TEST(task_op, mixed_void_and_value_operators) {
   async_coro::execution_system_config config{.worker_configs = {{"worker1", async_coro::execution_queues::worker}}};
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(config)};
 
-  auto handle = scheduler.start_task(routine());
+  auto handle = scheduler.start_task(routine(), async_coro::execution_queues::main);
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), 42);
 }
@@ -501,8 +501,8 @@ TEST(task_op, different_types_and_operator) {
 
     // Test combining different types with &&
     auto [int_val, double_val] = co_await (
-        scheduler.start_task(int_routine) &&
-        scheduler.start_task(double_routine));
+        scheduler.start_task(int_routine, async_coro::execution_queues::main) &&
+        scheduler.start_task(double_routine, async_coro::execution_queues::main));
 
     EXPECT_EQ(int_val, 1);
     EXPECT_DOUBLE_EQ(double_val, 2.5);
@@ -513,7 +513,7 @@ TEST(task_op, different_types_and_operator) {
   async_coro::execution_system_config config{.worker_configs = {{"worker1", async_coro::execution_queues::worker}}};
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(config)};
 
-  auto handle = scheduler.start_task(routine());
+  auto handle = scheduler.start_task(routine(), async_coro::execution_queues::main);
   ASSERT_TRUE(handle.done());
   EXPECT_DOUBLE_EQ(handle.get(), 3.5);
 }

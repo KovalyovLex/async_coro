@@ -1,0 +1,96 @@
+#pragma once
+
+#include <async_coro/task.h>
+#include <server/http1/http_status_code.h>
+#include <server/http1/http_version.h>
+#include <server/socket_layer/connection.h>
+#include <server/utils/compression_pool.h>
+#include <server/utils/expected.h>
+#include <server/utils/static_string.h>
+#include <server/utils/string_storage.h>
+
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace server::http1 {
+
+struct http_error;
+namespace content_types {
+inline constexpr static_string plain_text{"text/plain; charset=utf-8"};
+inline constexpr static_string html{"text/html; charset=utf-8"};
+inline constexpr static_string json{"application/json"};
+}  // namespace content_types
+
+using response_encoder = pooled_compressor<compressor_variant>;
+
+class response {
+ public:
+  // Constructs default response with 200 Ok status
+  explicit response(http_version ver) noexcept;
+
+  // Sets status code and reason. Reason will be default explanation: as_string (status)
+  void set_status(status_code status) noexcept;
+  // Sets status code reason and body of message.
+  void set_status(http_error&& error);
+  // Sets status code and reason as dynamic string
+  void set_status(http_status_code status, std::string_view reason);
+  // Sets status code and reason
+  void set_status(http_status_code status, static_string reason) noexcept;
+
+  [[nodiscard]] http_status_code get_status_code() const noexcept { return _status_code; }
+
+  [[nodiscard]] std::string_view get_reason() const noexcept { return _reason; }
+
+  // Adds string to storage associated with this response
+  std::string_view add_string(std::string&& str);
+  std::string_view add_string(std::string_view str);
+
+  void add_header(static_string name, static_string value);
+  void add_header(std::string name, std::string value) {
+    add_header(static_string{add_string(std::move(name))}, static_string{add_string(std::move(value))});
+  }
+  void add_header(static_string name, std::string value) {
+    add_header(name, static_string{add_string(std::move(value))});
+  }
+
+  void set_body(static_string body, static_string content_type);
+  void set_body(std::string body, static_string content_type);
+  void set_body(std::string body, std::string content_type) {
+    set_body(std::move(body), static_string{add_string(std::move(content_type))});
+  }
+
+  [[nodiscard]] bool was_sent() const noexcept { return _was_sent; }
+
+  [[nodiscard]] async_coro::task<expected<void, std::string>> send(server::socket_layer::connection& conn);
+
+  // Set encoding for compression support. It will work if compression_pool also was set
+  void set_encoding(compression_encoding encoding) noexcept { _encoding = encoding; }
+
+  // Set compression_pool instance to use for body compression
+  void set_compression_pool(compression_pool::ptr pool) noexcept { _compression_pool = std::move(pool); }
+
+  // Check if response has compression encoder
+  [[nodiscard]] bool has_encoding() const noexcept { return _compression_pool != nullptr && _encoding != compression_encoding::none; }
+
+  // clears status (sets 200 ok), string storage and headers
+  void clear();
+
+ private:
+  void set_body_impl(std::string_view body, static_string content_type, bool is_body_static, std::string* body_str);
+
+ private:
+  using header_list_t = std::vector<std::pair<std::string_view, std::string_view>>;
+
+  http_version _ver;
+  http_status_code _status_code;
+  bool _was_sent = false;
+  compression_encoding _encoding = compression_encoding::none;
+  std::string_view _reason;
+  header_list_t _headers;
+  std::string_view _body;
+  string_storage::ptr _string_storage;
+  compression_pool::ptr _compression_pool;
+};
+
+}  // namespace server::http1

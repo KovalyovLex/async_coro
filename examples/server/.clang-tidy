@@ -1,0 +1,62 @@
+---
+# Strict, modern clang-tidy configuration for C++ projects
+# - Enables modernizing, correctness, performance and style checks
+# - Treats all checks as errors (WarningsAsErrors: '*') to enforce fixes
+
+Checks: >
+  clang-analyzer-*,
+  bugprone-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  modernize-*,
+  cppcoreguidelines-*,
+  hicpp-*,
+  readability-identifier-naming,
+  hicpp-avoid-goto,
+  -readability-redundant-access-specifiers,
+  -modernize-use-trailing-return-type,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  -cppcoreguidelines-pro-type-union-access,
+  -cppcoreguidelines-avoid-capturing-lambda-coroutines,
+  -cppcoreguidelines-avoid-reference-coroutine-parameters,
+
+# Treat all warnings as errors to enforce fixes.
+WarningsAsErrors: '*'
+
+# Run checks over all headers in the project.
+HeaderFilterRegex: '*'
+
+# Use project .clang-format when available
+FormatStyle: file
+
+# Fine-grained options for several checks.
+CheckOptions:
+  - key: modernize-use-nullptr.NullMacros
+    value: 'NULL'
+
+  - key: modernize-use-auto.MinTypeNameLength
+    value: '0'
+
+  - key: modernize-loop-convert.MinConfidence
+    value: 'reasonable'
+
+  - key: readability-braces-around-statements.ShortStatementLines
+    value: '1'
+
+  - key: cppcoreguidelines-pro-type-vararg.CheckFormat
+    value: '1'
+
+  - key: cppcoreguidelines-pro-type-reinterpret-cast.WarnOnCStyleCast
+    value: '1'
+
+  - key: hicpp-special-member-functions.IncludeDefaultCopyConstructor
+    value: '1'
+
+  - key: cppcoreguidelines-special-member-functions.AllowImplicitMove
+    value: '0'
+
+  - key: modernize-use-using.CheckAlpha
+    value: '1'
+
+

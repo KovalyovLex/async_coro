@@ -327,6 +327,8 @@ class callback_on_heap final : public TCallback {
 
  private:
   static void execute(internal::callback_execute_command& cmd, callback_base<TCallback::is_noexcept>& clb) noexcept(TCallback::is_noexcept) {
+    static_assert(std::is_nothrow_destructible_v<callback_on_heap>, "Callback should be nothrow_destructible");
+
     auto& self = static_cast<callback_on_heap&>(clb);
 
     if (cmd.execute == internal::callback_execute_type::destroy) {
