@@ -1,5 +1,6 @@
 #pragma once
 
+#include <server/http1/http_method.h>
 #include <server/socket_layer/connection_id.h>
 
 #include <chrono>
@@ -7,8 +8,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-
-#include "server/http1/http_method.h"
 
 // Helper class to generate http requests for testing
 class http_test_client {

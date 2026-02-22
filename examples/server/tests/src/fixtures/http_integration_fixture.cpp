@@ -7,6 +7,7 @@
 #include <server/http1/response.h>
 #include <server/tcp_server_config.h>
 
+#include <chrono>
 #include <semaphore>
 
 void http_integration_fixture::SetUp() {
@@ -101,6 +102,7 @@ void http_integration_fixture::start_server() {
     conf.tcp_config.ip_address = "127.0.0.1";
     conf.tcp_config.port = 0;
     conf.tcp_config.num_reactors = 1;
+    conf.tcp_config.reactor_sleep = std::chrono::milliseconds{50};
 
     server.serve(conf, {}, [this, &sem](const auto&, auto port) {
       this->port = port;
