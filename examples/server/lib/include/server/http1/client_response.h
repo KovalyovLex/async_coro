@@ -3,7 +3,7 @@
 #include <async_coro/task.h>
 #include <async_coro/utils/function_view.h>
 #include <server/http1/http_error.h>
-#include <server/http1/http_method.h>
+#include <server/http1/http_status_code.h>
 #include <server/http1/http_version.h>
 #include <server/socket_layer/connection.h>
 #include <server/utils/ci_string_view.h>
@@ -17,7 +17,7 @@
 
 namespace server::http1 {
 
-class request {
+class client_response {
   struct parser;
 
   struct parse_deleter {
@@ -27,32 +27,29 @@ class request {
  public:
   using parser_ptr = std::unique_ptr<parser, parse_deleter>;
 
-  request() noexcept;
-  request(const request&) = delete;
-  request(request&&) noexcept = default;
+  client_response() noexcept;
+  client_response(const client_response&) = delete;
+  client_response(client_response&&) noexcept = default;
+  ~client_response() noexcept = default;
 
-  ~request() noexcept = default;
-
-  request& operator=(const request&) = delete;
-  request& operator=(request&&) = default;
+  client_response& operator=(const client_response&) = delete;
+  client_response& operator=(client_response&&) noexcept = default;
 
   [[nodiscard]] const auto& get_headers() const noexcept { return _headers; }
 
-  // optimized search for header with name
   [[nodiscard]] const std::pair<ci_string_view, std::string_view>* find_header(std::string_view name) const noexcept;
 
   void foreach_header_with_name(std::string_view name, async_coro::function_view<void(const std::pair<ci_string_view, std::string_view>&)>) const;
 
   [[nodiscard]] bool has_value_in_header(std::string_view name, std::string_view value) const noexcept;
 
-  [[nodiscard]] http_method get_method() const noexcept { return _method; }
+  [[nodiscard]] http_status_code get_status_code() const noexcept { return _status_code; }
+
+  [[nodiscard]] std::string_view get_reason() const noexcept { return _reason; }
 
   [[nodiscard]] http_version get_version() const noexcept { return _version; }
 
   [[nodiscard]] std::string_view get_body() const noexcept { return _body; }
-
-  // Returns URL part of request e.g. "/index.html"
-  [[nodiscard]] std::string_view get_target() const noexcept { return _target; }
 
   [[nodiscard]] bool is_parsed() const noexcept { return _parsed; }
 
@@ -63,13 +60,12 @@ class request {
 
  private:
   void reset();
-
-  expected<void, http_error> parse_header_line(std::string_view line);
+  expected<void, http_error> parse_status_line(std::string_view start_line);
 
  private:
-  std::string_view _target;
   std::string_view _body;
-  http_method _method;
+  http_status_code _status_code;
+  std::string_view _reason;
   http_version _version;
   bool _parsed = false;
   std::vector<std::pair<ci_string_view, std::string_view>> _headers;  // sorted

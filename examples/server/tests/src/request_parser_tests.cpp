@@ -19,7 +19,7 @@ TEST(request_parser, simple_get_single_portion) {
   request req;
   request::parser_ptr parser{};
 
-  req.begin_parse(parser, {});
+  req.begin_parse(parser);
 
   const auto bytes = to_bytes("GET /index.html HTTP/1.1\r\nHost: example.com\r\n\r\n");
   auto res = req.parse_data_part(parser, bytes);
@@ -37,7 +37,7 @@ TEST(request_parser, wrong_method) {
   request req;
   request::parser_ptr parser{};
 
-  req.begin_parse(parser, {});
+  req.begin_parse(parser);
 
   const auto bytes = to_bytes("BADMETHOD / HTTP/1.1\r\n\r\n");
   auto res = req.parse_data_part(parser, bytes);
@@ -51,7 +51,7 @@ TEST(request_parser, missing_version) {
   request req;
   request::parser_ptr parser{};
 
-  req.begin_parse(parser, {});
+  req.begin_parse(parser);
 
   const auto bytes = to_bytes("GET /nover\r\nHost: a\r\n\r\n");
   auto res = req.parse_data_part(parser, bytes);
@@ -107,7 +107,7 @@ TEST(request_parser, chunked_various_splits) {
   for (const auto& cuts : patterns) {
     request req;
     request::parser_ptr parser{};
-    req.begin_parse(parser, {});
+    req.begin_parse(parser);
 
     auto res = feed_parts(req, parser, total, cuts);
     ASSERT_TRUE(res) << (res ? "ok" : std::string{res.error().get_reason()});
@@ -126,7 +126,7 @@ TEST(request_parser, chunked_invalid_chunk_size) {
 
   request req;
   request::parser_ptr parser{};
-  req.begin_parse(parser, {});
+  req.begin_parse(parser);
 
   auto res = req.parse_data_part(parser, to_bytes(total));
   ASSERT_FALSE(res);
