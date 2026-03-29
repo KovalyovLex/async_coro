@@ -50,6 +50,8 @@ class client_request final : public headers_holder {
     add_header(name, static_string{add_string(std::move(value))});
   }
 
+  void remove_headers(async_coro::function_view<bool(const core::headers_type::value_type&)> func) noexcept;
+
   void set_headers(core::headers_type headers) noexcept;
 
   void reserve_headers(size_t num);

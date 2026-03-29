@@ -7,6 +7,7 @@
 #include <charconv>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace server::http1 {
@@ -42,6 +43,16 @@ std::string_view client_request::add_string(std::string_view str) {
 
 void client_request::add_header(static_string name, static_string value) {
   _headers.emplace_back(traits_cast<ascii_ci_traits>(name.str), value.str);
+}
+
+void client_request::remove_headers(async_coro::function_view<bool(const core::headers_type::value_type &)> func) noexcept {
+  ASYNC_CORO_ASSERT(func);
+
+  if (!func) [[unlikely]] {
+    return;
+  }
+
+  std::erase_if(_headers, func);
 }
 
 void client_request::reserve_headers(size_t num) {
