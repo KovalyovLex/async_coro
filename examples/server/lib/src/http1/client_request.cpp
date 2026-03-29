@@ -1,4 +1,5 @@
 #include <async_coro/config.h>
+#include <server/core/i_write_connection.h>
 #include <server/http1/client_request.h>
 #include <server/utils/expected.h>
 
@@ -10,9 +11,13 @@
 
 namespace server::http1 {
 
-client_request::client_request(http_method method, std::string_view target, http_version ver) noexcept
+client_request::client_request(http_method method, static_string target, http_version ver) noexcept
     : _method(method),
-      _target(target),
+      _target(target.str),
+      _version(ver) {}
+
+client_request::client_request(http_method method, http_version ver) noexcept
+    : _method(method),
       _version(ver) {}
 
 std::string_view client_request::add_string(std::string &&str) {  // NOLINT(*not-moved)
@@ -36,7 +41,15 @@ std::string_view client_request::add_string(std::string_view str) {
 }
 
 void client_request::add_header(static_string name, static_string value) {
-  _headers.emplace_back(name.str, value.str);
+  _headers.emplace_back(traits_cast<ascii_ci_traits>(name.str), value.str);
+}
+
+void client_request::reserve_headers(size_t num) {
+  _headers.reserve(num);
+}
+
+void client_request::set_headers(core::headers_type headers) noexcept {
+  _headers = std::move(headers);
 }
 
 void client_request::set_body(std::string body, static_string content_type) {
@@ -44,16 +57,28 @@ void client_request::set_body(std::string body, static_string content_type) {
 }
 
 void client_request::set_body(static_string body, static_string content_type) {
+  if (!_body.empty()) {
+    // remove previous set headers
+    std::erase_if(_headers, [](const auto &pair) {
+      return pair.first == "Content-Type" || pair.first == "Content-Length";
+    });
+  }
+
   _body = body.str;
   if (!content_type.str.empty()) {
     _headers.emplace_back("Content-Type", content_type.str);
   }
-  std::array<char, 20> buf{};
-  auto res = std::to_chars(buf.data(), buf.data() + buf.size(), _body.size());
+  std::array<char, 20> buf{};  // NOLINT(*magic*)
+
+  auto res = std::to_chars(buf.data(), buf.data() + buf.size(), _body.size());  // NOLINT(*pointer*)
   if (res.ec == std::errc{}) {
     std::string_view lenstr{buf.data(), res.ptr};
     _headers.emplace_back("Content-Length", add_string(lenstr));
   }
+}
+
+void client_request::set_body_without_content_headers(static_string body) noexcept {
+  _body = body.str;
 }
 
 void client_request::clear() {
@@ -67,7 +92,7 @@ void client_request::clear() {
 
 // very similar to response::send with adjusted first line
 // NOLINTBEGIN(*pointer*,*array-index*,*macro*)
-async_coro::task<expected<void, std::string>> client_request::send(server::socket_layer::connection &conn) {  // NOLINT(*complexity*)
+async_coro::task<expected<void, std::string>> client_request::send(server::core::i_write_connection &conn) {  // NOLINT(*complexity*)
   using res_t = expected<void, std::string>;
   using namespace std::string_view_literals;
 
@@ -110,10 +135,10 @@ async_coro::task<expected<void, std::string>> client_request::send(server::socke
   PUSH_TO_BUF(as_string(_version));
   PUSH_TO_BUF("\r\n"sv);
 
-  for (auto &h : _headers) {
-    PUSH_TO_BUF(h.first);
+  for (auto &header : _headers) {
+    PUSH_TO_BUF(header.first);
     PUSH_TO_BUF(": "sv);
-    PUSH_TO_BUF(h.second);
+    PUSH_TO_BUF(header.second);
     PUSH_TO_BUF("\r\n"sv);
   }
   PUSH_TO_BUF("\r\n"sv);
@@ -133,36 +158,5 @@ async_coro::task<expected<void, std::string>> client_request::send(server::socke
   _was_sent = true;
   co_return res_t{};
 }  // NOLINTEND(*pointer*,*array-index*,*macro*)
-
-std::string client_request::to_string() const {
-  using namespace std::string_view_literals;
-  std::string out;
-  out.reserve(256);
-
-  // helper lambda similar to PUSH_TO_BUF but pushing into string
-  auto push = [&](std::string_view str) {
-    out.append(str);
-  };
-
-  push(as_string(_method));
-  push(" "sv);
-  push(_target);
-  push(" "sv);
-  push(as_string(_version));
-  push("\r\n"sv);
-
-  for (const auto &header : _headers) {
-    push(header.first);
-    push(": "sv);
-    push(header.second);
-    push("\r\n"sv);
-  }
-  push("\r\n"sv);
-  if (!_body.empty()) {
-    push(_body);
-  }
-
-  return out;
-}
 
 }  // namespace server::http1

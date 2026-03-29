@@ -6,14 +6,14 @@
 #include <string>
 #include <vector>
 
-using namespace server::http1;  // NOLINT(*-using-namespace)
-
 static auto to_bytes(std::string_view str) {
   std::span span{str};
   return std::as_bytes(span);
 }
 
 TEST(client_response_parser, simple_ok_single_portion) {
+  using namespace server::http1;
+
   client_response resp;
   client_response::parser_ptr parser{};
 
@@ -34,6 +34,8 @@ TEST(client_response_parser, simple_ok_single_portion) {
 }
 
 TEST(client_response_parser, chunked_various_splits) {
+  using namespace server::http1;
+
   const std::string_view total =
       "HTTP/1.1 200 OK\r\n"
       "Transfer-Encoding: chunked\r\n"
@@ -77,6 +79,8 @@ TEST(client_response_parser, chunked_various_splits) {
 }
 
 TEST(client_response_parser, invalid_status_line) {
+  using namespace server::http1;
+
   client_response resp;
   client_response::parser_ptr parser{};
   resp.begin_parse(parser);
@@ -88,6 +92,8 @@ TEST(client_response_parser, invalid_status_line) {
 }
 
 TEST(client_response_parser, missing_code) {
+  using namespace server::http1;
+
   client_response resp;
   client_response::parser_ptr parser{};
   resp.begin_parse(parser);
@@ -98,6 +104,8 @@ TEST(client_response_parser, missing_code) {
 }
 
 TEST(client_response_parser, wrong_content_length) {
+  using namespace server::http1;
+
   client_response resp;
   client_response::parser_ptr parser{};
   resp.begin_parse(parser);

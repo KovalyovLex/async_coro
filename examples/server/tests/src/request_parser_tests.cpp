@@ -8,14 +8,14 @@
 #include <string>
 #include <vector>
 
-using namespace server::http1;  // NOLINT(*-using-namespace)
-
 static auto to_bytes(std::string_view str) {
   std::span span{str};
   return std::as_bytes(span);
 }
 
 TEST(request_parser, simple_get_single_portion) {
+  using namespace server::http1;
+
   request req;
   request::parser_ptr parser{};
 
@@ -34,6 +34,8 @@ TEST(request_parser, simple_get_single_portion) {
 }
 
 TEST(request_parser, wrong_method) {
+  using namespace server::http1;
+
   request req;
   request::parser_ptr parser{};
 
@@ -48,6 +50,8 @@ TEST(request_parser, wrong_method) {
 }
 
 TEST(request_parser, missing_version) {
+  using namespace server::http1;
+
   request req;
   request::parser_ptr parser{};
 
@@ -62,6 +66,7 @@ TEST(request_parser, missing_version) {
 }
 
 // Helper: feed string in multiple arbitrary parts to simulate network fragmentation
+namespace server::http1::tests {
 static server::expected<void, http_error> feed_parts(request& req, request::parser_ptr& parser, std::string_view full, const std::vector<size_t>& cuts) {
   size_t pos = 0;
   for (size_t cut : cuts) {
@@ -86,8 +91,11 @@ static server::expected<void, http_error> feed_parts(request& req, request::pars
 
   return server::expected<void, http_error>{};
 }
+}  // namespace server::http1::tests
 
 TEST(request_parser, chunked_various_splits) {
+  using namespace server::http1;
+
   // Body: "Wikipedia" in chunked form
   const std::string_view total =
       "POST /chunk HTTP/1.1\r\n"
@@ -109,7 +117,7 @@ TEST(request_parser, chunked_various_splits) {
     request::parser_ptr parser{};
     req.begin_parse(parser);
 
-    auto res = feed_parts(req, parser, total, cuts);
+    auto res = tests::feed_parts(req, parser, total, cuts);
     ASSERT_TRUE(res) << (res ? "ok" : std::string{res.error().get_reason()});
     EXPECT_TRUE(req.is_parsed());
     EXPECT_EQ(std::string(req.get_body()), "Wikipedia");
@@ -117,6 +125,8 @@ TEST(request_parser, chunked_various_splits) {
 }
 
 TEST(request_parser, chunked_invalid_chunk_size) {
+  using namespace server::http1;
+
   const std::string_view total =
       "POST /chunk HTTP/1.1\r\n"
       "Transfer-Encoding: chunked\r\n"

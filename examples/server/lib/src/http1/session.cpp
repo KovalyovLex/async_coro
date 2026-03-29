@@ -135,8 +135,8 @@ async_coro::task<void> start_session(server::socket_layer::connection conn, cons
       std::pmr::vector<encoding_preference> preferences{std::pmr::polymorphic_allocator<encoding_preference>{&buf_mem_res}};
       preferences.reserve(k_preallocated_size);
 
-      req.foreach_header_with_name("Accept-Encoding", [&preferences](const auto& pair) {
-        server::compression_negotiator::parse_accept_encoding(pair.second, preferences);
+      req.foreach_header_with_name("Accept-Encoding", [&preferences](const auto& value) {
+        server::compression_negotiator::parse_accept_encoding(value, preferences);
       });
 
       const auto negotiated_encoding = negotiator.negotiate(std::span{preferences});

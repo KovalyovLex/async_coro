@@ -16,11 +16,9 @@
 #include <system_error>
 #include <vector>
 
-namespace server::http1 {
+#include "server/core/i_read_connection.h"
 
-static std::string_view as_string_view(const std::vector<std::byte>& bytes) noexcept {
-  return {reinterpret_cast<const char*>(bytes.data()), bytes.size()};  // NOLINT(*-reinterpret-cast)
-}
+namespace server::http1 {
 
 static void remove_lws(std::string_view& str) noexcept {
   while (!str.empty() && (str.front() == ' ' || str.front() == '\t')) {
@@ -331,7 +329,7 @@ void client_response::parse_deleter::operator()(parser* parser) const noexcept {
   delete parser;  // NOLINT(*owning-memory)
 }
 
-async_coro::task<expected<void, http_error>> client_response::read(server::socket_layer::connection& conn) {
+async_coro::task<expected<void, http_error>> client_response::read(server::core::i_read_connection& conn) {
   using res_t = expected<void, http_error>;
 
   reset();

@@ -2,6 +2,8 @@
 
 #include <async_coro/task.h>
 #include <async_coro/utils/function_view.h>
+#include <server/core/headers_type.h>
+#include <server/http1/headers_holder.h>
 #include <server/http1/http_error.h>
 #include <server/http1/http_status_code.h>
 #include <server/http1/http_version.h>
@@ -15,9 +17,13 @@
 #include <utility>
 #include <vector>
 
+namespace server::core {
+class i_read_connection;
+}
+
 namespace server::http1 {
 
-class client_response {
+class client_response final : public headers_holder {
   struct parser;
 
   struct parse_deleter {
@@ -26,6 +32,7 @@ class client_response {
 
  public:
   using parser_ptr = std::unique_ptr<parser, parse_deleter>;
+  using headers = std::vector<std::pair<ci_string_view, std::string_view>>;  // Sorted by header name (case-insensitive)
 
   client_response() noexcept;
   client_response(const client_response&) = delete;
@@ -53,9 +60,10 @@ class client_response {
 
   [[nodiscard]] bool is_parsed() const noexcept { return _parsed; }
 
-  async_coro::task<expected<void, http_error>> read(server::socket_layer::connection& conn);
+  async_coro::task<expected<void, http_error>> read(server::core::i_read_connection& conn);
 
   void begin_parse(parser_ptr& parser_p);
+
   expected<void, http_error> parse_data_part(parser_ptr& parser_p, std::span<const std::byte> bytes);
 
  private:
@@ -63,12 +71,13 @@ class client_response {
   expected<void, http_error> parse_status_line(std::string_view start_line);
 
  private:
-  std::string_view _body;
-  http_status_code _status_code;
-  std::string_view _reason;
   http_version _version;
+  http_status_code _status_code;
   bool _parsed = false;
-  std::vector<std::pair<ci_string_view, std::string_view>> _headers;  // sorted
+
+  std::string_view _body;
+  std::string_view _reason;
+
   std::vector<std::byte> _bytes;
 };
 

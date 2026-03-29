@@ -1,7 +1,10 @@
 #include <async_coro/config.h>
+#include <server/core/i_read_connection.h>
+#include <server/http1/client_request.h>
 #include <server/http1/request.h>
 #include <server/utils/ci_string_view.h>
 #include <server/utils/expected.h>
+#include <server/utils/static_string.h>
 
 #include <algorithm>
 #include <array>
@@ -13,13 +16,8 @@
 #include <optional>
 #include <string_view>
 #include <system_error>
-#include <vector>
 
 namespace server::http1 {
-
-static std::string_view as_string_view(const std::vector<std::byte>& bytes) noexcept {
-  return {reinterpret_cast<const char*>(bytes.data()), bytes.size()};  // NOLINT(*-reinterpret-cast)
-}
 
 static void remove_lws(std::string_view& str) noexcept {
   while (!str.empty() && (str.front() == ' ' || str.front() == '\t')) {
@@ -57,74 +55,64 @@ request::request() noexcept
     : _method(http_method::Trace),
       _version(http_version::http_0_9) {}
 
-const std::pair<ci_string_view, std::string_view>* request::find_header(std::string_view name) const noexcept {
-  const auto ci_name = traits_cast<ascii_ci_traits>(name);
+request::request(request&& other) noexcept
+    : _target(other._target),
+      _body(other._body),
+      _method(other._method),
+      _version(other._version),
+      _parsed(other._parsed) {
+  _headers = std::move(other._headers);
+  auto* old_str_ptr = other._request_str.data();
+  _request_str = std::move(other._request_str);  // NOLINT(*member-initializer*)
 
-  const auto iter = std::lower_bound(_headers.begin(), _headers.end(), ci_name, headers_comparator{});  // NOLINT(*ranges*)
-  if (iter != _headers.end() && iter->first == ci_name) {
-    return std::addressof(*iter);
-  }
-
-  return nullptr;
-}
-
-void request::foreach_header_with_name(std::string_view name, async_coro::function_view<void(const std::pair<ci_string_view, std::string_view>&)> func) const {
-  if (!func) [[unlikely]] {
-    return;
-  }
-
-  const auto ci_name = traits_cast<ascii_ci_traits>(name);
-
-  auto iter = std::lower_bound(_headers.begin(), _headers.end(), ci_name, headers_comparator{});  // NOLINT(*ranges*)
-  while (iter != _headers.end() && iter->first == ci_name) {
-    func(*iter);
-    iter++;
+  if (_request_str.data() != old_str_ptr) {
+    // fix pointers
+    fix_string_pointers(old_str_ptr, _request_str);
   }
 }
 
-bool request::has_value_in_header(std::string_view name, std::string_view value) const noexcept {  // NOLINT(*swap*)
-  bool has_value = false;
+request& request::operator=(request&& other) noexcept {
+  if (this == &other) {
+    return *this;
+  }
 
-  foreach_header_with_name(name, [&](auto& pair) {
-    if (has_value) {
-      return;
-    }
+  _headers = std::move(other._headers);
+  _target = other._target;
+  _body = other._body;
+  _method = other._method;
+  _version = other._version;
+  _parsed = other._parsed;
 
-    const auto idx = pair.second.find(value);
-    if (idx != std::string_view::npos) {
-      if (idx > 0) {
-        // check begin
-        const auto symbol = pair.second[idx - 1];
-        if (symbol != ' ' && symbol != ',') {
-          // its a substring
-          return;
-        }
-      }
-      if (idx + value.size() < pair.second.size()) {
-        // check end
-        const auto symbol = pair.second[idx + value.size()];
-        if (symbol != ' ' && symbol != ',') {
-          // its a substring
-          return;
-        }
-      }
+  auto* old_str_ptr = other._request_str.data();
+  _request_str = std::move(other._request_str);
 
-      has_value = true;
-    }
-  });
+  if (_request_str.data() != old_str_ptr) {
+    // fix pointers
+    fix_string_pointers(old_str_ptr, _request_str);
+  }
 
-  return has_value;
+  return *this;
+}
+
+void request::fix_string_pointers(const char* old_str_ptr, std::span<const char> new_str) {
+  _body = {&new_str[_body.data() - old_str_ptr], _body.size()};
+  _target = {&new_str[_target.data() - old_str_ptr], _target.size()};
+
+  for (auto& pair : _headers) {
+    pair.first = {&new_str[pair.first.data() - old_str_ptr], pair.first.size()};
+    pair.second = {&new_str[pair.second.data() - old_str_ptr], pair.second.size()};
+  }
 }
 
 void request::reset() {
   _target = {};
   _body = {};
-  _bytes.clear();
+  _request_str.clear();
   _headers.clear();
   _parsed = false;
 }
 
-expected<void, http_error> request::parse_header_line(std::string_view start_line) {
+expected<void, http_error> request::parse_header_line(std::string_view start_line, const char* init_data_ptr, const char* current_str_start) {
   using res_t = expected<void, http_error>;
 
   std::string_view method;
@@ -155,7 +143,8 @@ expected<void, http_error> request::parse_header_line(std::string_view start_lin
   path = start_line.substr(0, split_index);
   remove_spaces(path);
 
-  _target = path;
+  // target should point to init_data_ptr (probably invalid string)
+  _target = {init_data_ptr + (path.data() - current_str_start), path.size()};  // NOLINT(*pointer-arithmetic*)
 
   if (split_index == std::string_view::npos) {
     return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = static_string{"Wrong request format. No HTTP version."}}};
@@ -189,13 +178,17 @@ struct request::parser {
   parse_state state = parse_state::init;
   bool is_chunked = false;
 
-  // NOLINTBEGIN(*pointer*, *reinterpret-cast)
+  // NOLINTBEGIN(*pointer*, *narrowing*, *reinterpret-cast)
   expected<void, http_error> process_next_portion(request& req) noexcept {  // NOLINT(*complexity*)
     using res_t = expected<void, http_error>;
 
-    const auto* const current_bytes_start = reinterpret_cast<const char*>(req._bytes.data());
+    std::string& request_str = req._request_str;
 
-    std::string_view string_to_process{current_bytes_start + line_start, req._bytes.size() - line_start};
+    const auto* const current_str_start = request_str.data();
+
+    auto request_size = request_str.size();
+
+    std::string_view string_to_process{current_str_start + line_start, request_size - line_start};
 
     if (state == parse_state::init) {
       const auto first_line_end = string_to_process.find('\n');
@@ -206,18 +199,17 @@ struct request::parser {
           start_line.remove_suffix(1);
         }
 
-        auto res = req.parse_header_line(start_line);
+        auto res = req.parse_header_line(start_line, init_data_ptr, current_str_start);
         if (!res) {
           return res_t{unexpect, std::move(res).error()};
         }
-        // fixing target to original ptr (invalid string)
-        req._target = {init_data_ptr + (req._target.data() - current_bytes_start), req._target.size()};
 
         state = parse_state::reading_headers;
         string_to_process.remove_prefix(first_line_end + 1);
         line_start += first_line_end + 1;
       }
     }
+
     if (state == parse_state::reading_headers) {
       auto next_line_end = string_to_process.find('\n');
 
@@ -236,7 +228,7 @@ struct request::parser {
           body_start = line_start;
 
           if (!content_length.has_value() && !is_chunked) {
-            if (req._bytes.size() > line_start) {
+            if (request_size > line_start) {
               return res_t{unexpect, http_error{.status_code = status_code::length_required, .reason = static_string{"Non empty body should have Content-Length."}}};
             }
             content_length = 0;
@@ -272,16 +264,17 @@ struct request::parser {
           }
 
           // fixing target to original ptr (invalid string)
-          name = {init_data_ptr + (name.data() - current_bytes_start), name.size()};
-          value = {init_data_ptr + (value.data() - current_bytes_start), value.size()};
+          name = {init_data_ptr + (name.data() - current_str_start), name.size()};
+          value = {init_data_ptr + (value.data() - current_str_start), value.size()};
 
           req._headers.emplace_back(traits_cast<ascii_ci_traits>(name), value);
         }
       }
     }
+
     if (state == parse_state::reading_body) {
       if (!is_chunked) {
-        if (req._bytes.size() - body_start >= content_length.value_or(0)) {
+        if (request_size - body_start >= content_length.value_or(0)) {
           // finished read
           state = parse_state::finished;
         }
@@ -290,7 +283,7 @@ struct request::parser {
         while (true) {
           // read chunk
           if (content_length.has_value()) {
-            if (req._bytes.size() - line_start >= *content_length) {
+            if (request_size - line_start >= *content_length) {
               string_to_process.remove_prefix(*content_length);
               line_start += *content_length;
 
@@ -304,15 +297,18 @@ struct request::parser {
               }
 
               if (bytes_to_remove > 0) {
-                // removing excessive data from bytes
-                req._bytes.erase(req._bytes.begin() + line_start, req._bytes.begin() + line_start + bytes_to_remove);  // NOLINT(*narrowing*)
+                // removing excessive data from request string
+                const auto it_to_remove = request_str.begin() + line_start;
+                request_str.erase(it_to_remove, it_to_remove + bytes_to_remove);
+                request_size -= bytes_to_remove;
               }
 
               if (*content_length == 0) {
                 // termination chunk
                 state = parse_state::finished;
                 // remove all data at the end (supposed to be \r\n)
-                req._bytes.erase(req._bytes.begin() + line_start, req._bytes.end());  // NOLINT(*narrowing*)
+                request_str.erase(request_str.begin() + line_start, request_str.end());
+                request_size = line_start;
                 break;
               }
 
@@ -330,7 +326,7 @@ struct request::parser {
 
           auto line = string_to_process.substr(0, next_line_end);
           const auto bytes_to_remove = line.size() + 1;
-          const auto iter_to_remove = req._bytes.begin() + line_start;  // NOLINT(*narrowing*)
+          const auto iter_to_remove = request_str.begin() + line_start;
 
           if (!line.empty() && line.back() == '\r') {
             line.remove_suffix(1);
@@ -349,52 +345,46 @@ struct request::parser {
           content_length = size;
 
           // removing line with chunk size from the stream
-          req._bytes.erase(iter_to_remove, iter_to_remove + bytes_to_remove);  // NOLINT(*narrowing*)
+          request_str.erase(iter_to_remove, iter_to_remove + bytes_to_remove);
+          request_size -= bytes_to_remove;
         }
       }
     }
+
     if (state == parse_state::finished) {
-      const auto* const bytes_start = reinterpret_cast<const char*>(req._bytes.data());
+      // making body invalid string
+      req._body = {init_data_ptr + body_start, request_str.size() - body_start};
 
-      // Fix pointers of string views
-      req._body = {bytes_start + body_start, req._bytes.size() - body_start};
-      req._target = {bytes_start + (req._target.data() - init_data_ptr), req._target.size()};
-      for (auto& pair : req._headers) {
-        pair.first = {bytes_start + (pair.first.data() - init_data_ptr), pair.first.size()};
-        pair.second = {bytes_start + (pair.second.data() - init_data_ptr), pair.second.size()};
-      }
-
-      // sort headers
-      std::ranges::stable_sort(req._headers, headers_comparator{});
+      req.fix_string_pointers(init_data_ptr, request_str);
     }
 
     return res_t{};
   }
-  // NOLINTEND(*pointer*, *reinterpret-cast)
+  // NOLINTEND(*pointer*, *narrowing*, *reinterpret-cast)
 };
 
 void request::parse_deleter::operator()(parser* parser) const noexcept {
   delete parser;  // NOLINT(*owning-memory)
 }
 
-async_coro::task<expected<void, http_error>> request::read(server::socket_layer::connection& conn) {
+async_coro::task<expected<void, http_error>> request::read(core::i_read_connection& conn) {
   using res_t = expected<void, http_error>;
 
   reset();
 
   parser parse{};
 
-  std::array<std::byte, 4 * 1024> buffer;  // NOLINT(*)
+  std::array<char, 4 * 1024> buffer;  // NOLINT(*)
 
   while (!conn.is_closed() && parse.state != parser::parse_state::finished) {
-    auto read = co_await conn.read_buffer(std::span{buffer});
+    auto read = co_await conn.read_buffer(as_writable_bytes(std::span{buffer}));
     if (!read.has_value()) {
       co_return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = std::move(read).error()}};
     }
 
-    const auto bytes_read = read.value();
+    auto bytes_str = std::string_view{buffer.data(), read.value()};
 
-    std::copy(buffer.data(), buffer.data() + bytes_read, std::back_inserter(_bytes));  // NOLINT(*narrowing*, *pointer*)
+    std::ranges::copy(bytes_str, std::back_inserter(_request_str));
 
     auto res = parse.process_next_portion(*this);
     if (!res) {
@@ -424,7 +414,9 @@ void request::begin_parse(parser_ptr& parser_p) {
 expected<void, http_error> request::parse_data_part(parser_ptr& parser_p, std::span<const std::byte> bytes) {
   ASYNC_CORO_ASSERT(parser_p != nullptr);
 
-  std::ranges::copy(bytes, std::back_inserter(_bytes));
+  std::string_view bytes_str = {reinterpret_cast<const char*>(bytes.data()), bytes.size()};  // NOLINT(*reinterpret-cast*)
+
+  std::ranges::copy(bytes_str, std::back_inserter(_request_str));
 
   auto res = parser_p->process_next_portion(*this);
   if (!res) {
@@ -436,6 +428,103 @@ expected<void, http_error> request::parse_data_part(parser_ptr& parser_p, std::s
   }
 
   return {};
+}
+
+// Converts request to client_request for proxying
+request::operator client_request() && noexcept {
+  auto request = client_request{_method, _version};
+
+  const auto* old_data_start = _request_str.data();
+
+  auto new_str = request.add_string(std::move(_request_str));
+
+  fix_string_pointers(old_data_start, new_str);
+
+  request.set_target(static_string{_target});
+  request.set_body_without_content_headers(static_string{_body});
+  request.set_headers(std::move(_headers));
+
+  return request;
+}
+
+request_with_sorted_headers::request_with_sorted_headers(request&& other) noexcept
+    : request(std::move(other)) {
+  ASYNC_CORO_ASSERT(other.is_parsed());
+
+  std::ranges::stable_sort(_headers, headers_comparator{});
+}
+
+const std::pair<ci_string_view, std::string_view>* request_with_sorted_headers::find_header(std::string_view name) const noexcept {
+  const auto ci_name = traits_cast<ascii_ci_traits>(name);
+
+  const auto iter = std::lower_bound(_headers.begin(), _headers.end(), ci_name, headers_comparator{});  // NOLINT(*ranges*)
+  if (iter != _headers.end() && iter->first == ci_name) {
+    return std::addressof(*iter);
+  }
+
+  return nullptr;
+}
+
+void request_with_sorted_headers::foreach_header_with_name(std::string_view name, async_coro::function_view<void(std::string_view)> func) const {
+  if (!func) [[unlikely]] {
+    return;
+  }
+
+  const auto ci_name = traits_cast<ascii_ci_traits>(name);
+
+  auto iter = std::lower_bound(_headers.begin(), _headers.end(), ci_name, headers_comparator{});  // NOLINT(*ranges*)
+  while (iter != _headers.end() && iter->first == ci_name) {
+    func(iter->second);
+    iter++;
+  }
+}
+
+void request_with_sorted_headers::foreach_header_with_name_noexcept(std::string_view name, async_coro::function_view<void(std::string_view) noexcept> func) const noexcept {
+  if (!func) [[unlikely]] {
+    return;
+  }
+
+  const auto ci_name = traits_cast<ascii_ci_traits>(name);
+
+  auto iter = std::lower_bound(_headers.begin(), _headers.end(), ci_name, headers_comparator{});  // NOLINT(*ranges*)
+  while (iter != _headers.end() && iter->first == ci_name) {
+    func(iter->second);
+    iter++;
+  }
+}
+
+bool request_with_sorted_headers::has_value_in_header(std::string_view name, std::string_view value) const noexcept {  // NOLINT(*swap*)
+  bool has_value = false;
+
+  foreach_header_with_name_noexcept(name, [&](std::string_view head_value) noexcept {
+    if (has_value) {
+      return;
+    }
+
+    const auto idx = head_value.find(value);
+    if (idx != std::string_view::npos) {
+      if (idx > 0) {
+        // check begin
+        const auto symbol = head_value[idx - 1];
+        if (symbol != ' ' && symbol != ',') {
+          // its a substring
+          return;
+        }
+      }
+      if (idx + value.size() < head_value.size()) {
+        // check end
+        const auto symbol = head_value[idx + value.size()];
+        if (symbol != ' ' && symbol != ',') {
+          // its a substring
+          return;
+        }
+      }
+
+      has_value = true;
+    }
+  });
+
+  return has_value;
 }
 
 }  // namespace server::http1

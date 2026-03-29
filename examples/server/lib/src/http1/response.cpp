@@ -1,7 +1,9 @@
 #include <async_coro/config.h>
+#include <server/core/i_write_connection.h>
 #include <server/http1/http_error.h>
 #include <server/http1/http_status_code.h>
 #include <server/http1/response.h>
+#include <server/utils/ci_string_view.h>
 #include <server/utils/compression_pool.h>
 #include <server/utils/expected.h>
 
@@ -81,7 +83,7 @@ std::string_view response::add_string(std::string_view str) {
 }
 
 void response::add_header(static_string name, static_string value) {
-  _headers.emplace_back(name.str, value.str);
+  _headers.emplace_back(traits_cast<ascii_ci_traits>(name.str), value.str);
 }
 
 void response::set_body_impl(std::string_view body, static_string content_type, bool is_body_static, std::string *body_str) {  // NOLINT(*complexity*)
@@ -182,7 +184,7 @@ void response::clear() {
 }
 
 // NOLINTBEGIN(*pointer*,*array-index*,*macro*)
-async_coro::task<expected<void, std::string>> response::send(server::socket_layer::connection &conn) {  // NOLINT(*complexity*)
+async_coro::task<expected<void, std::string>> response::send(core::i_write_connection &conn) {  // NOLINT(*complexity*)
   using res_t = expected<void, std::string>;
   using namespace std::string_view_literals;
 

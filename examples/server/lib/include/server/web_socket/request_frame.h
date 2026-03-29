@@ -14,8 +14,8 @@
 #include <string>
 #include <string_view>
 
-namespace server::socket_layer {
-class connection;
+namespace server::core {
+class i_read_connection;
 }
 
 namespace server::web_socket {
@@ -37,7 +37,7 @@ class request_frame {
   explicit constexpr request_frame(ws_op_code code) noexcept
       : opcode_dec(static_cast<uint8_t>(code)) {}
 
-  async_coro::task<expected<void, std::string>> read_payload(socket_layer::connection& conn, std::span<const std::byte> rest_data_in_buffer);
+  async_coro::task<expected<void, std::string>> read_payload(core::i_read_connection& conn, std::span<const std::byte> rest_data_in_buffer);
 
   constexpr void set_op_code(ws_op_code code) noexcept { opcode_dec = static_cast<uint8_t>(code); }
   [[nodiscard]] constexpr ws_op_code get_op_code() const noexcept { return static_cast<ws_op_code>(opcode_dec); }

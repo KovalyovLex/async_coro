@@ -9,8 +9,8 @@
 #include <cstdint>
 #include <span>
 
-namespace server::socket_layer {
-class connection;
+namespace server::core {
+class i_write_connection;
 }
 
 namespace server::web_socket {
@@ -27,9 +27,9 @@ class response_frame {
   [[nodiscard]] ws_op_code get_op_code() const noexcept { return static_cast<ws_op_code>(_opcode_dec); }
   [[nodiscard]] uint8_t get_op_code_dec() const noexcept { return _opcode_dec; }
 
-  static async_coro::task<void> send_error_and_close_connection(socket_layer::connection& conn, const ws_error& error);
+  static async_coro::task<void> send_error_and_close_connection(core::i_write_connection& conn, const ws_error& error);
 
-  static async_coro::task<void> close_connection(socket_layer::connection& conn);
+  static async_coro::task<void> close_connection(core::i_write_connection& conn);
 
   static void fill_frame_size(std::span<std::byte>& buffer_after_frame, frame_base& frame, size_t cont_length) noexcept;
 

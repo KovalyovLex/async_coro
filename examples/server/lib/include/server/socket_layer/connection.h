@@ -1,6 +1,8 @@
 #pragma once
 
 #include <async_coro/task.h>
+#include <server/core/i_read_connection.h>
+#include <server/core/i_write_connection.h>
 #include <server/socket_layer/connection_id.h>
 #include <server/socket_layer/ssl_connection.h>
 #include <server/utils/expected.h>
@@ -15,7 +17,7 @@ namespace server::socket_layer {
 
 class reactor;
 
-class connection {
+class connection final : public core::i_read_connection, public core::i_write_connection {
  public:
   connection(connection_id fd_id, reactor& react, ssl_connection ssl_con) noexcept
       : _reactor(std::addressof(react)),
@@ -29,7 +31,7 @@ class connection {
         _subscription_index(other._subscription_index),
         _sock(std::exchange(other._sock, invalid_connection)) {}
 
-  ~connection() noexcept;
+  ~connection() noexcept override;
 
   connection& operator=(const connection&) = delete;
   connection& operator=(connection&& other) noexcept {
@@ -41,27 +43,27 @@ class connection {
     return *this;
   }
 
-  [[nodiscard]] bool is_closed() const noexcept { return _reactor == nullptr; }
+  [[nodiscard]] bool is_closed() const noexcept override { return _reactor == nullptr; }
+
+  [[nodiscard]] async_coro::task<expected<void, std::string>> write_buffer(std::span<const std::byte> bytes) override;
+
+  [[nodiscard]] async_coro::task<expected<size_t, std::string>> read_buffer(std::span<std::byte> bytes) override;
 
   [[nodiscard]] auto get_connection_id() const noexcept { return _sock; }
 
   [[nodiscard]] auto get_subscription_index() const noexcept { return _subscription_index; }
 
-  constexpr auto operator<=>(const connection& other) const noexcept { return _sock <=> other._sock; }
-
-  [[nodiscard]] async_coro::task<expected<void, std::string>> write_buffer(std::span<const std::byte> bytes);
-
-  [[nodiscard]] async_coro::task<expected<size_t, std::string>> read_buffer(std::span<std::byte> bytes);
-
   [[nodiscard]] reactor* get_reactor() const noexcept { return _reactor; }
 
   void check_subscribed();
 
-  void close_connection();
+  void close_connection() override;
 
   void set_no_delay(bool value) noexcept;
 
   [[nodiscard]] bool is_no_delay() const noexcept { return _no_delay; }
+
+  constexpr auto operator<=>(const connection& other) const noexcept { return _sock <=> other._sock; }
 
  private:
   static constexpr size_t k_invalid_index = size_t(-1);

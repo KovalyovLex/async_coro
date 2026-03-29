@@ -1,5 +1,5 @@
 
-#include <server/socket_layer/connection.h>
+#include <server/core/i_read_connection.h>
 #include <server/utils/expected.h>
 #include <server/web_socket/request_frame.h>
 
@@ -9,7 +9,7 @@
 
 namespace server::web_socket {
 
-async_coro::task<expected<void, std::string>> request_frame::read_payload(socket_layer::connection& conn, std::span<const std::byte> rest_data_in_buffer) {
+async_coro::task<expected<void, std::string>> request_frame::read_payload(core::i_read_connection& conn, std::span<const std::byte> rest_data_in_buffer) {
   using result_t = expected<void, std::string>;
 
   if (payload_length == 0) {

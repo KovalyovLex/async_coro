@@ -1,27 +1,36 @@
+#include <async_coro/execution_system.h>
+#include <async_coro/scheduler.h>
 #include <gtest/gtest.h>
 #include <server/http1/client_request.h>
 #include <server/http1/client_response.h>
+#include <server/http1/http_client.h>
+#include <server/http1/request.h>
 #include <server/http1/response.h>  // for content_types
 
-#include <array>
 #include <span>
 #include <string_view>
 
-using namespace server::http1;  // NOLINT(*-using-namespace)
+#include "fixtures/test_write_connection.h"
 
 TEST(client_integration, request_to_string) {
-  client_request req{http_method::Post, "/test"};
+  using namespace server::http1;
   using server::static_string;
+
+  client_request req{http_method::Post, static_string{"/test"}};
 
   req.add_header(static_string{"Host"}, static_string{"example"});
   req.set_body(std::string{"body"}, content_types::plain_text);
-  auto out = req.to_string();
+
+  auto out = test_write_connection::serialize(req);
+
   EXPECT_NE(out.find("POST /test HTTP/1.1"), std::string::npos);
   EXPECT_NE(out.find("Content-Length: 4"), std::string::npos);
   EXPECT_NE(out.find("body"), std::string::npos);
 }
 
 TEST(client_integration, response_parse) {
+  using namespace server::http1;
+
   client_response resp;
   client_response::parser_ptr parser{};
 

@@ -1,4 +1,4 @@
-#include <server/socket_layer/connection.h>
+#include <server/core/i_write_connection.h>
 #include <server/utils/expected.h>
 #include <server/web_socket/response_frame.h>
 #include <server/web_socket/ws_error.h>
@@ -49,7 +49,7 @@ void response_frame::fill_frame_size(std::span<std::byte>& buffer_after_frame, f
   }
 }
 
-async_coro::task<void> response_frame::send_error_and_close_connection(socket_layer::connection& conn, const ws_error& error) {
+async_coro::task<void> response_frame::send_error_and_close_connection(core::i_write_connection& conn, const ws_error& error) {
   using max_data_buf = std::array<std::byte, sizeof(frame_base) + sizeof(uint16_t) + ws_error::k_max_message_length>;
 
   union frame_union {  // NOLINT(*init*)
@@ -84,7 +84,7 @@ async_coro::task<void> response_frame::send_error_and_close_connection(socket_la
   conn.close_connection();
 }
 
-async_coro::task<void> response_frame::close_connection(socket_layer::connection& conn) {
+async_coro::task<void> response_frame::close_connection(core::i_write_connection& conn) {
   frame_begin frame{.frame{
       true,
       static_cast<uint8_t>(ws_op_code::connection_close),

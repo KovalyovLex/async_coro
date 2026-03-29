@@ -1,9 +1,10 @@
 #pragma once
 
 #include <async_coro/task.h>
+#include <server/core/headers_type.h>
+#include <server/http1/headers_holder.h>
 #include <server/http1/http_status_code.h>
 #include <server/http1/http_version.h>
-#include <server/socket_layer/connection.h>
 #include <server/utils/compression_pool.h>
 #include <server/utils/expected.h>
 #include <server/utils/static_string.h>
@@ -11,20 +12,25 @@
 
 #include <string>
 #include <string_view>
-#include <vector>
+
+namespace server::core {
+class i_write_connection;
+}
 
 namespace server::http1 {
 
 struct http_error;
+
 namespace content_types {
 inline constexpr static_string plain_text{"text/plain; charset=utf-8"};
 inline constexpr static_string html{"text/html; charset=utf-8"};
 inline constexpr static_string json{"application/json"};
+
 }  // namespace content_types
 
 using response_encoder = pooled_compressor<compressor_variant>;
 
-class response {
+class response final : public headers_holder {
  public:
   // Constructs default response with 200 Ok status
   explicit response(http_version ver) noexcept;
@@ -62,7 +68,7 @@ class response {
 
   [[nodiscard]] bool was_sent() const noexcept { return _was_sent; }
 
-  [[nodiscard]] async_coro::task<expected<void, std::string>> send(server::socket_layer::connection& conn);
+  [[nodiscard]] async_coro::task<expected<void, std::string>> send(core::i_write_connection& conn);
 
   // Set encoding for compression support. It will work if compression_pool also was set
   void set_encoding(compression_encoding encoding) noexcept { _encoding = encoding; }
@@ -80,14 +86,11 @@ class response {
   void set_body_impl(std::string_view body, static_string content_type, bool is_body_static, std::string* body_str);
 
  private:
-  using header_list_t = std::vector<std::pair<std::string_view, std::string_view>>;
-
   http_version _ver;
   http_status_code _status_code;
   bool _was_sent = false;
   compression_encoding _encoding = compression_encoding::none;
   std::string_view _reason;
-  header_list_t _headers;
   std::string_view _body;
   string_storage::ptr _string_storage;
   compression_pool::ptr _compression_pool;

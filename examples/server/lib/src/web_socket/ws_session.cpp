@@ -264,12 +264,12 @@ async_coro::task<void> ws_session::run(const server::http1::request& handshake_r
 #if SERVER_HAS_ZLIB
     if (is_permessage_deflate_enabled()) {
       // Parse and handle Sec-WebSocket-Extensions header for permessage-deflate
-      handshake_request.foreach_header_with_name("Sec-WebSocket-Extensions", [this](const auto& ext_pair) {
+      handshake_request.foreach_header_with_name("Sec-WebSocket-Extensions", [this](const auto& value) {
         if (_used_config) {
           return;
         }
 
-        if (auto deflate_config = parse_permessage_deflate_extension(ext_pair.second)) {
+        if (auto deflate_config = parse_permessage_deflate_extension(value)) {
           // Extension is supported and negotiated, enable it
           _used_config = permessage_deflate_config::get_negotiated_config(*_allowed_config, *deflate_config);
         }
