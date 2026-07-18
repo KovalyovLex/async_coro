@@ -72,46 +72,37 @@ This plan covers async I/O for the `async_coro` library. The codebase **already 
 
 ## What's Genuinely New (Implement These)
 
-### 3.1 `server::io::file` — Async File I/O (NEW)
+### 3.1 `server::io::file` — Async File I/O (✅ COMPLETE)
 
-No existing file I/O abstraction. This is the primary new component.
+**Status:** Implemented and tested.
 
+**Files:**
+- `examples/server/lib/include/server/io/file.h` — Header
+- `examples/server/lib/src/io/file.cpp` — Implementation (epoll/kqueue backend)
+
+**API:**
 ```cpp
 namespace server::io {
 
-// Async file operations using epoll (Linux) or kqueue (macOS)
-// For production low-latency: io_uring AIO (Linux 5.1+)
-
 class file {
  public:
-  // Open file asynchronously (non-blocking)
-  static auto open(const std::string& path, std::ios::openmode mode) noexcept;
-
-  // Read all data into a buffer
-  auto read_all() noexcept;
-
-  // Write data
-  auto write(std::span<const uint8_t> data) noexcept;
-
-  // Flush
-  auto flush() noexcept;
-
-  // Close
+  static expected<file, std::string> open(reactor& reactor, const std::string& path, int mode, int permissions = 0644) noexcept;
+  async_coro::task<expected<size_t, std::string>> read(std::span<uint8_t> buffer);
+  async_coro::task<expected<void, std::string>> write(std::span<const uint8_t> data);
+  expected<void, std::string> flush();
   void close() noexcept;
+  expected<size_t, std::string> get_size();
+  expected<off_t, std::string> seek(off_t offset, seek_whence whence);
+  async_coro::task<expected<std::vector<std::byte>, std::string>> read_all();
 };
 
 }  // namespace server::io
 ```
 
-**Use cases:**
-- Market data file ingestion (tick data, order books)
-- Log writing (structured logs with correlation IDs)
-- Configuration file loading
-
 **Implementation approach:**
-- Use existing `reactor` pattern from `server::socket_layer` (epoll/kqueue)
+- Uses existing `reactor` pattern from `server::socket_layer` (epoll/kqueue)
 - File descriptors are pollable on Linux (epoll supports regular files)
-- For io_uring: `IORING_OP_READ` / `IORING_OP_WRITE` with fixed files
+- Non-blocking I/O with `await_callback_with_result` pattern
 
 ### 3.2 io_uring Backend (Linux, Future Enhancement)
 
