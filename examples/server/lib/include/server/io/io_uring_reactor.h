@@ -93,40 +93,40 @@ class io_uring_reactor {
   /**
    * @brief Submit an async read operation.
    *
-   * @param fd File descriptor to read from.
+   * @param file_descriptor File descriptor to read from.
    * @param offset Offset in the file to start reading from.
    * @param buffer Buffer to read into. MUST remain valid until the callback is invoked.
    * @param callback Continuation callback will be called after read complete.
    * @note The buffer must outlive the callback invocation. The reactor stores a non-owning span.
    */
-  void submit_read(int fd, size_t offset, std::span<uint8_t> buffer, continue_size_callback_t&& callback);
+  void submit_read(int file_descriptor, size_t offset, std::span<uint8_t> buffer, continue_size_callback_t&& callback);
 
   /**
    * @brief Submit an async write operation.
    *
-   * @param fd File descriptor to write to.
+   * @param file_descriptor File descriptor to write to.
    * @param offset File offset to write to.
    * @param buffer Buffer containing data to write. MUST remain valid until the callback is invoked.
    * @param callback Continuation callback will be called after write complete.
    * @note The buffer must outlive the callback invocation. The reactor stores a non-owning span.
    */
-  void submit_write(int fd, size_t offset, std::span<const uint8_t> buffer, continue_size_callback_t&& callback);
+  void submit_write(int file_descriptor, size_t offset, std::span<const uint8_t> buffer, continue_size_callback_t&& callback);
 
   /**
    * @brief Submit an async fsync operation.
    *
-   * @param fd File descriptor to fsync.
+   * @param file_descriptor File descriptor to fsync.
    * @param callback Continuation callback will be called after write complete.
    */
-  void submit_fsync(int fd, continue_void_callback_t&& callback);
+  void submit_fsync(int file_descriptor, continue_void_callback_t&& callback);
 
   /**
    * @brief Submit an async close operation.
    *
-   * @param fd File descriptor to close.
+   * @param file_descriptor File descriptor to close.
    * @param callback Continuation callback will be called after write complete.
    */
-  void submit_close(int fd, continue_void_callback_t&& callback);
+  void submit_close(int file_descriptor, continue_void_callback_t&& callback);
 
   /**
    * @brief Submit an async open operation.

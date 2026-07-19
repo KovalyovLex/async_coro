@@ -17,35 +17,35 @@ bool file::would_block(int err) noexcept {
 #endif
 }
 
-file::file(reactor& reactor, socket_type fd, size_t index) noexcept  // NOLINT(*-swappable*)
+file::file(reactor& reactor, socket_type file_descriptor, size_t index) noexcept  // NOLINT(*-swappable*)
     : _reactor(reactor),
-      _fd(fd),
+      _fd(file_descriptor),
       _index(index) {
   // The fd is already added to the reactor in file::open
 }
 
 expected<file, std::string> file::open(reactor& reactor, const std::string& path, int mode, int permissions) noexcept {
-  socket_type fd = ::open(path.c_str(), mode, permissions);  // NOLINT(*vararg*)
-  if (fd == invalid_socket_id) {
+  socket_type file_descriptor = ::open(path.c_str(), mode, permissions);  // NOLINT(*vararg*)
+  if (file_descriptor == invalid_socket_id) {
     return expected<file, std::string>{unexpect, std::string(strerror(errno))};
   }
 
   // Set non-blocking mode for async I/O
 #if !WIN_SOCKET
-  const int flags = ::fcntl(fd, F_GETFL, 0);
-  if (flags < 0 || ::fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {  // NOLINT(*-signed*, *vararg*)
-    socket_layer::close_socket(fd);
+  const auto flags = ::fcntl(file_descriptor, F_GETFL, 0);
+  if (flags < 0 || ::fcntl(file_descriptor, F_SETFL, flags | O_NONBLOCK) < 0) {  // NOLINT(*-signed*, *vararg*)
+    socket_layer::close_socket(file_descriptor);
     return expected<file, std::string>{unexpect, "Failed to set non-blocking mode"};
   }
 #endif
 
-  size_t index = reactor.add_fd(fd);
+  size_t index = reactor.add_fd(file_descriptor);
   if (index == static_cast<size_t>(-1)) {
-    socket_layer::close_socket(fd);
+    socket_layer::close_socket(file_descriptor);
     return expected<file, std::string>{unexpect, "Failed to add fd to reactor"};
   }
 
-  return file{reactor, fd, index};
+  return file{reactor, file_descriptor, index};
 }
 
 async_coro::task<expected<size_t, std::string>> file::read(std::span<uint8_t> buffer) {
@@ -124,7 +124,7 @@ async_coro::task<expected<void, std::string>> file::write(std::span<const uint8_
   co_return expected<void, std::string>{};
 }
 
-expected<void, std::string> file::flush() {
+expected<void, std::string> file::flush() const {
   if (_fd == invalid_socket_id) {
     return expected<void, std::string>{unexpect, "File is closed"};
   }
@@ -165,12 +165,12 @@ int file::map_whence(seek_whence whence) noexcept {
   return SEEK_SET;  // fallback
 }
 
-expected<size_t, std::string> file::get_size() {
+expected<size_t, std::string> file::get_size() const {
   if (_fd == invalid_socket_id) {
     return expected<size_t, std::string>{unexpect, "File is closed"};
   }
 
-  struct stat stat_buf;
+  struct stat stat_buf{};
   if (::fstat(_fd, &stat_buf) != 0) {
     return expected<size_t, std::string>{unexpect, std::string(strerror(errno))};
   }
@@ -178,7 +178,7 @@ expected<size_t, std::string> file::get_size() {
   return static_cast<size_t>(stat_buf.st_size);
 }
 
-expected<off_t, std::string> file::seek(off_t offset, seek_whence whence) {
+expected<off_t, std::string> file::seek(off_t offset, seek_whence whence) const {
   if (_fd == invalid_socket_id) {
     return expected<off_t, std::string>{unexpect, "File is closed"};
   }

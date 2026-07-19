@@ -83,7 +83,7 @@ request& request::operator=(request&& other) noexcept {
   _version = other._version;
   _parsed = other._parsed;
 
-  auto* old_str_ptr = other._request_str.data();
+  auto* old_str_ptr = other._request_str.data();  // NOLINT(clang-analyzer-cplusplus.InnerPointer)
   _request_str = std::move(other._request_str);
 
   if (_request_str.data() != old_str_ptr) {
@@ -308,7 +308,7 @@ struct request::parser {
                 state = parse_state::finished;
                 // remove all data at the end (supposed to be \r\n)
                 request_str.erase(request_str.begin() + line_start, request_str.end());
-                request_size = line_start;
+                [[maybe_unused]] auto request_size_final = line_start;
                 break;
               }
 
@@ -367,7 +367,7 @@ void request::parse_deleter::operator()(parser* parser) const noexcept {
   delete parser;  // NOLINT(*owning-memory)
 }
 
-async_coro::task<expected<void, http_error>> request::read(core::i_read_connection& conn) {
+async_coro::task<expected<void, http_error>> request::read(core::i_read_connection& conn) {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters)
   using res_t = expected<void, http_error>;
 
   reset();
@@ -414,7 +414,8 @@ void request::begin_parse(parser_ptr& parser_p) {
 expected<void, http_error> request::parse_data_part(parser_ptr& parser_p, std::span<const std::byte> bytes) {
   ASYNC_CORO_ASSERT(parser_p != nullptr);
 
-  std::string_view bytes_str = {reinterpret_cast<const char*>(bytes.data()), bytes.size()};  // NOLINT(*reinterpret-cast*)
+  const char* bytes_data_ptr = reinterpret_cast<const char*>(bytes.data());  // NOLINT(clang-analyzer-cplusplus.InnerPointer, *reinterpret-cast*)
+  std::string_view bytes_str{bytes_data_ptr, bytes.size()};
 
   std::ranges::copy(bytes_str, std::back_inserter(_request_str));
 
@@ -449,7 +450,7 @@ request::operator client_request() && noexcept {
 
 request_with_sorted_headers::request_with_sorted_headers(request&& other) noexcept
     : request(std::move(other)) {
-  ASYNC_CORO_ASSERT(other.is_parsed());
+  ASYNC_CORO_ASSERT(this->is_parsed());
 
   std::ranges::stable_sort(_headers, headers_comparator{});
 }

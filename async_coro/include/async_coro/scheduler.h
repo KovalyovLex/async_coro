@@ -124,14 +124,14 @@ class scheduler {
    * thread is suitable, or schedule it for later execution.
    * @param handle_impl The handle of the coroutine to continue.
    */
-  void continue_execution(base_handle& handle_impl, std::thread::id current_thread, passkey_any<internal::coroutine_suspender, base_handle>);
+  void continue_execution(base_handle& handle_impl, std::thread::id current_thread, passkey_any<internal::coroutine_suspender, base_handle> passkey);
 
   /**
    * @brief Embed coroutine. Parent and child coroutines switch to suspended state, child will be continued after parent suspension point
    * @param parent The handle of the owning coroutine.
    * @param parent The handle of the coroutine to embed into parent.
    */
-  void on_child_coro_added(base_handle& parent, base_handle& child, passkey<task_base>);
+  void on_child_coro_added(base_handle& parent, base_handle& child, passkey<task_base> passkey);
 
  private:
   bool is_thread_fits(execution_queue_mark execution_queue, std::thread::id thread_id) noexcept;

@@ -76,7 +76,7 @@ class client_request final : public headers_holder {
 
   [[nodiscard]] bool was_sent() const noexcept { return _was_sent; }
 
-  [[nodiscard]] async_coro::task<expected<void, std::string>> send(server::core::i_write_connection& conn);
+  [[nodiscard]] async_coro::task<expected<void, std::string>> send(server::core::i_write_connection& conn);  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters)
 
  private:
   std::string_view _target;

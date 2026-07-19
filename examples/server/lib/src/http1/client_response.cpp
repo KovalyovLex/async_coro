@@ -153,8 +153,8 @@ expected<void, http_error> client_response::parse_status_line(std::string_view s
 
   // parse numeric code
   size_t val = 0;
-  auto r = std::from_chars(code.data(), code.data() + code.size(), val);
-  if (r.ec != std::errc{}) {
+  auto from_chars_result = std::from_chars(code.data(), code.data() + code.size(), val);
+  if (from_chars_result.ec != std::errc{}) {
     return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = static_string{"Invalid status code"}}};
   }
   _status_code = http_status_code{static_cast<uint16_t>(val)};
@@ -234,9 +234,9 @@ struct client_response::parser {
           auto name_ci = traits_cast<ascii_ci_traits>(name);
           if (!content_length.has_value() && name_ci == "Content-Length"_ci_sv) {
             size_t size = 0;
-            auto r = std::from_chars(value.data(), value.data() + value.size(), size);
-            if (r.ec != std::errc{}) {
-              auto detailed_ec = std::make_error_code(r.ec);
+            auto from_chars_result = std::from_chars(value.data(), value.data() + value.size(), size);
+            if (from_chars_result.ec != std::errc{}) {
+              auto detailed_ec = std::make_error_code(from_chars_result.ec);
               return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = std::string{"Wrong Content-Length: "}.append(detailed_ec.message())}};
             }
             content_length = size;
@@ -273,7 +273,9 @@ struct client_response::parser {
                 }
               }
               if (bytes_to_remove > 0) {
-                resp._bytes.erase(resp._bytes.begin() + line_start, resp._bytes.begin() + line_start + bytes_to_remove);
+                auto erase_begin = resp._bytes.begin() + static_cast<std::vector<std::byte>::difference_type>(line_start);
+                auto erase_end = erase_begin + static_cast<std::vector<std::byte>::difference_type>(bytes_to_remove);
+                resp._bytes.erase(erase_begin, erase_end);
               }
               if (*content_length == 0) {
                 state = parse_state::finished;
@@ -291,7 +293,7 @@ struct client_response::parser {
           }
           auto line = string_to_process.substr(0, next_line_end);
           const auto bytes_to_remove = line.size() + 1;
-          const auto iter_to_remove = resp._bytes.begin() + line_start;
+          const auto iter_to_remove = resp._bytes.begin() + static_cast<std::vector<std::byte>::difference_type>(line_start);
           if (!line.empty() && line.back() == '\r') {
             line.remove_suffix(1);
           }
@@ -299,23 +301,23 @@ struct client_response::parser {
             return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = static_string{"Unexpected chunked contend format. Can't read chunk length"}}};
           }
           size_t size = 0;
-          auto r = std::from_chars(line.data(), line.data() + line.size(), size);
-          if (r.ec != std::errc{}) {
-            auto detailed_ec = std::make_error_code(r.ec);
+          auto from_chars_result = std::from_chars(line.data(), line.data() + line.size(), size);
+          if (from_chars_result.ec != std::errc{}) {
+            auto detailed_ec = std::make_error_code(from_chars_result.ec);
             return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = std::string{"Wrong chunk size: "}.append(detailed_ec.message()).append(". Size: ").append(line)}};
           }
           content_length = size;
-          resp._bytes.erase(iter_to_remove, iter_to_remove + bytes_to_remove);
+          resp._bytes.erase(iter_to_remove, iter_to_remove + static_cast<std::vector<std::byte>::difference_type>(bytes_to_remove));
         }
       }
     }
     if (state == parse_state::finished) {
       const auto* const bytes_start = reinterpret_cast<const char*>(resp._bytes.data());
-      resp._body = {bytes_start + body_start, resp._bytes.size() - body_start};
+      resp._body = {bytes_start + static_cast<std::ptrdiff_t>(body_start), static_cast<std::size_t>(resp._bytes.size() - body_start)};
       // version was set while parsing status line
       for (auto& pair : resp._headers) {
-        pair.first = {bytes_start + (pair.first.data() - init_data_ptr), pair.first.size()};
-        pair.second = {bytes_start + (pair.second.data() - init_data_ptr), pair.second.size()};
+        pair.first = {bytes_start + static_cast<std::ptrdiff_t>(pair.first.data() - init_data_ptr), pair.first.size()};
+        pair.second = {bytes_start + static_cast<std::ptrdiff_t>(pair.second.data() - init_data_ptr), pair.second.size()};
       }
       std::ranges::stable_sort(resp._headers, headers_comparator{});
     }
@@ -329,7 +331,7 @@ void client_response::parse_deleter::operator()(parser* parser) const noexcept {
   delete parser;  // NOLINT(*owning-memory)
 }
 
-async_coro::task<expected<void, http_error>> client_response::read(server::core::i_read_connection& conn) {
+async_coro::task<expected<void, http_error>> client_response::read(server::core::i_read_connection& conn) {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters)
   using res_t = expected<void, http_error>;
 
   reset();

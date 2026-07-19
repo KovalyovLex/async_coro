@@ -58,38 +58,38 @@ class reactor {
   /**
    * @brief Add a file descriptor to the reactor for polling.
    *
-   * @param fd The file descriptor to add (socket or regular file).
+   * @param file_descriptor The file descriptor to add (socket or regular file).
    * @return The index of the registered fd, or invalid_index on failure.
    * @note The fd will be set to non-blocking mode if not already.
    */
-  size_t add_fd(socket_type fd);
+  size_t add_fd(socket_type file_descriptor);
 
   /**
    * @brief Remove a file descriptor from the reactor.
    *
-   * @param fd The file descriptor to remove.
+   * @param file_descriptor The file descriptor to remove.
    * @param index The index returned by add_fd.
    * @note The fd is closed after removal.
    */
-  void remove_fd(socket_type fd, size_t index);
+  void remove_fd(socket_type file_descriptor, size_t index);
 
   /**
    * @brief Register a callback for when data is available for reading.
    *
-   * @param fd The file descriptor.
+   * @param file_descriptor The file descriptor.
    * @param index The index returned by add_fd.
    * @param callback The callback to invoke when data is available.
    */
-  void continue_after_receive_data(socket_type fd, size_t index, continue_callback_t&& callback);
+  void continue_after_receive_data(socket_type file_descriptor, size_t index, continue_callback_t&& callback);
 
   /**
    * @brief Register a callback for when data can be written.
    *
-   * @param fd The file descriptor.
+   * @param file_descriptor The file descriptor.
    * @param index The index returned by add_fd.
    * @param callback The callback to invoke when write is possible.
    */
-  void continue_after_sent_data(socket_type fd, size_t index, continue_callback_t&& callback);
+  void continue_after_sent_data(socket_type file_descriptor, size_t index, continue_callback_t&& callback);
 
  private:
   enum class await_type : uint8_t {

@@ -77,7 +77,7 @@ class file {
    * @return An expected<void, std::string>.
    *         On success, contains void. On failure, contains an error message.
    */
-  [[nodiscard]] expected<void, std::string> flush();
+  [[nodiscard]] expected<void, std::string> flush() const;
 
   /**
    * @brief Close the file.
@@ -109,7 +109,7 @@ class file {
    * @return An expected<size_t, std::string>. On success, contains the file size
    *         in bytes. On failure, contains an error message.
    */
-  [[nodiscard]] expected<size_t, std::string> get_size();
+  [[nodiscard]] expected<size_t, std::string> get_size() const;
 
   /**
    * @brief Seek to a position in the file.
@@ -122,7 +122,7 @@ class file {
    * @return An expected<off_t, std::string>. On success, contains the new file offset.
    *         On failure, contains an error message.
    */
-  [[nodiscard]] expected<off_t, std::string> seek(off_t offset, seek_whence whence);
+  [[nodiscard]] expected<off_t, std::string> seek(off_t offset, seek_whence whence) const;
 
   /**
    * @brief Read the entire file contents into a vector.
@@ -154,7 +154,7 @@ class file {
   [[nodiscard]] static bool would_block(int err) noexcept;
 
  private:
-  explicit file(reactor& reactor, socket_type fd, size_t index) noexcept;
+  explicit file(reactor& reactor, socket_type file_descriptor, size_t index) noexcept;
 
   reactor& _reactor;
   socket_type _fd = -1;

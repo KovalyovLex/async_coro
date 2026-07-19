@@ -24,26 +24,27 @@
 
 namespace server::io {
 
-static void epoll_ctl_impl(epoll_handle_t epoll_fd, socket_type fd, int action, uint32_t flags, void* user_data) {  // NOLINT(bugprone-easily-swappable-parameters)
+static void epoll_ctl_impl(epoll_handle_t event_fd, socket_type file_descriptor, int action, uint32_t flags, void* user_data) {  // NOLINT(bugprone-easily-swappable-parameters)
 #if EPOLL_SOCKET
   epoll_event event{};
   event.data.ptr = user_data;
   event.events = flags;
-  if (-1 == ::epoll_ctl(epoll_fd, action, fd, &event)) {
+  if (-1 == ::epoll_ctl(event_fd, action, file_descriptor, &event)) {
     std::cerr << "epoll_ctl error: " << strerror(errno) << '\n';
   }
 
 #elif KQUEUE_SOCKET
   struct kevent ev_set;
-  EV_SET(&ev_set, fd, flags, action, 0, 0, user_data);
-  if (-1 == ::kevent(epoll_fd, &ev_set, 1, nullptr, 0, nullptr)) {
+  EV_SET(&ev_set, file_descriptor, flags, action, 0, 0, user_data);
+  if (-1 == ::kevent(event_fd, &ev_set, 1, nullptr, 0, nullptr)) {
     std::cerr << "kevent set error: " << strerror(errno) << '\n';
   }
 
 #endif
 }
 
-reactor::reactor() noexcept {
+reactor::reactor() noexcept
+    : _epoll_fd(static_cast<epoll_handle_t>(invalid_socket_id)) {
 #if EPOLL_SOCKET
   _epoll_fd = epoll_create1(0);
 
@@ -74,9 +75,10 @@ void reactor::process_loop(std::chrono::nanoseconds max_wait) {
   size_t num_continuations = 0;
 
 #if EPOLL_SOCKET
-  std::array<epoll_event, MAXEVENTS> events;
+  std::array<epoll_event, MAXEVENTS> events{};
 
-  int n_events = ::epoll_wait(_epoll_fd, events.data(), events.size(), std::chrono::duration_cast<std::chrono::milliseconds>(max_wait).count());
+  auto timeout_ms = std::chrono::duration_cast<std::chrono::milliseconds>(max_wait).count();
+  int n_events = ::epoll_wait(_epoll_fd, events.data(), events.size(), static_cast<int>(timeout_ms));
 
   if (n_events == -1) {
     std::cerr << "epoll_wait error: " << strerror(errno) << '\n';
@@ -206,7 +208,7 @@ void reactor::process_loop(std::chrono::nanoseconds max_wait) {
   }
 }
 
-size_t reactor::add_fd(socket_type fd) {
+size_t reactor::add_fd(socket_type file_descriptor) {
   size_t index = 0;
   {
     async_coro::unique_lock lock{_mutex};
@@ -215,26 +217,26 @@ size_t reactor::add_fd(socket_type fd) {
       index = _empty_fds.back();
       _empty_fds.pop_back();
       auto& fd_info = _handled_fds[index];
-      fd_info.fd = fd;
+      fd_info.fd = file_descriptor;
       fd_info.await = reactor::await_type::no_await;
     } else {
       index = _handled_fds.size();
-      _handled_fds.emplace_back(continue_callback_t{}, fd, reactor::await_type::no_await);
+      _handled_fds.emplace_back(continue_callback_t{}, file_descriptor, reactor::await_type::no_await);
     }
   }
 
 #if WIN_SOCKET
-  epoll_ctl_impl(_epoll_fd, fd, EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLRDHUP, reinterpret_cast<void*>(index));
+  epoll_ctl_impl(_epoll_fd, file_descriptor, EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLRDHUP, reinterpret_cast<void*>(static_cast<uintptr_t>(index)));
 #elif EPOLL_SOCKET
-  epoll_ctl_impl(_epoll_fd, fd, EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET, reinterpret_cast<void*>(index));
+  epoll_ctl_impl(_epoll_fd, file_descriptor, EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET, reinterpret_cast<void*>(static_cast<uintptr_t>(index)));
 #elif KQUEUE_SOCKET
-  epoll_ctl_impl(_epoll_fd, fd, EV_ADD, EVFILT_READ | EVFILT_WRITE, reinterpret_cast<void*>(index));
+  epoll_ctl_impl(_epoll_fd, file_descriptor, EV_ADD, EVFILT_READ | EVFILT_WRITE, reinterpret_cast<void*>(static_cast<uintptr_t>(index)));
 #endif
 
   return index;
 }
 
-void reactor::remove_fd(socket_type fd, size_t index) {
+void reactor::remove_fd(socket_type file_descriptor, size_t index) {
   {
     async_coro::unique_lock lock{_mutex};
 
@@ -249,33 +251,33 @@ void reactor::remove_fd(socket_type fd, size_t index) {
   }
 
 #if EPOLL_SOCKET
-  epoll_ctl_impl(_epoll_fd, fd, EPOLL_CTL_DEL, 0, nullptr);
+  epoll_ctl_impl(_epoll_fd, file_descriptor, EPOLL_CTL_DEL, 0, nullptr);
 #elif KQUEUE_SOCKET
-  epoll_ctl_impl(_epoll_fd, fd, EV_DELETE, 0, nullptr);
+  epoll_ctl_impl(_epoll_fd, file_descriptor, EV_DELETE, 0, nullptr);
 #endif
 
-  socket_layer::close_socket(fd);
+  socket_layer::close_socket(file_descriptor);
 }
 
-void reactor::continue_after_receive_data(socket_type fd, size_t index, continue_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters)
+void reactor::continue_after_receive_data(socket_type file_descriptor, size_t index, continue_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters)
   async_coro::unique_lock lock{_mutex};
 
   ASYNC_CORO_ASSERT(index < _handled_fds.size());
 
   auto& fd_info = _handled_fds[index];
-  ASYNC_CORO_ASSERT(fd_info.fd == fd);
+  ASYNC_CORO_ASSERT(fd_info.fd == file_descriptor);
 
   fd_info.callback = std::move(callback);
   fd_info.await = reactor::await_type::receive_data;
 }
 
-void reactor::continue_after_sent_data(socket_type fd, size_t index, continue_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters)
+void reactor::continue_after_sent_data(socket_type file_descriptor, size_t index, continue_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters)
   async_coro::unique_lock lock{_mutex};
 
   ASYNC_CORO_ASSERT(index < _handled_fds.size());
 
   auto& fd_info = _handled_fds[index];
-  ASYNC_CORO_ASSERT(fd_info.fd == fd);
+  ASYNC_CORO_ASSERT(fd_info.fd == file_descriptor);
 
   fd_info.callback = std::move(callback);
   fd_info.await = reactor::await_type::send_data;

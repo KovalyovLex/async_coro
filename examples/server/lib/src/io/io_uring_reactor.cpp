@@ -2,6 +2,8 @@
 #include <cstdint>
 #include <type_traits>
 #include <variant>
+
+#include "async_coro/utils/always_false.h"
 #if IO_URING_ENABLED
 
 #include <async_coro/config.h>
@@ -102,8 +104,6 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {
     }
 
     // Submit SQE
-    sqe->user_data = static_cast<uint64_t>(index);
-
     auto& entry = _local_ring[index];
 
     switch (entry.operation) {
@@ -124,6 +124,8 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {
         break;
     }
 
+    io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(static_cast<uintptr_t>(index)));
+
     // remove index from non pushed
     _events_to_push.pop_back();
 
@@ -132,9 +134,6 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {
 
   if (events_to_submit > 0) {
     int submitted = io_uring_submit(&_ring);
-    if (submitted < 0) {
-      return;  // Submit failure — no completions to process.
-    }
     ASYNC_CORO_ASSERT(events_to_submit == submitted);
   }
 
@@ -142,97 +141,67 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {
   struct io_uring_cqe* cqe_ptr = nullptr;
   int n_cqes = 0;
 
+  constexpr auto nanoseconds_per_second = 1000000000LL;
+
   if (max_wait.count() > 0) {
-    struct __kernel_timespec ts;
-    ts.tv_sec = max_wait.count() / 1000000000LL;
-    ts.tv_nsec = max_wait.count() % 1000000000LL;
-    n_cqes = io_uring_wait_cqe_timeout(&_ring, &cqe_ptr, &ts);
-    if (n_cqes <= 0) {
+    struct __kernel_timespec timespec_val{};
+    timespec_val.tv_sec = max_wait.count() / nanoseconds_per_second;
+    timespec_val.tv_nsec = max_wait.count() % nanoseconds_per_second;
+    n_cqes = io_uring_wait_cqe_timeout(&_ring, &cqe_ptr, &timespec_val);
+    if (n_cqes != 0) {
+      // n_cqes < 0: error, n_cqes > 0: timeout (no CQE found)
       return;
     }
   } else {
     n_cqes = io_uring_peek_cqe(&_ring, &cqe_ptr);
-    if (n_cqes <= 0) {
+    if (n_cqes != 0) {
+      // n_cqes < 0: error, n_cqes == -EAGAIN: no CQE available
       return;
     }
   }
 
   // Phase 4: Process CQEs
   while (cqe_ptr != nullptr) {
-    const uint64_t user_data = cqe_ptr->user_data;
-    const int result = cqe_ptr->res;
+    const auto index = reinterpret_cast<size_t>(io_uring_cqe_get_data(cqe_ptr));
 
-    auto index = static_cast<size_t>(user_data);
+    const int result = cqe_ptr->res;
 
     auto& entry = _local_ring[index];
 
     // Update entry fields
     const auto is_error = (result < 0);
-    const auto result_errno = is_error ? errno : 0;
+    auto error_msg = is_error ? std::string{strerror(errno)} : std::string{};
 
-    if (!is_error) {
-      switch (entry.operation) {
-        case operation_type::send_data: {
-          std::visit([&](auto& var) {
-            if constexpr (std::is_same_v<decltype(var), continue_size_callback_t>) {
-              if (var) {
-                var(expected<size_t, std::string>{static_cast<size_t>(result)});
-              }
-            }
-          },
-                     entry.callback);
-        } break;
-        case operation_type::receive_data:
-          std::visit([&](auto& var) {
-            if constexpr (std::is_same_v<decltype(var), continue_size_callback_t>) {
-              if (var) {
-                var(expected<size_t, std::string>{static_cast<size_t>(result)});
-              }
-            }
-          },
-                     entry.callback);
-          break;
-        case operation_type::open_file: {
-          std::visit([&](auto& var) {
-            if constexpr (std::is_same_v<decltype(var), continue_file_callback_t>) {
-              if (var) {
-                var(expected<int, std::string>{static_cast<int>(result)});
-              }
-            }
-          },
-                     entry.callback);
-        } break;
-        case operation_type::close_file:
-        case operation_type::fsync: {
-          std::visit([&](auto& var) {
-            if constexpr (std::is_same_v<decltype(var), continue_void_callback_t>) {
-              if (var) {
-                var(expected<void, std::string>{});
-              }
-            }
-          },
-                     entry.callback);
-        } break;
+    std::visit([&](auto& var) {
+      if (!var) {
+        return;
       }
-    } else {
-      auto error_msg = std::string(strerror(errno));
-      std::visit([&](auto& var) {
-        if constexpr (std::is_same_v<decltype(var), continue_size_callback_t>) {
-          if (var) {
-            var(unexpect, std::move(error_msg));
-          }
-        } else if constexpr (std::is_same_v<decltype(var), continue_file_callback_t>) {
-          if (var) {
-            var(unexpect, std::move(error_msg));
-          }
-        } else if constexpr (std::is_same_v<decltype(var), continue_void_callback_t>) {
-          if (var) {
-            var(unexpect, std::move(error_msg));
-          }
+
+      using T = std::decay_t<decltype(var)>;
+
+      if constexpr (std::is_same_v<T, continue_size_callback_t>) {
+        if (is_error) {
+          var(expected<size_t, std::string>{unexpect, std::move(error_msg)});
+        } else {
+          var(static_cast<size_t>(result));
         }
-      },
-                 entry.callback);
-    }
+      } else if constexpr (std::is_same_v<T, continue_file_callback_t>) {
+        if (is_error) {
+          var(expected<int, std::string>{unexpect, std::move(error_msg)});
+        } else {
+          var(static_cast<int>(result));
+        }
+      } else if constexpr (std::is_same_v<T, continue_void_callback_t>) {
+        if (is_error) {
+          var(expected<void, std::string>{unexpect, std::move(error_msg)});
+        } else {
+          var(expected<void, std::string>{});
+        }
+      } else {
+        static_assert(async_coro::always_false<T>::value, "Unsupported callback type");
+      }
+    },
+               entry.callback);
 
     _free_indices.push_back(index);
 
@@ -244,9 +213,9 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {
   }
 }
 
-void io_uring_reactor::submit_read(int fd, size_t offset, std::span<uint8_t> buffer, continue_size_callback_t&& callback) {
+void io_uring_reactor::submit_read(int file_descriptor, size_t offset, std::span<uint8_t> buffer, continue_size_callback_t&& callback) {
   request_entry entry;
-  entry.fd = fd;
+  entry.fd = file_descriptor;
   entry.operation = operation_type::receive_data;
   entry.callback = std::move(callback);
   entry.buffer_data = buffer;
@@ -255,29 +224,30 @@ void io_uring_reactor::submit_read(int fd, size_t offset, std::span<uint8_t> buf
   _requests.push(std::move(entry));
 }
 
-void io_uring_reactor::submit_write(int fd, size_t offset, std::span<const uint8_t> buffer, continue_size_callback_t&& callback) {
+void io_uring_reactor::submit_write(int file_descriptor, size_t offset, std::span<const uint8_t> buffer, continue_size_callback_t&& callback) {
   request_entry entry;
-  entry.fd = fd;
+  entry.fd = file_descriptor;
   entry.operation = operation_type::send_data;
   entry.callback = std::move(callback);
+  // io_uring requires mutable buffers for write operations
   entry.buffer_data = std::span<uint8_t>{const_cast<uint8_t*>(buffer.data()), buffer.size()};
   entry.offset = offset;
 
   _requests.push(std::move(entry));
 }
 
-void io_uring_reactor::submit_fsync(int fd, continue_void_callback_t&& callback) {
+void io_uring_reactor::submit_fsync(int file_descriptor, continue_void_callback_t&& callback) {
   request_entry entry;
-  entry.fd = fd;
+  entry.fd = file_descriptor;
   entry.operation = operation_type::fsync;
   entry.callback = std::move(callback);
 
   _requests.push(std::move(entry));
 }
 
-void io_uring_reactor::submit_close(int fd, continue_void_callback_t&& callback) {
+void io_uring_reactor::submit_close(int file_descriptor, continue_void_callback_t&& callback) {
   request_entry entry;
-  entry.fd = fd;
+  entry.fd = file_descriptor;
   entry.operation = operation_type::close_file;
   entry.callback = std::move(callback);
 
