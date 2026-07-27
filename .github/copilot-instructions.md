@@ -54,6 +54,6 @@ Refer to `.claude/cpp_coding_instructions.instructions.md` for full details, but
 - Use snake_case names, lowercase filenames with underscores.
 - Document public APIs with Doxygen comments (`/** ... */`) including `@param`, `@return`, etc.
 - Follow formatting rules: 2-space indent, braces on same line, `noexcept` where applicable, `[[nodiscard]]` on results, etc.
-- Avoid manual `cmake` calls; rely on CMake Tools extension and run clang-tidy/clang-format through CMake.
 - Optimize for performance: minimize allocations, avoid virtual dispatch, use `std::string_view`/`std::span` and branch hints.
+- Avoid manual `cmake` calls; rely on CMake Tools extension and run clang-tidy/clang-format through CMake.
 - Ensure tests accompany new features and run `clang-tidy`/format before PRs.
