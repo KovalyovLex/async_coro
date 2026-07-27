@@ -3,11 +3,11 @@
 #include <async_coro/atomic_queue.h>
 #include <async_coro/executor_data.h>
 #include <async_coro/i_execution_system.h>
-#include <async_coro/internal/hardware_interference_size.h>
 #include <async_coro/thread_notifier.h>
 #include <async_coro/thread_safety/analysis.h>
 #include <async_coro/thread_safety/condition_variable.h>
 #include <async_coro/thread_safety/mutex.h>
+#include <async_coro/utils/hardware_interference_size.h>
 #include <async_coro/utils/unique_function.h>
 #include <async_coro/warnings.h>
 
