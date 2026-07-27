@@ -15,12 +15,15 @@
 #include <wepoll.h>
 #else
 #include <sys/epoll.h>
-#include <unistd.h>
 #endif  // WIN_SOCKET
 #elif KQUEUE_SOCKET
 #include <sys/event.h>
 #else
 #error "Unsupported platform"
+#endif
+
+#if !WIN_SOCKET
+#include <unistd.h>
 #endif
 
 namespace server::io {

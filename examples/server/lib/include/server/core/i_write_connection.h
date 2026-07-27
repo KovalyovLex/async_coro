@@ -3,7 +3,9 @@
 #include <async_coro/task.h>
 #include <server/utils/expected.h>
 
+#include <cstddef>
 #include <span>
+#include <string>
 
 namespace server::core {
 

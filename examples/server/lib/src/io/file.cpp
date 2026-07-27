@@ -1,9 +1,14 @@
+
 #include <async_coro/await/await_callback.h>
 #include <fcntl.h>
 #include <server/io/file.h>
+#include <server/socket_layer/socket_config.h>
 #include <server/utils/expected.h>
 #include <sys/stat.h>
+
+#if !WIN_SOCKET
 #include <unistd.h>
+#endif
 
 #include <cerrno>
 
