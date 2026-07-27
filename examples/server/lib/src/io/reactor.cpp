@@ -15,6 +15,7 @@
 #include <wepoll.h>
 #else
 #include <sys/epoll.h>
+#include <unistd.h>
 #endif  // WIN_SOCKET
 #elif KQUEUE_SOCKET
 #include <sys/event.h>
