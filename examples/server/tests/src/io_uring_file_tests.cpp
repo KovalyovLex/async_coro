@@ -1,9 +1,12 @@
+#include <server/io/io_uring_file.h>
+
+#if IO_URING_ENABLED
+
 #include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/task.h>
 #include <fcntl.h>
 #include <gtest/gtest.h>
-#include <server/io/io_uring_file.h>
 #include <server/io/io_uring_reactor.h>
 
 #include <cstddef>
@@ -296,3 +299,5 @@ TEST(io_uring_file_tests, read_closed_file) {
   ASSERT_TRUE(run_task(test(), scheduler, reactor));
   fs::remove(path);
 }
+
+#endif
