@@ -99,7 +99,7 @@ class io_uring_reactor {
    * @param callback Continuation callback will be called after read complete.
    * @note The buffer must outlive the callback invocation. The reactor stores a non-owning span.
    */
-  void submit_read(int file_descriptor, size_t offset, std::span<uint8_t> buffer, continue_size_callback_t&& callback);
+  void submit_read(int file_descriptor, uint64_t offset, std::span<uint8_t> buffer, continue_size_callback_t&& callback);
 
   /**
    * @brief Submit an async write operation.
@@ -110,7 +110,7 @@ class io_uring_reactor {
    * @param callback Continuation callback will be called after write complete.
    * @note The buffer must outlive the callback invocation. The reactor stores a non-owning span.
    */
-  void submit_write(int file_descriptor, size_t offset, std::span<const uint8_t> buffer, continue_size_callback_t&& callback);
+  void submit_write(int file_descriptor, uint64_t offset, std::span<const uint8_t> buffer, continue_size_callback_t&& callback);
 
   /**
    * @brief Submit an async fsync operation.
@@ -200,7 +200,7 @@ class io_uring_reactor {
   /**
    * @brief Stack of non submitted indices (capacity = ring_size).
    *
-   * Used to push events to SWE in case of exhausted system buffer
+   * Used to push events to SQE in case of exhausted system buffer. Fixed capacity, no dynamic reallocation.
    */
   std::vector<size_t> _events_to_push;
 };

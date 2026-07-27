@@ -213,7 +213,7 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {
   }
 }
 
-void io_uring_reactor::submit_read(int file_descriptor, size_t offset, std::span<uint8_t> buffer, continue_size_callback_t&& callback) {
+void io_uring_reactor::submit_read(int file_descriptor, uint64_t offset, std::span<uint8_t> buffer, continue_size_callback_t&& callback) {
   request_entry entry;
   entry.fd = file_descriptor;
   entry.operation = operation_type::receive_data;
@@ -224,7 +224,7 @@ void io_uring_reactor::submit_read(int file_descriptor, size_t offset, std::span
   _requests.push(std::move(entry));
 }
 
-void io_uring_reactor::submit_write(int file_descriptor, size_t offset, std::span<const uint8_t> buffer, continue_size_callback_t&& callback) {
+void io_uring_reactor::submit_write(int file_descriptor, uint64_t offset, std::span<const uint8_t> buffer, continue_size_callback_t&& callback) {
   request_entry entry;
   entry.fd = file_descriptor;
   entry.operation = operation_type::send_data;
