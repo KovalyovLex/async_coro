@@ -25,7 +25,7 @@ This plan covers async I/O for the `async_coro` library. The codebase **already 
 | `examples/server/lib/include/server/socket_layer/connection_id.h` | Platform-abstracted socket FD wrapper |
 | `examples/server/lib/include/server/socket_layer/ssl_connection.h` | OpenSSL TLS wrapper with async handshake |
 | `examples/server/lib/include/server/socket_layer/ssl_context.h` | SSL context management |
-| `examples/server/lib/include/server/socket_layer/socket_config.h` | Platform detection macros (EPOLL/KQUEUE/WIN_SOCKET) |
+| `examples/server/lib/include/server/io/io_config.h` | Platform detection macros (EPOLL/KQUEUE/WIN_SOCKET) |
 | `examples/server/lib/src/socket_layer/reactor.cpp` | epoll_wait/kevent polling loop |
 | `examples/server/lib/src/socket_layer/connection.cpp` | Non-blocking read/write with SSL support |
 | `examples/server/lib/src/socket_layer/listener.cpp` | Socket creation, bind, listen, accept |

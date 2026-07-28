@@ -4,7 +4,7 @@
 #include <async_coro/thread_safety/analysis.h>
 #include <async_coro/thread_safety/mutex.h>
 #include <async_coro/utils/unique_function.h>
-#include <server/socket_layer/socket_config.h>
+#include <server/io/io_config.h>
 #include <server/utils/expected.h>
 
 #include <chrono>
@@ -12,10 +12,6 @@
 #include <vector>
 
 namespace server::io {
-
-using socket_type = socket_layer::socket_type;
-using epoll_handle_t = socket_layer::epoll_handle_t;
-constexpr socket_type invalid_socket_id = socket_layer::invalid_socket_id;
 
 /**
  * @brief Common event reactor for both sockets and files.
@@ -58,11 +54,11 @@ class reactor {
   /**
    * @brief Add a file descriptor to the reactor for polling.
    *
-   * @param file_descriptor The file descriptor to add (socket or regular file).
+   * @param file_descriptor The file descriptor to add (regular file).
    * @return The index of the registered fd, or invalid_index on failure.
    * @note The fd will be set to non-blocking mode if not already.
    */
-  size_t add_fd(socket_type file_descriptor);
+  size_t add_fd(file_handle_t file_descriptor);
 
   /**
    * @brief Remove a file descriptor from the reactor.
@@ -71,7 +67,25 @@ class reactor {
    * @param index The index returned by add_fd.
    * @note The fd is closed after removal.
    */
-  void remove_fd(socket_type file_descriptor, size_t index);
+  void remove_fd(file_handle_t file_descriptor, size_t index);
+
+  /**
+   * @brief Add a socket descriptor to the reactor for polling.
+   *
+   * @param sock The socket id to add.
+   * @return The index of the registered fd, or invalid_index on failure.
+   * @note The socket will be set to non-blocking mode if not already.
+   */
+  size_t add_sock(socket_type sock);
+
+  /**
+   * @brief Remove a socket descriptor from the reactor.
+   *
+   * @param sock The socket id to remove.
+   * @param index The index returned by add_sock.
+   * @note The socket is closed after removal.
+   */
+  void remove_sock(socket_type sock, size_t index);
 
   /**
    * @brief Register a callback for when data is available for reading.
@@ -80,7 +94,7 @@ class reactor {
    * @param index The index returned by add_fd.
    * @param callback The callback to invoke when data is available.
    */
-  void continue_after_receive_data(socket_type file_descriptor, size_t index, continue_callback_t&& callback);
+  void continue_after_read_data_ready(file_handle_t file_descriptor, size_t index, continue_callback_t&& callback);
 
   /**
    * @brief Register a callback for when data can be written.
@@ -89,7 +103,25 @@ class reactor {
    * @param index The index returned by add_fd.
    * @param callback The callback to invoke when write is possible.
    */
-  void continue_after_sent_data(socket_type file_descriptor, size_t index, continue_callback_t&& callback);
+  void continue_after_write_data(file_handle_t file_descriptor, size_t index, continue_callback_t&& callback);
+
+  /**
+   * @brief Register a callback for when data is available for reading.
+   *
+   * @param sock The socket id.
+   * @param index The index returned by add_sock.
+   * @param callback The callback to invoke when data is available.
+   */
+  void continue_after_receive_data(socket_type sock, size_t index, continue_callback_t&& callback);
+
+  /**
+   * @brief Register a callback for when data can be written.
+   *
+   * @param sock The socket id.
+   * @param index The index returned by add_sock.
+   * @param callback The callback to invoke when write is possible.
+   */
+  void continue_after_sent_data(socket_type sock, size_t index, continue_callback_t&& callback);
 
  private:
   enum class await_type : uint8_t {
@@ -99,7 +131,7 @@ class reactor {
   };
   struct handled_fd {
     continue_callback_t callback;
-    socket_type fd = invalid_socket_id;
+    socket_type sock = invalid_socket_id;
     await_type await = await_type::no_await;
   };
 
@@ -108,7 +140,7 @@ class reactor {
   std::vector<size_t> _empty_fds CORO_THREAD_GUARDED_BY(_mutex);
 
 #if EPOLL_SOCKET || KQUEUE_SOCKET
-  epoll_handle_t _epoll_fd = invalid_socket_id;
+  epoll_handle_t _epoll_fd = invalid_epoll_handle;
 #endif
   bool _error = false;
 };

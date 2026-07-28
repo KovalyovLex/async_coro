@@ -1,6 +1,7 @@
 #pragma once
 
 #include <async_coro/task.h>
+#include <server/io/file_open_mode.h>
 #include <server/io/reactor.h>
 #include <server/utils/expected.h>
 #include <sys/types.h>
@@ -46,12 +47,11 @@ class file {
    *
    * @param reactor The reactor to use for async I/O. Must outlive this file.
    * @param path The file path to open.
-   * @param mode The open mode (e.g., std::ios::in, std::ios::out, std::ios::binary).
-   * @param permissions File permissions (only used when creating new files).
+   * @param mode The open mode flags (e.g., file_open_mode::read | file_open_mode::create).
    * @return An expected<file, std::string>.
    *         On success, contains the opened file. On failure, contains an error message.
    */
-  [[nodiscard]] static expected<file, std::string> open(reactor& reactor, const std::string& path, int mode, int permissions = 0644) noexcept;
+  [[nodiscard]] static expected<file, std::string> open(reactor& reactor, const std::string& path, file_open_mode mode) noexcept;
 
   /**
    * @brief Read data from the file into a buffer.
@@ -91,14 +91,14 @@ class file {
    *
    * @return true if the file is closed, false otherwise.
    */
-  [[nodiscard]] bool is_closed() const noexcept;
+  [[nodiscard]] bool is_closed() const noexcept { return _fd == invalid_file_handle; }
 
   /**
    * @brief Get the file descriptor.
    *
    * @return The file descriptor, or -1 if the file is closed.
    */
-  [[nodiscard]] int get_fd() const noexcept;
+  [[nodiscard]] file_handle_t get_fd() const noexcept { return _fd; }
 
   /**
    * @brief Get the file size in bytes.
@@ -138,27 +138,19 @@ class file {
 
  private:
   /**
-   * @brief Map a seek_whence enum value to the corresponding POSIX lseek constant.
-   *
-   * @param whence The seek origin enum value.
-   * @return The corresponding POSIX whence constant (SEEK_SET, SEEK_CUR, or SEEK_END).
-   */
-  [[nodiscard]] static int map_whence(seek_whence whence) noexcept;
-
-  /**
    * @brief Check if an error code indicates a "would block" condition.
    *
    * @param err The error code to check.
    * @return true if the error indicates the operation should be retried, false otherwise.
    */
-  [[nodiscard]] static bool would_block(int err) noexcept;
+  [[nodiscard]] static bool would_block() noexcept;
 
  private:
-  explicit file(reactor& reactor, socket_type file_descriptor, size_t index) noexcept;
+  explicit file(reactor& reactor, file_handle_t file_descriptor, size_t index) noexcept;
 
   reactor& _reactor;
-  socket_type _fd = -1;
-  size_t _index = -1;
+  file_handle_t _fd = invalid_file_handle;
+  size_t _index = static_cast<size_t>(-1);
 };
 
 }  // namespace server::io

@@ -52,7 +52,7 @@ void connection::close_connection() {
     _reactor->close_connection(_sock, _subscription_index);
     _subscription_index = k_invalid_index;
   } else if (_sock != invalid_connection) {
-    close_socket(_sock.get_platform_id());
+    io::close_socket(_sock.get_platform_id());
   }
 
   _reactor = nullptr;

@@ -2,6 +2,7 @@
 
 // NOLINTBEGIN(*macro-usage)
 
+#include <cstdint>
 #ifdef _WIN32
 
 #define WIN_SOCKET 1
@@ -42,18 +43,34 @@ static_assert(false, "Unsupported platform");
 
 // NOLINTEND(*macro-usage)
 
-namespace server::socket_layer {
+namespace server::io {
 
 #if WIN_SOCKET
+
 using socket_type = SOCKET;
 using epoll_handle_t = HANDLE;
+using file_handle_t = HANDLE;
+
 static constexpr socket_type invalid_socket_id = INVALID_SOCKET;
+static const epoll_handle_t invalid_epoll_handle = INVALID_HANDLE_VALUE;
+static const file_handle_t invalid_file_handle = INVALID_HANDLE_VALUE;
+
+static_assert(sizeof(socket_type) == sizeof(file_handle_t), "Wring platform, SDK?");
+
 #else
+
 using socket_type = int;
 using epoll_handle_t = int;
+using file_handle_t = int;
+
 static constexpr socket_type invalid_socket_id = -1;
+static constexpr epoll_handle_t invalid_epoll_handle = -1;
+static constexpr file_handle_t invalid_file_handle = -1;
+
 #endif
 
 void close_socket(socket_type socket_id) noexcept;
+void close_epoll(epoll_handle_t handle) noexcept;
+void close_file(file_handle_t handle) noexcept;
 
-}  // namespace server::socket_layer
+}  // namespace server::io

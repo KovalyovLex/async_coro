@@ -2,6 +2,7 @@
 
 #include <async_coro/await/await_callback.h>
 #include <fcntl.h>
+#include <server/io/file_open_mode.h>
 #include <server/io/io_uring_file.h>
 #include <server/utils/expected.h>
 #include <sys/stat.h>
@@ -26,9 +27,10 @@ io_uring_file::io_uring_file(io_uring_reactor& reactor, int file_descriptor) noe
   // The fd is already opened via io_uring in io_uring_file::open
 }
 
-async_coro::task<expected<io_uring_file, std::string>> io_uring_file::open_coro(io_uring_reactor& reactor, std::string path, int flags, int mode) noexcept {
+async_coro::task<expected<io_uring_file, std::string>> io_uring_file::open_coro(io_uring_reactor& reactor, std::string path, file_open_mode mode, int permissions) noexcept {
+  int posix_flags = mode_to_posix_flags(mode);
   auto result = co_await async_coro::await_callback_with_result<expected<int, std::string>>([&](auto cont) {
-    reactor.submit_open(path.c_str(), flags, mode, std::move(cont));
+    reactor.submit_open(path.c_str(), posix_flags, permissions, std::move(cont));
   });
 
   if (!result) {

@@ -1,60 +1,98 @@
 
 #include <async_coro/await/await_callback.h>
-#include <fcntl.h>
 #include <server/io/file.h>
-#include <server/socket_layer/socket_config.h>
+#include <server/io/io_config.h>
 #include <server/utils/expected.h>
-#include <sys/stat.h>
 
 #if !WIN_SOCKET
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
-#endif
 
 #include <cerrno>
 
+#else
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
+
 namespace server::io {
 
-bool file::would_block(int err) noexcept {
+bool file::would_block() noexcept {
 #if WIN_SOCKET
-  return err == WSAEWOULDBLOCK || err == WSAEAGAIN;
+  // On Windows, file I/O errors are reported via GetLastError, not errno.
+  // Non-blocking mode is not supported for files on Windows, so this should
+  // not be called for file handles.
+  return false;
 #else
-  return err == EAGAIN || err == EWOULDBLOCK;
+  const int err_code = errno;
+  return err_code == EAGAIN || err_code == EWOULDBLOCK;
 #endif
 }
 
-file::file(reactor& reactor, socket_type file_descriptor, size_t index) noexcept  // NOLINT(*-swappable*)
+file::file(reactor& reactor, file_handle_t file_descriptor, size_t index) noexcept  // NOLINT(*-swappable*)
     : _reactor(reactor),
       _fd(file_descriptor),
       _index(index) {
   // The fd is already added to the reactor in file::open
 }
 
-expected<file, std::string> file::open(reactor& reactor, const std::string& path, int mode, int permissions) noexcept {
-  socket_type file_descriptor = ::open(path.c_str(), mode, permissions);  // NOLINT(*vararg*)
-  if (file_descriptor == invalid_socket_id) {
+expected<file, std::string> file::open(reactor& reactor, const std::string& path, file_open_mode mode) noexcept {
+#if WIN_SOCKET
+  DWORD access = 0;
+  DWORD creation = 0;
+  mode_to_win_flags(mode, access, creation);
+
+  // Convert path to wide string for CreateFileW
+  const int wide_len = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), static_cast<int>(path.size()), nullptr, 0);
+  if (wide_len <= 0) {
+    return expected<file, std::string>{unexpect, "Failed to convert path to wide string"};
+  }
+
+  std::vector<wchar_t> wide_path(static_cast<size_t>(wide_len) + 1, 0);
+  MultiByteToWideChar(CP_UTF8, 0, path.c_str(), static_cast<int>(path.size()), wide_path.data(), wide_len);
+
+  HANDLE handle = ::CreateFileW(
+      wide_path.data(),
+      access,
+      0,        // no sharing by default
+      nullptr,  // default security
+      creation,
+      FILE_ATTRIBUTE_NORMAL,
+      nullptr);
+
+  if (handle == INVALID_HANDLE_VALUE) {
+    const DWORD error = GetLastError();
+    return expected<file, std::string>{unexpect, "CreateFile failed with error code " + std::to_string(error)};
+  }
+
+  size_t index = reactor.add_fd(handle);
+  if (index == static_cast<size_t>(-1)) {
+    close_file(handle);
+    return expected<file, std::string>{unexpect, "Failed to add fd to reactor"};
+  }
+
+  return file{reactor, handle, index};
+#else
+  int posix_mode = mode_to_posix_flags(mode) | O_NONBLOCK;
+  file_handle_t file_descriptor = ::open(path.c_str(), posix_mode, static_cast<int>(0644));  // NOLINT(*vararg*)
+  if (file_descriptor == invalid_file_handle) {
     return expected<file, std::string>{unexpect, std::string(strerror(errno))};
   }
 
-  // Set non-blocking mode for async I/O
-#if !WIN_SOCKET
-  const auto flags = ::fcntl(file_descriptor, F_GETFL, 0);
-  if (flags < 0 || ::fcntl(file_descriptor, F_SETFL, flags | O_NONBLOCK) < 0) {  // NOLINT(*-signed*, *vararg*)
-    socket_layer::close_socket(file_descriptor);
-    return expected<file, std::string>{unexpect, "Failed to set non-blocking mode"};
-  }
-#endif
-
   size_t index = reactor.add_fd(file_descriptor);
   if (index == static_cast<size_t>(-1)) {
-    socket_layer::close_socket(file_descriptor);
+    close_file(file_descriptor);
     return expected<file, std::string>{unexpect, "Failed to add fd to reactor"};
   }
 
   return file{reactor, file_descriptor, index};
+#endif
 }
 
 async_coro::task<expected<size_t, std::string>> file::read(std::span<uint8_t> buffer) {
-  if (_fd == invalid_socket_id) {
+  if (_fd == invalid_file_handle) {
     co_return expected<size_t, std::string>{unexpect, "File is closed"};
   }
 
@@ -62,6 +100,33 @@ async_coro::task<expected<size_t, std::string>> file::read(std::span<uint8_t> bu
   auto current_buffer = buffer;
 
   while (total_bytes_read < buffer.size()) {
+#if WIN_SOCKET
+    DWORD bytes_read = 0;
+    BOOL result = ::ReadFile(_fd, current_buffer.data(), static_cast<DWORD>(current_buffer.size()), &bytes_read, nullptr);
+
+    if (result && bytes_read > 0) {
+      total_bytes_read += bytes_read;
+      current_buffer = current_buffer.subspan(bytes_read);
+      continue;
+    }
+
+    if (!result && bytes_read == 0) {
+      // End of file
+      co_return total_bytes_read;
+    }
+
+    if (!result) {
+      const DWORD error = GetLastError();
+      // ERROR_HANDLE_EOF means end of file
+      if (error == ERROR_HANDLE_EOF) {
+        co_return total_bytes_read;
+      }
+      co_return expected<size_t, std::string>{unexpect, "ReadFile failed with error code " + std::to_string(error)};
+    }
+
+    // bytes_read > 0 but result is false - shouldn't happen, treat as error
+    co_return expected<size_t, std::string>{unexpect, "ReadFile returned success with no bytes"};
+#else
     ssize_t bytes_read = ::read(_fd, current_buffer.data(), current_buffer.size());
 
     if (bytes_read > 0) {
@@ -76,7 +141,7 @@ async_coro::task<expected<size_t, std::string>> file::read(std::span<uint8_t> bu
     }
 
     // Error or EAGAIN/EWOULDBLOCK
-    if (!file::would_block(errno)) {
+    if (!file::would_block()) {
       co_return expected<size_t, std::string>{unexpect, std::string(strerror(errno))};
     }
 
@@ -88,16 +153,38 @@ async_coro::task<expected<size_t, std::string>> file::read(std::span<uint8_t> bu
     if (result == reactor::connection_state::closed) {
       co_return expected<size_t, std::string>{unexpect, "File was closed"};
     }
+#endif
   }
 
   co_return total_bytes_read;
 }
 
 async_coro::task<expected<void, std::string>> file::write(std::span<const uint8_t> data) {
-  if (_fd == invalid_socket_id) {
+  if (_fd == invalid_file_handle) {
     co_return expected<void, std::string>{unexpect, "File is closed"};
   }
 
+#if WIN_SOCKET
+  // On Windows, files are blocking by default. Use WriteFile directly.
+  DWORD bytes_written = 0;
+  BOOL result = ::WriteFile(_fd, data.data(), static_cast<DWORD>(data.size()), &bytes_written, nullptr);
+
+  if (result && static_cast<size_t>(bytes_written) == data.size()) {
+    co_return expected<void, std::string>{};
+  }
+
+  if (!result) {
+    const DWORD error = GetLastError();
+    co_return expected<void, std::string>{unexpect, "WriteFile failed with error code " + std::to_string(error)};
+  }
+
+  // Partial write - shouldn't normally happen for files
+  if (static_cast<size_t>(bytes_written) < data.size()) {
+    co_return expected<void, std::string>{unexpect, "Partial write: " + std::to_string(bytes_written) + " of " + std::to_string(data.size()) + " bytes"};
+  }
+
+  co_return expected<void, std::string>{};
+#else
   while (!data.empty()) {
     ssize_t bytes_written = ::write(_fd, data.data(), data.size());
 
@@ -112,7 +199,7 @@ async_coro::task<expected<void, std::string>> file::write(std::span<const uint8_
     }
 
     // Error or EAGAIN/EWOULDBLOCK
-    if (!file::would_block(errno)) {
+    if (!file::would_block()) {
       co_return expected<void, std::string>{unexpect, std::string(strerror(errno))};
     }
 
@@ -127,78 +214,119 @@ async_coro::task<expected<void, std::string>> file::write(std::span<const uint8_
   }
 
   co_return expected<void, std::string>{};
+#endif
 }
 
 expected<void, std::string> file::flush() const {
-  if (_fd == invalid_socket_id) {
+  if (_fd == invalid_file_handle) {
     return expected<void, std::string>{unexpect, "File is closed"};
   }
 
+#if WIN_SOCKET
+  if (::FlushFileBuffers(_fd)) {
+    return expected<void, std::string>{};
+  }
+  const DWORD error = GetLastError();
+  return expected<void, std::string>{unexpect, "FlushFileBuffers failed with error code " + std::to_string(error)};
+#else
   if (::fsync(_fd) == 0) {
     return expected<void, std::string>{};
   }
 
   return expected<void, std::string>{unexpect, std::string(strerror(errno))};
+#endif
 }
 
 void file::close() noexcept {
-  if (_fd != invalid_socket_id) {
-    ::close(_fd);
+  if (_fd != invalid_file_handle) {
     _reactor.remove_fd(_fd, _index);
-    _fd = invalid_socket_id;
+    close_file(_fd);
+    _fd = invalid_file_handle;
     _index = static_cast<size_t>(-1);
   }
 }
 
-bool file::is_closed() const noexcept {
-  return _fd == invalid_socket_id;
-}
-
-int file::get_fd() const noexcept {
-  return static_cast<int>(_fd);
-}
-
-int file::map_whence(seek_whence whence) noexcept {
-  switch (whence) {
-    case seek_whence::set:
-      return SEEK_SET;
-    case seek_whence::current:
-      return SEEK_CUR;
-    case seek_whence::end:
-      return SEEK_END;
-  }
-  return SEEK_SET;  // fallback
-}
-
 expected<size_t, std::string> file::get_size() const {
-  if (_fd == invalid_socket_id) {
+  if (_fd == invalid_file_handle) {
     return expected<size_t, std::string>{unexpect, "File is closed"};
   }
 
+#if WIN_SOCKET
+  LARGE_INTEGER size{};
+  if (::GetFileSizeEx(_fd, &size)) {
+    return static_cast<size_t>(size.QuadPart);
+  }
+  return expected<size_t, std::string>{unexpect, "GetFileSizeEx failed"};
+#else
   struct stat stat_buf{};
   if (::fstat(_fd, &stat_buf) != 0) {
     return expected<size_t, std::string>{unexpect, std::string(strerror(errno))};
   }
 
   return static_cast<size_t>(stat_buf.st_size);
+#endif
 }
 
 expected<off_t, std::string> file::seek(off_t offset, seek_whence whence) const {
-  if (_fd == invalid_socket_id) {
+  if (_fd == invalid_file_handle) {
     return expected<off_t, std::string>{unexpect, "File is closed"};
   }
 
-  const int posix_whence = map_whence(whence);
+#if WIN_SOCKET
+  LARGE_INTEGER distance{};
+  LARGE_INTEGER new_position{};
+  DWORD win_seek_origin;
+
+  switch (whence) {
+    case seek_whence::set:
+      win_seek_origin = FILE_BEGIN;
+      break;
+    case seek_whence::current:
+      win_seek_origin = FILE_CURRENT;
+      break;
+    case seek_whence::end:
+      win_seek_origin = FILE_END;
+      break;
+    default:
+      win_seek_origin = FILE_CURRENT;
+      break;
+  }
+
+  distance.QuadPart = offset;
+  if (::SetFilePointerEx(_fd, distance, &new_position, win_seek_origin)) {
+    return static_cast<off_t>(new_position.QuadPart);
+  }
+
+  const DWORD error = GetLastError();
+  return expected<off_t, std::string>{unexpect, "SetFilePointerEx failed with error code " + std::to_string(error)};
+#else
+  int posix_whence;
+  switch (whence) {
+    case seek_whence::set:
+      posix_whence = SEEK_SET;
+      break;
+    case seek_whence::current:
+      posix_whence = SEEK_CUR;
+      break;
+    case seek_whence::end:
+      posix_whence = SEEK_END;
+      break;
+    default:
+      posix_whence = SEEK_SET;
+      break;
+  }
+
   off_t new_offset = ::lseek(_fd, offset, posix_whence);
   if (new_offset == static_cast<off_t>(-1)) {
     return expected<off_t, std::string>{unexpect, std::string(strerror(errno))};
   }
 
   return new_offset;
+#endif
 }
 
 async_coro::task<expected<std::vector<std::byte>, std::string>> file::read_all() {
-  if (_fd == invalid_socket_id) {
+  if (_fd == invalid_file_handle) {
     co_return expected<std::vector<std::byte>, std::string>{unexpect, "File is closed"};
   }
 
@@ -219,6 +347,31 @@ async_coro::task<expected<std::vector<std::byte>, std::string>> file::read_all()
   auto current_buffer = std::span<std::byte>{buffer.data(), buffer.size()};
 
   while (total_bytes_read < file_size) {
+#if WIN_SOCKET
+    DWORD bytes_read = 0;
+    BOOL result = ::ReadFile(_fd, current_buffer.data(), static_cast<DWORD>(current_buffer.size()), &bytes_read, nullptr);
+
+    if (result && bytes_read > 0) {
+      total_bytes_read += bytes_read;
+      current_buffer = current_buffer.subspan(bytes_read);
+      continue;
+    }
+
+    if (!result && bytes_read == 0) {
+      // End of file
+      co_return std::move(buffer);
+    }
+
+    if (!result) {
+      const DWORD error = GetLastError();
+      if (error == ERROR_HANDLE_EOF) {
+        co_return std::move(buffer);
+      }
+      co_return expected<std::vector<std::byte>, std::string>{unexpect, "ReadFile failed with error code " + std::to_string(error)};
+    }
+
+    co_return expected<std::vector<std::byte>, std::string>{unexpect, "ReadFile returned success with no bytes"};
+#else
     ssize_t bytes_read = ::read(_fd, current_buffer.data(), current_buffer.size());
 
     if (bytes_read > 0) {
@@ -233,7 +386,7 @@ async_coro::task<expected<std::vector<std::byte>, std::string>> file::read_all()
     }
 
     // Error or EAGAIN/EWOULDBLOCK
-    if (!file::would_block(errno)) {
+    if (!file::would_block()) {
       co_return expected<std::vector<std::byte>, std::string>{unexpect, std::string(strerror(errno))};
     }
 
@@ -245,6 +398,7 @@ async_coro::task<expected<std::vector<std::byte>, std::string>> file::read_all()
     if (result == reactor::connection_state::closed) {
       co_return expected<std::vector<std::byte>, std::string>{unexpect, "File was closed"};
     }
+#endif
   }
 
   co_return std::move(buffer);

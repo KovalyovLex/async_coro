@@ -1,7 +1,6 @@
 #include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/task.h>
-#include <fcntl.h>
 #include <gtest/gtest.h>
 #include <server/io/file.h>
 #include <server/utils/expected.h>
@@ -21,7 +20,14 @@ namespace fs = std::filesystem;
 static std::string create_temp_file(const std::string& content) {
   static thread_local std::mt19937 gen(std::random_device{}());
   static thread_local std::uniform_int_distribution<int> dist(0, 999999);
+
+  ASYNC_CORO_WARNINGS_PUSH
+  ASYNC_CORO_WARNINGS_MSVC_IGNORE(4996)
+
   auto path = fs::temp_directory_path() / ("async_coro_test_" + std::to_string(getpid()) + "_" + std::to_string(dist(gen)));
+
+  ASYNC_CORO_WARNINGS_POP
+
   std::ofstream ofs(path, std::ios::binary);
   ofs.write(content.data(), static_cast<std::streamsize>(content.size()));
   ofs.close();
@@ -53,7 +59,7 @@ TEST(async_file_io, open_and_read_file) {
   server::io::reactor file_reactor;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = server::io::file::open(file_reactor, path, O_RDONLY);
+    auto result = server::io::file::open(file_reactor, path, server::io::file_open_mode::read);
     if (!result) {
       co_return -1;
     }
@@ -82,7 +88,7 @@ TEST(async_file_io, write_and_read_file) {
   server::io::reactor file_reactor;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = server::io::file::open(file_reactor, path, O_WRONLY | O_CREAT | O_TRUNC);
+    auto result = server::io::file::open(file_reactor, path, server::io::file_open_mode::write | server::io::file_open_mode::create | server::io::file_open_mode::trunc);
     if (!result) {
       co_return -1;
     }
@@ -113,7 +119,7 @@ TEST(async_file_io, read_nonexistent_file) {
   server::io::reactor file_reactor;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = server::io::file::open(file_reactor, "/nonexistent/path/file.txt", O_RDONLY);
+    auto result = server::io::file::open(file_reactor, "/nonexistent/path/file.txt", server::io::file_open_mode::read);
     if (result) {
       co_return -1;  // Should have failed
     }
@@ -131,7 +137,7 @@ TEST(async_file_io, close_file) {
   server::io::reactor file_reactor;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = server::io::file::open(file_reactor, path, O_RDONLY);
+    auto result = server::io::file::open(file_reactor, path, server::io::file_open_mode::read);
     if (!result) {
       co_return -1;
     }
@@ -156,7 +162,7 @@ TEST(async_file_io, read_empty_file) {
   server::io::reactor file_reactor;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = server::io::file::open(file_reactor, path, O_RDONLY);
+    auto result = server::io::file::open(file_reactor, path, server::io::file_open_mode::read);
     if (!result) {
       co_return -1;
     }
@@ -185,7 +191,7 @@ TEST(async_file_io, get_size_returns_correct_value) {
   server::io::reactor file_reactor;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = server::io::file::open(file_reactor, path, O_RDONLY);
+    auto result = server::io::file::open(file_reactor, path, server::io::file_open_mode::read);
     if (!result) {
       co_return -1;
     }
@@ -214,7 +220,7 @@ TEST(async_file_io, read_all_reads_entire_file) {
   server::io::reactor file_reactor;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = server::io::file::open(file_reactor, path, O_RDONLY);
+    auto result = server::io::file::open(file_reactor, path, server::io::file_open_mode::read);
     if (!result) {
       co_return -1;
     }
@@ -254,7 +260,7 @@ TEST(async_file_io, read_all_empty_file) {
   server::io::reactor file_reactor;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = server::io::file::open(file_reactor, path, O_RDONLY);
+    auto result = server::io::file::open(file_reactor, path, server::io::file_open_mode::read);
     if (!result) {
       co_return -1;
     }
@@ -288,7 +294,7 @@ TEST(async_file_io, seek_moves_position) {
   server::io::reactor file_reactor;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = server::io::file::open(file_reactor, path, O_RDONLY);
+    auto result = server::io::file::open(file_reactor, path, server::io::file_open_mode::read);
     if (!result) {
       co_return -1;
     }
@@ -333,7 +339,7 @@ TEST(async_file_io, seek_error_invalid_whence) {
   server::io::reactor file_reactor;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = server::io::file::open(file_reactor, path, O_RDONLY);
+    auto result = server::io::file::open(file_reactor, path, server::io::file_open_mode::read);
     if (!result) {
       co_return -1;
     }

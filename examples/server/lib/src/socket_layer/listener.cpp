@@ -1,7 +1,7 @@
 #include <async_coro/config.h>
+#include <server/io/io_config.h>
 #include <server/socket_layer/connection_id.h>
 #include <server/socket_layer/listener.h>
-#include <server/socket_layer/socket_config.h>
 
 #include <array>
 #include <cerrno>
@@ -47,7 +47,7 @@ enum class socket_init_state : uint8_t {
 static auto win_sock_init_state = socket_init_state::not_initialized;  // NOLINT(*-non-const-*)
 #endif
 
-static bool set_non_blocking_mode(socket_type sock, std::string* error_message) {
+static bool set_non_blocking_mode(io::socket_type sock, std::string* error_message) {
 #if WIN_SOCKET
   u_long set_on = 1;
   auto ret = ::ioctlsocket(sock, (long)FIONBIO, &set_on);
@@ -73,18 +73,18 @@ static bool set_non_blocking_mode(socket_type sock, std::string* error_message) 
   return true;
 }
 
-static socket_type open_socket_impl(const std::string& ip_address, uint16_t port, bool non_block, std::string* error_message) {  // NOLINT(*-complexity*)
+static io::socket_type open_socket_impl(const std::string& ip_address, uint16_t port, bool non_block, std::string* error_message) {  // NOLINT(*-complexity*)
 #if WIN_SOCKET
   if (win_sock_init_state == socket_init_state::fatal_error) {
     if (error_message != nullptr) {
       *error_message = "WSAStartup failed";
     }
-    return invalid_socket_id;
+    return io::invalid_socket_id;
   }
   ASYNC_CORO_ASSERT(win_sock_init_state == socket_init_state::initialized);
 #endif
 
-  socket_type listen_socket = invalid_socket_id;
+  io::socket_type listen_socket = io::invalid_socket_id;
 
   if (ip_address.empty()) {
     // starts listening on port
@@ -97,13 +97,13 @@ static socket_type open_socket_impl(const std::string& ip_address, uint16_t port
       if (error_message != nullptr) {
         *error_message = std::make_error_code(res.ec).message();
       }
-      return invalid_socket_id;
+      return io::invalid_socket_id;
     }
     if (res.ptr != port_end) {
       *res.ptr = '\0';
     } else {
       ASYNC_CORO_ASSERT(false && "To small buffer");  // NOLINT(*-static-*)
-      return invalid_socket_id;
+      return io::invalid_socket_id;
     }
 
     struct free_addr_info_raii {  // NOLINT(*-special-member-*)
@@ -117,10 +117,10 @@ static socket_type open_socket_impl(const std::string& ip_address, uint16_t port
     };
 
     struct close_sock_raii {  // NOLINT(*-special-member-*)
-      socket_type socket_id;
+      io::socket_type socket_id;
 
       ~close_sock_raii() {
-        close_socket(socket_id);
+        io::close_socket(socket_id);
       }
     };
 
@@ -139,7 +139,7 @@ static socket_type open_socket_impl(const std::string& ip_address, uint16_t port
         *error_message = "getaddrinfo: ";
         error_message->append(::gai_strerror(get_addr_res));
       }
-      return invalid_socket_id;
+      return io::invalid_socket_id;
     }
 
     addrinfo* result_bind = addr.result;
@@ -159,13 +159,13 @@ static socket_type open_socket_impl(const std::string& ip_address, uint16_t port
           *error_message = "FATAL ERROR: setsockopt error when setting IPV6_V6ONLY to 0: ";
           error_message->append(strerror(errno));
         }
-        return invalid_socket_id;
+        return io::invalid_socket_id;
       }
 
       const auto bind_res = ::bind(sfd, result_bind->ai_addr, int(result_bind->ai_addrlen));
       if (bind_res == 0) {
         /* We managed to bind successfully! */
-        late_close.socket_id = invalid_socket_id;
+        late_close.socket_id = io::invalid_socket_id;
         listen_socket = sfd;
         break;
       }
@@ -178,8 +178,8 @@ static socket_type open_socket_impl(const std::string& ip_address, uint16_t port
         error_message->append(", error: ");
         error_message->append(strerror(errno));
       }
-      close_socket(listen_socket);
-      return invalid_socket_id;
+      io::close_socket(listen_socket);
+      return io::invalid_socket_id;
     }
   } else {
     // ip address provided
@@ -189,7 +189,7 @@ static socket_type open_socket_impl(const std::string& ip_address, uint16_t port
       if (error_message != nullptr) {
         *error_message = "Could not open socket";
       }
-      return invalid_socket_id;
+      return io::invalid_socket_id;
     }
 
     // Use the user specified IP address
@@ -206,15 +206,15 @@ static socket_type open_socket_impl(const std::string& ip_address, uint16_t port
         error_message->append(", error: ");
         error_message->append(strerror(errno));
       }
-      close_socket(listen_socket);
-      return invalid_socket_id;
+      io::close_socket(listen_socket);
+      return io::invalid_socket_id;
     }
   }
 
   if (non_block) {
     if (!set_non_blocking_mode(listen_socket, error_message)) {
-      close_socket(listen_socket);
-      return invalid_socket_id;
+      io::close_socket(listen_socket);
+      return io::invalid_socket_id;
     }
   }
 
@@ -224,8 +224,8 @@ static socket_type open_socket_impl(const std::string& ip_address, uint16_t port
       *error_message = "Could not listen socket: ";
       error_message->append(strerror(errno));
     }
-    close_socket(listen_socket);
-    return invalid_socket_id;
+    io::close_socket(listen_socket);
+    return io::invalid_socket_id;
   }
 
   return listen_socket;
@@ -265,7 +265,7 @@ bool listener::open(const std::string& ip_address, uint16_t port, std::string* e
 
   auto socket = open_socket_impl(ip_address, port, true, error_message);
 
-  if (socket == invalid_socket_id) {
+  if (socket == io::invalid_socket_id) {
     return false;
   }
 
@@ -282,7 +282,7 @@ listener::connection_result listener::process_loop(std::span<char>* host_name_bu
 
   while (true) {
     const auto accept_sock = ::accept(_opened_connection.get_platform_id(), reinterpret_cast<sockaddr*>(&in_addr_storage), &in_len);  // NOLINT(*-reinterpret-cast)
-    if (accept_sock == invalid_socket_id) {
+    if (accept_sock == io::invalid_socket_id) {
       const auto err = errno;
       if (err == EAGAIN || err == EWOULDBLOCK) {
         return {.connection = invalid_connection, .type = listen_result_type::wait_for_connections};
@@ -292,7 +292,7 @@ listener::connection_result listener::process_loop(std::span<char>* host_name_bu
 
     // set non blocking mode in case of error just silently close the socket
     if (!set_non_blocking_mode(accept_sock, nullptr)) {
-      close_socket(accept_sock);
+      io::close_socket(accept_sock);
       continue;
     }
 
@@ -344,7 +344,7 @@ std::pair<std::string, uint16_t> listener::get_address() {
 
 listener::~listener() {
   if (_opened_connection != invalid_connection) {
-    close_socket(_opened_connection.get_platform_id());
+    io::close_socket(_opened_connection.get_platform_id());
   }
 }
 

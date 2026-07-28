@@ -11,11 +11,11 @@ void reactor::process_loop(std::chrono::nanoseconds max_wait) {
 }
 
 size_t reactor::add_connection(connection_id conn) {
-  return _reactor.add_fd(conn.get_platform_id());
+  return _reactor.add_sock(conn.get_platform_id());
 }
 
 void reactor::close_connection(connection_id conn, size_t index) {
-  _reactor.remove_fd(conn.get_platform_id(), index);
+  _reactor.remove_sock(conn.get_platform_id(), index);
 }
 
 void reactor::continue_after_receive_data(connection_id conn, size_t index, continue_callback_t&& callback) {

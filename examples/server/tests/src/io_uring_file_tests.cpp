@@ -5,7 +5,6 @@
 #include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/task.h>
-#include <fcntl.h>
 #include <gtest/gtest.h>
 #include <server/io/io_uring_reactor.h>
 
@@ -52,7 +51,7 @@ TEST(io_uring_file_tests, open_and_close) {
   auto& reactor = *reactor_result;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = co_await server::io::io_uring_file::open_coro(reactor, path, O_RDONLY);
+    auto result = co_await server::io::io_uring_file::open_coro(reactor, path, server::io::file_open_mode::read);
     if (!result) {
       co_return -1;
     }
@@ -84,7 +83,7 @@ TEST(io_uring_file_tests, read_file_content) {
   auto& reactor = *reactor_result;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = co_await server::io::io_uring_file::open_coro(reactor, path, O_RDONLY);
+    auto result = co_await server::io::io_uring_file::open_coro(reactor, path, server::io::file_open_mode::read);
     if (!result) {
       co_return -1;
     }
@@ -122,7 +121,7 @@ TEST(io_uring_file_tests, write_to_file) {
   auto& reactor = *reactor_result;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = co_await server::io::io_uring_file::open_coro(reactor, path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    auto result = co_await server::io::io_uring_file::open_coro(reactor, path, server::io::file_open_mode::write | server::io::file_open_mode::create | server::io::file_open_mode::trunc);
     if (!result) {
       co_return -1;
     }
@@ -170,7 +169,7 @@ TEST(io_uring_file_tests, get_file_size) {
   auto& reactor = *reactor_result;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = co_await server::io::io_uring_file::open_coro(reactor, path, O_RDONLY);
+    auto result = co_await server::io::io_uring_file::open_coro(reactor, path, server::io::file_open_mode::read);
     if (!result) {
       co_return -1;
     }
@@ -201,7 +200,7 @@ TEST(io_uring_file_tests, seek_and_read) {
   auto& reactor = *reactor_result;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = co_await server::io::io_uring_file::open_coro(reactor, path, O_RDONLY);
+    auto result = co_await server::io::io_uring_file::open_coro(reactor, path, server::io::file_open_mode::read);
     if (!result) {
       co_return -1;
     }
@@ -242,7 +241,7 @@ TEST(io_uring_file_tests, read_empty_file) {
   auto& reactor = *reactor_result;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = co_await server::io::io_uring_file::open_coro(reactor, path, O_RDONLY);
+    auto result = co_await server::io::io_uring_file::open_coro(reactor, path, server::io::file_open_mode::read);
     if (!result) {
       co_return -1;
     }
@@ -272,7 +271,7 @@ TEST(io_uring_file_tests, read_closed_file) {
   auto& reactor = *reactor_result;
 
   auto test = [&]() -> async_coro::task<int> {
-    auto result = co_await server::io::io_uring_file::open_coro(reactor, path, O_RDONLY);
+    auto result = co_await server::io::io_uring_file::open_coro(reactor, path, server::io::file_open_mode::read);
     if (!result) {
       co_return -1;
     }

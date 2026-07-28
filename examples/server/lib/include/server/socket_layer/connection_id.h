@@ -1,14 +1,15 @@
 #pragma once
 
+#include <server/io/io_config.h>
+
 #include <compare>
 
-#include "socket_config.h"
 
 namespace server::socket_layer {
 
 class connection_id {
  public:
-  explicit constexpr connection_id(socket_type fd_id) noexcept
+  explicit constexpr connection_id(io::socket_type fd_id) noexcept
       : _fid(fd_id) {}
 
   [[nodiscard]] constexpr auto get_platform_id() const noexcept { return _fid; }
@@ -16,9 +17,9 @@ class connection_id {
   constexpr auto operator<=>(const connection_id& other) const noexcept = default;
 
  private:
-  socket_type _fid;
+  io::socket_type _fid;
 };
 
-inline constexpr auto invalid_connection = connection_id{invalid_socket_id};
+inline constexpr auto invalid_connection = connection_id{io::invalid_socket_id};
 
 }  // namespace server::socket_layer

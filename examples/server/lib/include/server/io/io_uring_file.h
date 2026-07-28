@@ -3,7 +3,7 @@
 #if IO_URING_ENABLED
 
 #include <async_coro/task.h>
-#include <fcntl.h>
+#include <server/io/file_open_mode.h>
 #include <server/io/io_uring_reactor.h>
 #include <server/utils/expected.h>
 #include <sys/types.h>
@@ -35,14 +35,14 @@ class io_uring_file {
    *
    * @param reactor The io_uring reactor to use. Must outlive this file.
    * @param path The file path to open.
-   * @param flags Open flags (e.g., O_RDONLY, O_WRONLY, O_RDWR, O_CREAT).
-   * @param mode File permissions (only used when creating new files).
+   * @param mode The open mode flags (e.g., file_open_mode::read, file_open_mode::write | file_open_mode::create).
+   * @param permissions File permissions (only used when creating new files, default 0644).
    * @return An awaitable that resolves to an expected<io_uring_file, std::string>.
    *         On success, contains the opened file. On failure, contains an error message.
    * @note The open operation is submitted to io_uring and completes asynchronously.
    *       The coroutine will be suspended until the open completes.
    */
-  [[nodiscard]] static async_coro::task<expected<io_uring_file, std::string>> open_coro(io_uring_reactor& reactor, std::string path, int flags, int mode = 0644) noexcept;
+  [[nodiscard]] static async_coro::task<expected<io_uring_file, std::string>> open_coro(io_uring_reactor& reactor, std::string path, file_open_mode mode, int permissions = 0644) noexcept;
 
   /**
    * @brief Read data from the file into a buffer.

@@ -1,7 +1,7 @@
 #include "http_test_client.h"
 
+#include <server/io/io_config.h>
 #include <server/socket_layer/connection_id.h>
-#include <server/socket_layer/socket_config.h>
 
 #if WIN_SOCKET
 #include <winsock2.h>
@@ -23,7 +23,7 @@
 
 namespace {
 
-bool set_socket_timeouts(server::socket_layer::socket_type sock, std::chrono::microseconds timeout) {
+bool set_socket_timeouts(server::io::socket_type sock, std::chrono::microseconds timeout) {
   if (timeout.count() == 0) {
     return true;
   }
@@ -56,12 +56,12 @@ http_test_client::http_test_client(std::string host, uint16_t port, std::chrono:
   sa.sin_family = AF_INET;
   sa.sin_port = htons(port);
   if (::inet_pton(AF_INET, _host.c_str(), &sa.sin_addr) != 1) {
-    server::socket_layer::close_socket(sock);
+    server::io::close_socket(sock);
     return;
   }
 
   if (::connect(sock, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) != 0) {
-    server::socket_layer::close_socket(sock);
+    server::io::close_socket(sock);
     return;
   }
 
@@ -72,7 +72,7 @@ http_test_client::http_test_client(std::string host, uint16_t port, std::chrono:
 }
 
 http_test_client::~http_test_client() noexcept {
-  server::socket_layer::close_socket(_connection.get_platform_id());
+  server::io::close_socket(_connection.get_platform_id());
 }
 
 http_test_client::http_test_client(http_test_client&& other) noexcept
