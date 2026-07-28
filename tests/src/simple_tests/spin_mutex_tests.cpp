@@ -99,6 +99,7 @@ TEST_P(spin_mutex_mt, perf_simple_lock) {
 
   std::cout << "mutex_t: " << mutex_t.count() << " spin_t: " << spin_t.count() << "\n";
   std::cout << "total_mutex_locks: " << total_mutex_locks << " total_spin_locks: " << total_spin_locks << "\n";
+  std::cout << "num_workers: " << (num_workers + 1) << "\n";
   std::cout << "throughput_mutex: " << (total_mutex_locks / mutex_sec) << " throughput_spin: " << (total_spin_locks / spin_sec) << "\n";
 }
 
@@ -195,6 +196,7 @@ TEST_P(spin_mutex_mt, perf_try_lock) {
 
   std::cout << "mutex_t: " << mutex_t.count() << " spin_t: " << spin_t.count() << "\n";
   std::cout << "total_mutex_locks: " << total_mutex_locks << " total_spin_locks: " << total_spin_locks << "\n";
+  std::cout << "num_workers: " << (num_workers + 1) << "\n";
   std::cout << "throughput_mutex: " << (total_mutex_locks / mutex_sec) << " throughput_spin: " << (total_spin_locks / spin_sec) << "\n";
 }
 

@@ -100,6 +100,7 @@ TEST_P(light_mutex_mt, perf_simple_lock) {
 
   std::cout << "mutex_t: " << mutex_t.count() << " light_t: " << light_t.count() << "\n";
   std::cout << "total_mutex_locks: " << total_mutex_locks << " total_light_locks: " << total_light_locks << "\n";
+  std::cout << "num_workers: " << (num_workers + 1) << "\n";
   std::cout << "throughput_mutex: " << (total_mutex_locks / mutex_sec) << " throughput_light: " << (total_light_locks / light_sec) << "\n";
 }
 
@@ -196,6 +197,7 @@ TEST_P(light_mutex_mt, perf_try_lock) {
 
   std::cout << "mutex_t: " << mutex_t.count() << " light_t: " << light_t.count() << "\n";
   std::cout << "total_mutex_locks: " << total_mutex_locks << " total_light_locks: " << total_light_locks << "\n";
+  std::cout << "num_workers: " << (num_workers + 1) << "\n";
   std::cout << "throughput_mutex: " << (total_mutex_locks / mutex_sec) << " throughput_light: " << (total_light_locks / light_sec) << "\n";
 }
 
