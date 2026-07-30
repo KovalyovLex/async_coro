@@ -4,12 +4,14 @@
 #include <server/http1/http_status_code.h>
 #include <server/http1/request.h>
 #include <server/http1/response.h>
+#include <server/io/io_config.h>
 
 #include <array>
 #include <atomic>
 #include <charconv>
 #include <chrono>
 #include <cstring>
+#include <semaphore>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -18,7 +20,6 @@
 #if WIN_SOCKET
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#pragma comment(lib, "ws2_32.lib")
 #else
 #include <arpa/inet.h>
 #include <fcntl.h>
