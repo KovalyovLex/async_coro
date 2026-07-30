@@ -44,6 +44,15 @@ class io_uring_file {
    */
   [[nodiscard]] static async_coro::task<expected<io_uring_file, std::string>> open_coro(io_uring_reactor& reactor, std::string path, file_open_mode mode, int permissions = 0644) noexcept;
 
+  // Non-copyable to prevent multiple objects from closing the same file descriptor.
+  io_uring_file(const io_uring_file&) = delete;
+  io_uring_file& operator=(const io_uring_file&) = delete;
+
+  // Movable - ownership of the file descriptor transfers; reactor reference is preserved.
+  ~io_uring_file();
+  io_uring_file(io_uring_file&& other) noexcept;
+  io_uring_file& operator=(io_uring_file&& other) noexcept;
+
   /**
    * @brief Read data from the file into a buffer.
    *
@@ -137,8 +146,16 @@ class io_uring_file {
    */
   [[nodiscard]] static bool would_block(int err) noexcept;
 
+  /**
+   * @brief Synchronously close the file by submitting a close operation with empty callback.
+   *
+   * Submits the close to io_uring and processes the completion queue to wait for completion.
+   * This is used by the destructor and move assignment operator.
+   */
+  void close_sync() noexcept;
+
  private:
-  explicit io_uring_file(io_uring_reactor& reactor, int fd) noexcept;
+  explicit io_uring_file(io_uring_reactor& reactor, int file_descriptor) noexcept;
 
   io_uring_reactor& _reactor;
   int _fd = -1;

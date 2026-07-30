@@ -51,8 +51,7 @@ TEST(concurrent_io, concurrent_with_io_uring) {
       if (!result) {
         co_return -1;
       }
-      // NOLINTNEXTLINE(*move): io_uring_file is not movable, copy is intended.
-      iuring_files.push_back(*result);
+      iuring_files.push_back(std::move(*result));
     }
 
     int successes = 0;

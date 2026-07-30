@@ -1,11 +1,9 @@
-# Async Cororo Repository – Copilot Instructions
+# Async Coro Repository
 
 These notes are for an AI coding agent working on the **async_coro** project.  They collect the
 important domain knowledge, conventions and workflows that let you be productive immediately.
 
----
-
-## 1. Big‑picture architecture
+## Big‑picture architecture
 
 * The project is a **small C++20 library** that implements an asynchronous execution system
   around C++20 coroutines.  The public API lives under `async_coro/include/async_coro` and the
@@ -18,34 +16,31 @@ important domain knowledge, conventions and workflows that let you be productive
 * Tests live under `tests/` with a `common` directory plus `simple_tests` and
   `long_runnung_tests`.  Android variants are built when the `ANDROID` CMake variable is set.
 * Examples are under `examples/` and are enabled by the `ASYNC_CORO_EXAMPLES_ENABLED` option.
+* Examples have their own tests\static libraries and can be a big subproject
 
 When you modify or add new functionality, look for existing files with the same
 responsibility (`scheduler.cpp`, `execution_system.cpp`, etc.) and follow the model there.
 
-## 2. Build and developer workflows
+## Build and developer workflows
 
-1. **Configuration** – always use CMake (3.31+).  Most developers use the
-   [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools)
-   extension; manual `cmake` commands are discouraged (CI also just runs CMake directly).
+1. **Configuration** – always use CMake (3.31+).  Prefer to use tools for build project and direct cmake command in terminal if you was asked for.  A Ninja build directory is kept in `build/` by default.
 2. **Options of interest** (pass via `-D` to CMake):
    * `ASYNC_CORO_ASAN_ENABLED` / `ASYNC_CORO_TSAN_ENABLED` – enable sanitizers globally.
    * `ASYNC_CORO_NO_EXCEPTIONS` – builds the library with exceptions disabled.  CI exercises
      both modes.
    * `ASYNC_CORO_TESTS_ENABLED` / `ASYNC_CORO_EXAMPLES_ENABLED` – toggle subdirectories.
    * `ASYNC_CORO_TEST_KEEP_DEBUG_SYMBOLS` – used by long‑running tests for symbol lookup.
-3. **Building** – run `cmake -Bbuild -H.` then `cmake --build build --parallel` (or use the
-   CMake Tools build task).  A Ninja build directory is kept in `build/` by default.
-4. **Testing** – tests compile into `tests_simple` and `tests_long` executables (or a shared
-   library on Android).  They are executed by CTest or the helper script
-   `.github/scripts/run_tests.sh` which exercises repeat loops and signal handling.  Use
-   `RunCtest_CMakeTools` or `cmake --build build --target test` when iterating locally.
-   * `./tests/tests_simple --gtest_repeat=30` is the usual fast sequence.
-   * Long tests have a 120‑second timeout in CTest; `--gtest_brief=1` is used in CI.
-5. **Sanity checks** – CI also runs a lint workflow (`.github/workflows/cpp-linter.yml`) which
+3. **Testing** – tests compile into executables under `build/`.  Always run test binaries
+   directly via terminal (e.g., `./build/tests/tests_simple`) instead of CTest — it is faster
+   and gives cleaner output.  Do not use `ctest`, `RunCtest_CMakeTools`.
+   * `./build/tests/tests_simple --gtest_repeat=30` is the usual fast sequence.
+   * Long tests: `./build/tests/tests_long --gtest_brief=1` (CI uses a 120‑second timeout).
+   * Server example tests: `./build/examples/server/server_example_tests`.
+   * Helper script `.github/scripts/run_tests.sh` exercises repeat loops and signal handling
+     for CI; use it only when that behavior is needed.
+4. **Sanity checks** – CI also runs a lint workflow (`.github/workflows/cpp-linter.yml`) which
    invokes clang‑tidy/format; local development should run the same via the CMake commands or
    your editor integration.
-
----
 
 ## C++ Coding Standards (from project instructions)
 
@@ -55,5 +50,4 @@ Refer to `.claude/cpp_coding_instructions.instructions.md` for full details, but
 - Document public APIs with Doxygen comments (`/** ... */`) including `@param`, `@return`, etc.
 - Follow formatting rules: 2-space indent, braces on same line, `noexcept` where applicable, `[[nodiscard]]` on results, etc.
 - Optimize for performance: minimize allocations, avoid virtual dispatch, use `std::string_view`/`std::span` and branch hints.
-- Avoid manual `cmake` calls; rely on CMake Tools extension and run clang-tidy/clang-format through CMake.
 - Ensure tests accompany new features and run `clang-tidy`/format before PRs.

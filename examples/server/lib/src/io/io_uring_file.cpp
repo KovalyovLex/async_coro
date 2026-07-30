@@ -10,6 +10,7 @@
 
 #include <cerrno>
 #include <cstring>
+#include <utility>
 
 namespace server::io {
 
@@ -21,10 +22,40 @@ bool io_uring_file::would_block(int err) noexcept {
 #endif
 }
 
-io_uring_file::io_uring_file(io_uring_reactor& reactor, int file_descriptor) noexcept  // NOLINT(*-swappable*)
+io_uring_file::io_uring_file(io_uring_reactor& reactor, int file_descriptor) noexcept
     : _reactor(reactor),
       _fd(file_descriptor) {
   // The fd is already opened via io_uring in io_uring_file::open
+}
+
+io_uring_file::~io_uring_file() {
+  close_sync();
+}
+
+io_uring_file::io_uring_file(io_uring_file&& other) noexcept
+    : _reactor(other._reactor),
+      _fd(std::exchange(other._fd, -1)),
+      _seek_cur(std::exchange(other._seek_cur, 0)) {
+}
+
+void io_uring_file::close_sync() noexcept {
+  if (_fd == -1) {
+    return;
+  }
+
+  // Fire-and-forget: submit close with empty callback and don't wait for completion.
+  _reactor.submit_close(std::exchange(_fd, -1), {});
+}
+
+io_uring_file& io_uring_file::operator=(io_uring_file&& other) noexcept {
+  if (this != &other) {
+    // Explicitly destroy current object (closes file descriptor via destructor).
+    this->~io_uring_file();
+
+    // Reconstruct in-place using placement new to rebind the reactor reference.
+    ::new (static_cast<void*>(this)) io_uring_file(std::move(other));
+  }
+  return *this;
 }
 
 async_coro::task<expected<io_uring_file, std::string>> io_uring_file::open_coro(io_uring_reactor& reactor, std::string path, file_open_mode mode, int permissions) noexcept {

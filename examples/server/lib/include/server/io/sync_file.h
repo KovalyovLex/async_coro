@@ -97,6 +97,14 @@ class sync_file {
    */
   [[nodiscard]] file_handle_t get_fd() const noexcept { return _fd; }
 
+  // Non-copyable to prevent multiple objects from closing the same file descriptor.
+  sync_file(const sync_file&) = delete;
+  sync_file& operator=(const sync_file&) = delete;
+
+  // Movable - ownership transfers to the new object.
+  sync_file(sync_file&& other) noexcept = default;
+  sync_file& operator=(sync_file&& other) noexcept = default;
+
   /**
    * @brief Get the file size in bytes.
    *
