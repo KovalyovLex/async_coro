@@ -52,8 +52,10 @@ static server::io::socket_type create_client_socket(const char* host, uint16_t p
     return server::io::invalid_socket_id;
   }
 
+#if !WIN_SOCKET
   // Close the socket automatically when this process exits
   fcntl(sock, F_SETFD, FD_CLOEXEC);
+#endif
 
   sockaddr_in sa{};
   sa.sin_family = AF_INET;
@@ -107,7 +109,7 @@ static bool send_all(server::io::socket_type sock, std::span<const std::byte> da
  *
  * @return Number of bytes read, or -1 on error.
  */
-static ssize_t recv_bytes(server::io::socket_type sock, std::span<std::byte> buf) {
+static int receive_bytes(server::io::socket_type sock, std::span<std::byte> buf) {
   if (buf.empty()) {
     return 0;
   }
@@ -143,7 +145,7 @@ static std::string read_http_response(server::io::socket_type sock) {
     }
 
     auto bytes = std::as_writable_bytes(std::span<char>{buf});
-    auto r = recv_bytes(sock, bytes);
+    auto r = receive_bytes(sock, bytes);
     if (r > 0) {
       empty_read_count = 0;  // Reset on successful read
       out.append(reinterpret_cast<char*>(bytes.data()), static_cast<size_t>(r));

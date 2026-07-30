@@ -51,8 +51,10 @@ static server::io::socket_type create_client_socket(const char* host, uint16_t p
     return server::io::invalid_socket_id;
   }
 
+#if !WIN_SOCKET
   // Close the socket automatically when this process exits
   fcntl(sock, F_SETFD, FD_CLOEXEC);
+#endif
 
   sockaddr_in sa{};
   sa.sin_family = AF_INET;
@@ -127,27 +129,27 @@ static bool send_all(server::io::socket_type sock, const char* data, size_t len)
  *
  * @return Number of bytes received, or -1 on error.
  */
-static ssize_t recv_all(server::io::socket_type sock, char* buf, size_t len) {
+static int receive_all(server::io::socket_type sock, char* buf, size_t len) {
   size_t total = 0;
   while (total < len) {
 #if WIN_SOCKET
     auto n = ::recv(sock, buf + total, static_cast<int>(len - total), 0);
-    if (n <= 0) return static_cast<ssize_t>(total);
+    if (n <= 0) return static_cast<int>(total);
 #else
     auto n = ::recv(sock, buf + total, len - total, 0);
     if (n < 0) {
       if (errno == EINTR) {
         continue;
       }
-      return static_cast<ssize_t>(total);
+      return static_cast<int>(total);
     }
     if (n == 0) {
-      return static_cast<ssize_t>(total);  // peer closed
+      return static_cast<int>(total);  // peer closed
     }
 #endif
     total += static_cast<size_t>(n);
   }
-  return static_cast<ssize_t>(total);
+  return static_cast<int>(total);
 }
 
 /**
@@ -401,7 +403,7 @@ TEST(tcp_server_accept, multiple_connections_round_robin) {
 
     // Read echo response
     std::array<char, 256> reply_buf{};
-    ssize_t n = recv_all(clients[static_cast<size_t>(i)], reply_buf.data(), msg.size());
+    int n = receive_all(clients[static_cast<size_t>(i)], reply_buf.data(), msg.size());
     ASSERT_GT(n, 0) << "Client " << i << " did not receive echo";
 
     std::string reply(reply_buf.data(), static_cast<size_t>(n));
@@ -481,7 +483,7 @@ TEST(tcp_server_accept, concurrent_client_connections) {
 
   client_threads.reserve(num_clients);
   for (int i = 0; i < num_clients; ++i) {
-    client_threads.emplace_back([this_port = port, idx = i, &success_count]() {
+    client_threads.emplace_back(std::thread([this_port = port, idx = i, &success_count]() {
       auto fd = create_client_socket("127.0.0.1", this_port, std::chrono::seconds{5});
       if (fd < 0) {
         return;
@@ -495,7 +497,7 @@ TEST(tcp_server_accept, concurrent_client_connections) {
 
       // Read echo response
       std::array<char, 256> reply_buf{};
-      ssize_t n = recv_all(fd, reply_buf.data(), msg.size());
+      int n = receive_all(fd, reply_buf.data(), msg.size());
       if (n > 0) {
         std::string reply(reply_buf.data(), static_cast<size_t>(n));
         if (reply == msg) {
@@ -504,7 +506,7 @@ TEST(tcp_server_accept, concurrent_client_connections) {
       }
 
       close_client_socket(fd);
-    });
+    }));
   }
 
   // Wait for all client threads to complete.
