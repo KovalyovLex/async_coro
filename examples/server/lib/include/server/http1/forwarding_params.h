@@ -17,13 +17,13 @@ namespace server::http1 {
  */
 struct forwarding_params {
   /// This proxy's IP address or hostname (used in 'by' field)
-  std::string_view by = {};
+  std::string_view by = {};  // NOLINT(*-redundant-*)
 
   /// Protocol used by the client to connect to this proxy (http/https)
   std::string_view proto = "https";
 
   /// Remote client's IP address or hostname (used in 'for' field)
-  std::string_view for_addr = {};
+  std::string_view for_addr = {};  // NOLINT(*-redundant-*)
 
   /**
    * @brief Formats and appends a proxy element to an existing Forwarded header (RFC 7239).

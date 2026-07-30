@@ -12,11 +12,13 @@ important domain knowledge, conventions and workflows that let you be productive
   **`scheduler`** (drives a coroutine to completion) and **`execution_system`** (thread‑pool style
   queues, queue marks, masks, `executor_data` to identify the calling thread).  There is also a
   lightweight `atomic_queue` and various wait/notify utilities.
+* Library contains some generic useful classes from future standards under `async_coro/utils`
+folder (function_view, unique_function, passkey, etc)
 * The library is not header‑only; it builds as a `async_coro` static/shared target in CMake.
 * Tests live under `tests/` with a `common` directory plus `simple_tests` and
-  `long_runnung_tests`.  Android variants are built when the `ANDROID` CMake variable is set.
+  `long_runnung_tests`. 
 * Examples are under `examples/` and are enabled by the `ASYNC_CORO_EXAMPLES_ENABLED` option.
-* Examples have their own tests\static libraries and can be a big subproject
+* Examples have their own tests\static libraries and can be a big subproject.
 
 When you modify or add new functionality, look for existing files with the same
 responsibility (`scheduler.cpp`, `execution_system.cpp`, etc.) and follow the model there.
@@ -30,14 +32,14 @@ responsibility (`scheduler.cpp`, `execution_system.cpp`, etc.) and follow the mo
      both modes.
    * `ASYNC_CORO_TESTS_ENABLED` / `ASYNC_CORO_EXAMPLES_ENABLED` – toggle subdirectories.
    * `ASYNC_CORO_TEST_KEEP_DEBUG_SYMBOLS` – used by long‑running tests for symbol lookup.
-3. **Testing** – tests compile into executables under `build/`.  Always run test binaries
-   directly via terminal (e.g., `./build/tests/tests_simple`) instead of CTest — it is faster
-   and gives cleaner output.  Do not use `ctest`, `RunCtest_CMakeTools`.
+3. **Testing & verification** – tests compile into executables under `build/`.  Always run test binaries
+   directly via terminal (e.g., `./build/tests/tests_simple`). Never use `ctest`, `RunCtest_CMakeTools`.
    * `./build/tests/tests_simple --gtest_repeat=30` is the usual fast sequence.
    * Long tests: `./build/tests/tests_long --gtest_brief=1` (CI uses a 120‑second timeout).
    * Server example tests: `./build/examples/server/server_example_tests`.
    * Helper script `.github/scripts/run_tests.sh` exercises repeat loops and signal handling
      for CI; use it only when that behavior is needed.
+   * **After every build or test execution, you MUST read and analyze the full terminal output** before claiming success. Never assume a build succeeded — always check for error messages, exit codes, or warnings. If the user says "build still failed", immediately re-read the build output and identify the actual errors. This is a critical rule: failing to verify results has caused repeated wasted turns in this project.
 4. **Sanity checks** – CI also runs a lint workflow (`.github/workflows/cpp-linter.yml`) which
    invokes clang‑tidy/format; local development should run the same via the CMake commands or
    your editor integration.
@@ -50,4 +52,8 @@ Refer to `.claude/cpp_coding_instructions.instructions.md` for full details, but
 - Document public APIs with Doxygen comments (`/** ... */`) including `@param`, `@return`, etc.
 - Follow formatting rules: 2-space indent, braces on same line, `noexcept` where applicable, `[[nodiscard]]` on results, etc.
 - Optimize for performance: minimize allocations, avoid virtual dispatch, use `std::string_view`/`std::span` and branch hints.
+  **Callable type selection** — prefer this hierarchy:
+  1. `async_coro::function_view` (non-owning, zero allocation) — default when callable lifetime is guaranteed to outlive its use; always verify lifetime safety.
+  2. `async_coro::unique_function` (owning, move-only) — preferred for ownership transfer; move-only analogue of `std::function`.
+  3. `std::function` (owning) — use only when the callable must be copied by design or an external API requires it. Avoid in hot paths.
 - Ensure tests accompany new features and run `clang-tidy`/format before PRs.

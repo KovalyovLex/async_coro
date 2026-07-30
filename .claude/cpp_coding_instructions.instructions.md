@@ -23,7 +23,7 @@ This document describes the conventions and expectations for all C++ source file
 - A `.clang-tidy` file already lives at the project root with a strict configuration.  All new code must compile cleanly with the same settings.  Run clang‑tidy via the CMake integration or your editor (see below).
 - Use **clang-format** (the project provides a `.clang-format` file) before committing. Many editors/IDE plugins will format on save.
 - **Do not invoke `cmake` manually in scripts or CI**.  Instead, rely on the [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools) extension or equivalent integrations.  Those tools automatically configure, build, and run checks using the workspace's CMake configuration and respect generator choices.
-- Tests are managed with CTest; use the CMake extension's test runner or `RunCtest_CMakeTools` to execute them.
+- **Run tests directly from the terminal** — execute test binaries with their full path (e.g., `./build/tests/tests_simple`). Do not use `ctest` or `RunCtest_CMakeTools`; they are significantly slower and produce less readable output.
 
 > ⚠️ The absence of manual cmake calls helps keep local builds aligned with CI and avoids environment drift.
 
@@ -84,7 +84,10 @@ Given the library's goals, the following guidelines apply:
 
 1. **Minimize allocations**: prefer `std::array`, `std::vector::reserve`, or stack buffers (e.g. `std::array<std::byte, 4*1024> buffer;`).
 2. **Avoid unnecessary copies**: pass by `const&` or `&&` when appropriate, use `std::string_view`/`std::span` for read‑only views.
-3. **No hidden virtual calls**: polymorphism is usually handled via templates or small `std::function`‑like wrappers (`unique_function`). Avoid use of `std::function` in code (allowed only in tests).
+3. **Callable type selection** — prefer this hierarchy:
+  1. `async_coro::function_view` (non-owning, zero allocation) — default when callable lifetime is guaranteed to outlive its use; always verify lifetime safety.
+  2. `async_coro::unique_function` (move-only, no heap allocation) — preferred for ownership transfer; move-only analogue of `std::function` with zero overhead.
+  3. `std::function` (owning, heap-allocating) — use only when the callable must be copied by design or an external API requires it. Avoid in hot paths.
 4. **Conditional compilation**: use `[[likely]]`, `[[unlikely]]` only if you 100% sure (for example error handling) and branch hints to help the optimizer.
 5. **Exceptions**: code is written to compile with exceptions disabled (see `ASYNC_CORO_WITH_EXCEPTIONS`); avoid throwing any exceptions and use `expected`/`std::optional` models.
 6. **Thread safety**: preference for custom `mutex` wrappers and annotations (`CORO_THREAD_GUARDED_BY`) to keep static analysis happy.
