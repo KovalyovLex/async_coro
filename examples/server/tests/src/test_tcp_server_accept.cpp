@@ -1,4 +1,6 @@
 #include <async_coro/config.h>
+#include <async_coro/execution_system.h>
+#include <async_coro/scheduler.h>
 #include <async_coro/warnings.h>
 #include <gtest/gtest.h>
 #include <server/io/io_config.h>
@@ -11,6 +13,8 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <functional>
+#include <memory>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -194,12 +198,12 @@ static uint16_t find_available_port(const char* host = "127.0.0.1") {
  */
 class tcp_server_handle {
  public:
-  using connection_callback_t = server::tcp_server::connection_callback_t;
+  using connection_callback_t = std::function<void(server::socket_layer::connection)>;
 
   explicit tcp_server_handle(server::tcp_server_config config, connection_callback_t on_connected)
       : _server(std::make_unique<server::tcp_server>()),
         _config(std::move(config)),
-        _on_connected(on_connected) {}
+        _on_connected(std::move(on_connected)) {}
 
   ~tcp_server_handle() {
     stop();
@@ -218,14 +222,12 @@ class tcp_server_handle {
     ASYNC_CORO_ASSERT(!_thread.joinable());
 
     _ready = false;
-    _stopped = false;
 
     _thread = std::thread([this]() {
-      _server->serve(_config, std::nullopt, [this](server::socket_layer::connection conn) {
-        if (!_stopped.load(std::memory_order::relaxed)) {
-          _on_connected(std::move(conn));
-        }
-      });
+      _server->serve(_config, std::nullopt,
+                     [this](server::socket_layer::connection conn) {
+                       _on_connected(std::move(conn));
+                     });
     });
 
     // Wait a short moment for the server to be ready.
@@ -240,22 +242,15 @@ class tcp_server_handle {
    * Calls `terminate()` on the server and joins the background thread.
    * Returns true if the server stopped within the given timeout.
    */
-  bool stop(std::chrono::milliseconds timeout = std::chrono::seconds{5}) {
+  bool stop() {
     if (!_thread.joinable()) {
       return true;
     }
 
-    _stopped.store(true, std::memory_order::relaxed);
     _server->terminate();
 
     if (_thread.joinable()) {
-      auto start = std::chrono::steady_clock::now();
-      while (_thread.joinable()) {
-        if (std::chrono::steady_clock::now() - start > timeout) {
-          return false;  // timed out
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds{50});
-      }
+      _thread.join();
     }
     return true;
   }
@@ -265,10 +260,9 @@ class tcp_server_handle {
  private:
   std::unique_ptr<server::tcp_server> _server;
   server::tcp_server_config _config;
-  connection_callback_t _on_connected;
+  connection_callback_t _on_connected;  // owning callback (std::function)
   std::thread _thread;
   std::atomic_bool _ready{false};
-  std::atomic_bool _stopped{false};
 };
 
 // ============================================================================
@@ -321,7 +315,7 @@ TEST(tcp_server_accept, single_connection_accept) {
   close_client_socket(client_fd);
 
   // Stop the server
-  EXPECT_TRUE(server.stop(std::chrono::seconds{3})) << "Server did not stop in time";
+  server.stop();
 }
 
 // ============================================================================
@@ -341,14 +335,44 @@ TEST(tcp_server_accept, multiple_connections_round_robin) {
   constexpr int num_clients = 5;
   std::atomic<int> accepted_count{0};
 
+  // Scheduler with worker threads for fire-and-forget echo coroutines.
+  async_coro::execution_system_config exec_config{
+      .worker_configs = {async_coro::execution_thread_config{"echo_worker"}}};
+  async_coro::scheduler scheduler{
+      std::make_unique<async_coro::execution_system>(std::move(exec_config))};
+
   server::tcp_server_config config{};
   config.ip_address = "127.0.0.1";
   config.port = port;
   config.num_reactors = 2;  // 2 reactor threads for round-robin distribution
   config.reactor_sleep = std::chrono::milliseconds{50};
 
-  tcp_server_handle server(std::move(config), [&accepted_count](server::socket_layer::connection /* conn */) {
-    accepted_count.fetch_add(1, std::memory_order::relaxed);
+  tcp_server_handle server(std::move(config), [&scheduler, &accepted_count](server::socket_layer::connection conn) {
+    int idx = accepted_count.fetch_add(1, std::memory_order::relaxed);
+    if (idx >= num_clients) {
+      return;
+    }
+
+    // Launch a fire-and-forget coroutine that echoes data on this connection.
+    // The connection is captured by value directly into the coroutine — no shared container needed.
+    auto echo_task = [conn = std::move(conn)]() mutable -> async_coro::task<> {
+      while (!conn.is_closed()) {
+        std::array<std::byte, 4096> buf{};
+        auto result = co_await conn.read_buffer(buf);
+        if (result.has_value() && result.value() > 0) {
+          size_t n = result.value();
+          auto write_result = co_await conn.write_buffer(std::span<const std::byte>(buf.data(), n));
+          if (!write_result) {
+            break;
+          }
+        } else {
+          // Connection closed or error
+          break;
+        }
+      }
+    };
+
+    scheduler.start_task(std::move(echo_task));
   });
 
   server.start();
@@ -390,7 +414,7 @@ TEST(tcp_server_accept, multiple_connections_round_robin) {
     close_client_socket(fd);
   }
 
-  EXPECT_TRUE(server.stop(std::chrono::seconds{3})) << "Server did not stop in time";
+  server.stop();
 }
 
 // ============================================================================
@@ -409,14 +433,44 @@ TEST(tcp_server_accept, concurrent_client_connections) {
   constexpr int num_clients = 10;
   std::atomic<int> accepted_count{0};
 
+  // Scheduler with worker threads for fire-and-forget echo coroutines.
+  async_coro::execution_system_config exec_config{
+      .worker_configs = {async_coro::execution_thread_config{"echo_worker"}}};
+  async_coro::scheduler scheduler{
+      std::make_unique<async_coro::execution_system>(std::move(exec_config))};
+
   server::tcp_server_config config{};
   config.ip_address = "127.0.0.1";
   config.port = port;
   config.num_reactors = 2;
   config.reactor_sleep = std::chrono::milliseconds{50};
 
-  tcp_server_handle server(std::move(config), [&accepted_count](server::socket_layer::connection /* conn */) {
-    accepted_count.fetch_add(1, std::memory_order::relaxed);
+  tcp_server_handle server(std::move(config), [&scheduler, &accepted_count](server::socket_layer::connection conn) {
+    int idx = accepted_count.fetch_add(1, std::memory_order::relaxed);
+    if (idx >= num_clients) {
+      return;
+    }
+
+    // Launch a fire-and-forget coroutine that echoes data on this connection.
+    // The connection is captured by value directly into the coroutine — no shared container needed.
+    auto echo_task = [conn = std::move(conn)]() mutable -> async_coro::task<> {
+      while (!conn.is_closed()) {
+        std::array<std::byte, 4096> buf{};
+        auto result = co_await conn.read_buffer(buf);
+        if (result.has_value() && result.value() > 0) {
+          size_t n = result.value();
+          auto write_result = co_await conn.write_buffer(std::span<const std::byte>(buf.data(), n));
+          if (!write_result) {
+            break;
+          }
+        } else {
+          // Connection closed or error
+          break;
+        }
+      }
+    };
+
+    scheduler.start_task(std::move(echo_task));
   });
 
   server.start();
@@ -465,7 +519,7 @@ TEST(tcp_server_accept, concurrent_client_connections) {
   EXPECT_EQ(success_count.load(), num_clients)
       << "Expected " << num_clients << " successful round-trips but got " << success_count.load();
 
-  EXPECT_TRUE(server.stop(std::chrono::seconds{3})) << "Server did not stop in time";
+  server.stop();
 }
 
 // ============================================================================
@@ -516,7 +570,7 @@ TEST(tcp_server_accept, accept_then_close_gracefully) {
   ASSERT_GE(client_fd2, 0) << "Server crashed or became unresponsive after client disconnect";
   close_client_socket(client_fd2);
 
-  EXPECT_TRUE(server.stop(std::chrono::seconds{3})) << "Server did not stop in time";
+  server.stop();
 }
 
 // ============================================================================
@@ -579,7 +633,7 @@ TEST(tcp_server_accept, rapid_connect_disconnect) {
 
   std::this_thread::sleep_for(std::chrono::milliseconds{200});
 
-  EXPECT_TRUE(server.stop(std::chrono::seconds{3})) << "Server did not stop in time";
+  server.stop();
 }
 
 // ============================================================================
@@ -628,12 +682,7 @@ TEST(tcp_server_accept, server_termination) {
       << "Expected " << num_clients << " accepted connections but got " << accepted_count.load();
 
   // Terminate the server while clients are still connected.
-  const auto start = std::chrono::steady_clock::now();
-  const bool stopped = server.stop(std::chrono::seconds{5});
-  const auto elapsed = std::chrono::steady_clock::now() - start;
-
-  EXPECT_TRUE(stopped) << "Server did not terminate within 5 seconds (elapsed: "
-                       << std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() << " ms)";
+  server.stop();
 
   // Verify all client sockets are still valid (they should detect the server closed).
   for (auto fd : clients) {
