@@ -1,5 +1,10 @@
 #pragma once
 
+#if !WIN_SOCKET
+#include <unistd.h>
+#endif
+
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <random>
@@ -53,9 +58,9 @@ inline std::string create_temp_binary_file(size_t size_bytes = 65536) {
   }
 
   std::vector<uint8_t> chunk(4096);
+  std::mt19937 local_gen(std::random_device{}());
   for (size_t written = 0; written < size_bytes;) {
-    std::mt19937 local_gen(std::random_device{}());
-    std::generate(chunk.begin(), chunk.end(), [&local_gen]() {
+    std::ranges::generate(chunk, [&local_gen]() {
       return static_cast<uint8_t>(local_gen() % 256);
     });
     size_t to_write = std::min(chunk.size(), size_bytes - written);
