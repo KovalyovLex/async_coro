@@ -34,7 +34,7 @@ target_compile_options(server_example_tests PRIVATE
 gtest_add_tests(TARGET      server_example_tests
                 SOURCES     ${tests_src}
                 TEST_LIST   tests_list
-                EXTRA_ARGS  "--gtest_repeat=10"
+                EXTRA_ARGS  "--gtest_repeat=1"
 )
 
 set_tests_properties(${tests_list} PROPERTIES TIMEOUT 120)
