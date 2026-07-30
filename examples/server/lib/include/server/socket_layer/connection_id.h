@@ -4,7 +4,6 @@
 
 #include <compare>
 
-
 namespace server::socket_layer {
 
 class connection_id {

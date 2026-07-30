@@ -1,6 +1,8 @@
 #pragma once
 
-#if !WIN_SOCKET
+#if defined(_WIN32) || defined(_WIN64)
+#include <io.h>
+#else
 #include <unistd.h>
 #endif
 
@@ -14,28 +16,43 @@
 namespace test_utils {
 
 /**
- * @brief Create a temporary file with given content.
+ * @brief Generate a unique temporary file path in the system temp directory.
  *
- * Generates a unique filename in the system temp directory using getpid()
- * and a random number to avoid collisions between concurrent test runs.
+ * Uses the process ID and a random number to avoid collisions between
+ * concurrent test runs.
+ *
+ * @return  Absolute path string for a unique temp file.
+ */
+inline std::string generate_temp_path() {
+  static thread_local std::mt19937 gen(std::random_device{}());
+  static thread_local std::uniform_int_distribution<int> dist(0, 999999);
+
+#if defined(_WIN32) || defined(_WIN64)
+  const auto pid = _getpid();
+#else
+  const auto pid = getpid();
+#endif
+
+  return std::filesystem::temp_directory_path().string() +
+         "/async_coro_test_" + std::to_string(pid) +
+         "_" + std::to_string(dist(gen));
+}
+
+/**
+ * @brief Create a temporary file with given content.
  *
  * @param content  Data to write into the file.
  * @return         Absolute path to the created temp file.
  */
 inline std::string create_temp_file(std::string_view content) {
-  static thread_local std::mt19937 gen(std::random_device{}());
-  static thread_local std::uniform_int_distribution<int> dist(0, 999999);
-
-  auto path = std::filesystem::temp_directory_path() /
-              ("async_coro_test_" + std::to_string(getpid()) + "_" +
-               std::to_string(dist(gen)));
+  auto path = generate_temp_path();
 
   std::ofstream ofs(path, std::ios::binary);
   if (!content.empty()) {
     ofs.write(content.data(), static_cast<std::streamsize>(content.size()));
   }
   ofs.close();
-  return path.string();
+  return path;
 }
 
 /**
@@ -45,12 +62,7 @@ inline std::string create_temp_file(std::string_view content) {
  * @return            Absolute path to the created temp file.
  */
 inline std::string create_temp_binary_file(size_t size_bytes = 65536) {
-  static thread_local std::mt19937 gen(std::random_device{}());
-  static thread_local std::uniform_int_distribution<int> dist(0, 999999);
-
-  auto path = std::filesystem::temp_directory_path() /
-              ("async_coro_test_" + std::to_string(getpid()) + "_" +
-               std::to_string(dist(gen)));
+  auto path = generate_temp_path();
 
   std::ofstream ofs(path, std::ios::binary | std::ios::trunc);
   if (!ofs) {
@@ -69,7 +81,7 @@ inline std::string create_temp_binary_file(size_t size_bytes = 65536) {
     written += to_write;
   }
   ofs.close();
-  return path.string();
+  return path;
 }
 
 /**
