@@ -16,6 +16,9 @@
 
 namespace server::io {
 
+/// Default file permissions for new files: owner read/write, group/other read (rw-r--r--).
+inline constexpr int default_file_permissions = 0644;  // NOLINT(readability-magic-numbers)
+
 /**
  * @brief Async file I/O operations using io_uring for low-latency I/O.
  *
@@ -42,7 +45,7 @@ class io_uring_file {
    * @note The open operation is submitted to io_uring and completes asynchronously.
    *       The coroutine will be suspended until the open completes.
    */
-  [[nodiscard]] static async_coro::task<expected<io_uring_file, std::string>> open_coro(io_uring_reactor& reactor, std::string path, file_open_mode mode, int permissions = 0644) noexcept;
+  [[nodiscard]] static async_coro::task<expected<io_uring_file, std::string>> open_coro(io_uring_reactor& reactor, std::string path, file_open_mode mode, int permissions = default_file_permissions) noexcept;
 
   // Non-copyable to prevent multiple objects from closing the same file descriptor.
   io_uring_file(const io_uring_file&) = delete;
@@ -157,7 +160,7 @@ class io_uring_file {
  private:
   explicit io_uring_file(io_uring_reactor& reactor, int file_descriptor) noexcept;
 
-  io_uring_reactor& _reactor;
+  io_uring_reactor& _reactor;  // NOLINT(cppcoreguidelines-avoid-const-or-ref-data-members)
   int _fd = -1;
   size_t _seek_cur = 0;
 };

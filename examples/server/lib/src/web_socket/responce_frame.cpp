@@ -49,7 +49,7 @@ void response_frame::fill_frame_size(std::span<std::byte>& buffer_after_frame, f
   }
 }
 
-async_coro::task<void> response_frame::send_error_and_close_connection(core::i_write_connection& conn, const ws_error& error) {
+async_coro::task<void> response_frame::send_error_and_close_connection(core::i_write_connection& conn, const ws_error& error) {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): conn and error lifetimes guaranteed by caller
   using max_data_buf = std::array<std::byte, sizeof(frame_base) + sizeof(uint16_t) + ws_error::k_max_message_length>;
 
   union frame_union {  // NOLINT(*init*)

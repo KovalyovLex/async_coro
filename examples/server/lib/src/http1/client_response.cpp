@@ -279,7 +279,7 @@ struct client_response::parser {
               }
               if (*content_length == 0) {
                 state = parse_state::finished;
-                resp._bytes.erase(resp._bytes.begin() + line_start, resp._bytes.end());
+                resp._bytes.erase(resp._bytes.begin() + static_cast<std::vector<std::byte>::difference_type>(line_start), resp._bytes.end());  // NOLINT(cppcoreguidelines-narrowing-conversions): line_start is size_t bounded by content-length
                 break;
               }
               content_length = std::nullopt;

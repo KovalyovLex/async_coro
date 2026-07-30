@@ -43,6 +43,15 @@ responsibility (`scheduler.cpp`, `execution_system.cpp`, etc.) and follow the mo
 4. **Sanity checks** – CI also runs a lint workflow (`.github/workflows/cpp-linter.yml`) which
    invokes clang‑tidy/format; local development should run the same via the CMake commands or
    your editor integration.
+5. **Clang-tidy**. Always use run-clang-tidy*.py script instead of direct clang-tidy. Always specify source directories directly as positional arguments to avoid
+   third-party header noise from `build/`. Never rely on `-p` alone with directory arguments.
+   ```bash
+   # Library only:
+   run-clang-tidy-20.py -p=./build/ -config-file=./.clang-tidy -export-fixes=./clang-tidy-fixes.txt ./async_coro/async_coro
+   
+   # All project sources (library + examples + tests):
+   run-clang-tidy-20.py -p=./build/ -config-file=./.clang-tidy -export-fixes=./clang-tidy-fixes.txt ./async_coro/async_coro ./async_coro/examples ./async_coro/tests
+   ```
 
 ## C++ Coding Standards (from project instructions)
 

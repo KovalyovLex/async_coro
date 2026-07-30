@@ -414,7 +414,7 @@ void request::begin_parse(parser_ptr& parser_p) {
 expected<void, http_error> request::parse_data_part(parser_ptr& parser_p, std::span<const std::byte> bytes) {
   ASYNC_CORO_ASSERT(parser_p != nullptr);
 
-  const char* bytes_data_ptr = reinterpret_cast<const char*>(bytes.data());  // NOLINT(clang-analyzer-cplusplus.InnerPointer, *reinterpret-cast*)
+  auto bytes_data_ptr = reinterpret_cast<const char*>(bytes.data());  // NOLINT(clang-analyzer-cplusplus.InnerPointer, cppcoreguidelines-pro-type-reinterpret-cast)
   std::string_view bytes_str{bytes_data_ptr, bytes.size()};
 
   std::ranges::copy(bytes_str, std::back_inserter(_request_str));

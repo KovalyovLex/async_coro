@@ -20,7 +20,7 @@
 
 namespace server::http1 {
 
-async_coro::task<void> start_session(server::socket_layer::connection conn, const session_config& config) {  // NOLINT(*complexity)
+async_coro::task<void> start_session(server::socket_layer::connection conn, const session_config& config) {  // NOLINT(*complexity): HTTP/1.1 session with keep-alive, compression, and timeout handling
   request req;
   response res{http_version::http_1_1};
   res.set_compression_pool(config.compression);

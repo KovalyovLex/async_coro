@@ -155,7 +155,7 @@ std::string ws_session::get_web_socket_key_result(std::string_view client_key) {
   return key_str;
 }
 
-async_coro::task<void> ws_session::run(const server::http1::request& handshake_request, std::string_view protocol, message_handler_t handler) {  // NOLINT(*complexity)
+async_coro::task<void> ws_session::run(const server::http1::request& handshake_request, std::string_view protocol, message_handler_t handler) {  // NOLINT(*complexity,cppcoreguidelines-avoid-reference-coroutine-parameters): handshake_request lifetime guaranteed by router
   ASYNC_CORO_ASSERT(handler);
 
   if (_conn.is_closed() || !handler) {
@@ -463,8 +463,8 @@ async_coro::task<void> ws_session::continue_fragmented_send(const response_frame
   return send_data_impl(res_frame, data, last_chunk, static_cast<uint8_t>(ws_op_code::continuation));
 }
 
-async_coro::task<void> ws_session::send_data_impl(const response_frame& res_frame, std::span<const std::byte> data, bool last_chunk, uint8_t dec_code) {
-  using data_buf_on_stack = std::array<std::byte, 1024UL * 4U>;  // NOLINT(*magic*)
+async_coro::task<void> ws_session::send_data_impl(const response_frame& res_frame, std::span<const std::byte> data, bool last_chunk, uint8_t dec_code) {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): res_frame lifetime guaranteed by caller through send_data
+  using data_buf_on_stack = std::array<std::byte, 1024UL * 4U>;                                                                                           // NOLINT(*magic*)
 
   // Compress data if permessage-deflate is enabled and this is a data frame
   std::span<const std::byte> payload_to_send = data;

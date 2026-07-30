@@ -12,23 +12,23 @@ namespace server::io {
  * These flags are platform-independent and are converted to POSIX/O_* or
  * Windows CreateFile access/creation flags at the API boundary.
  */
-enum class file_open_mode : uint32_t {
+enum class file_open_mode : uint8_t {
   append = 1U << 0U,
   create = 1U << 1U,
   trunc = 1U << 2U,
 
-  read = 1U << 5U,
-  write = 1U << 6U,
+  read = 1U << 3U,
+  write = 1U << 4U,
 };
 
 // NOLINTBEGIN(*identifier-length)
 
 constexpr file_open_mode operator~(file_open_mode a) noexcept {
-  return file_open_mode(~static_cast<uint32_t>(a));
+  return file_open_mode(~static_cast<uint8_t>(a));
 }
 
 constexpr file_open_mode operator|(file_open_mode a, file_open_mode b) noexcept {
-  return file_open_mode(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+  return file_open_mode(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
 }
 
 constexpr file_open_mode& operator|=(file_open_mode& a, file_open_mode b) noexcept {
@@ -37,7 +37,7 @@ constexpr file_open_mode& operator|=(file_open_mode& a, file_open_mode b) noexce
 }
 
 constexpr file_open_mode operator&(file_open_mode a, file_open_mode b) noexcept {
-  return file_open_mode(static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
+  return file_open_mode(static_cast<uint8_t>(a) & static_cast<uint8_t>(b));
 }
 
 constexpr file_open_mode& operator&=(file_open_mode& a, file_open_mode b) noexcept {
@@ -46,7 +46,7 @@ constexpr file_open_mode& operator&=(file_open_mode& a, file_open_mode b) noexce
 }
 
 constexpr file_open_mode operator^(file_open_mode a, file_open_mode b) noexcept {
-  return file_open_mode(static_cast<uint32_t>(a) ^ static_cast<uint32_t>(b));
+  return file_open_mode(static_cast<uint8_t>(a) ^ static_cast<uint8_t>(b));
 }
 
 constexpr file_open_mode& operator^=(file_open_mode& a, file_open_mode b) noexcept {
@@ -55,41 +55,6 @@ constexpr file_open_mode& operator^=(file_open_mode& a, file_open_mode b) noexce
 }
 
 // NOLINTEND(*identifier-length)
-
-/**
- * @brief Check if a file_open_mode set contains read access.
- */
-[[nodiscard]] constexpr bool has_read(file_open_mode mode) noexcept {
-  return (static_cast<uint32_t>(mode) & static_cast<uint32_t>(file_open_mode::read)) != 0;
-}
-
-/**
- * @brief Check if a file_open_mode set contains write access.
- */
-[[nodiscard]] constexpr bool has_write(file_open_mode mode) noexcept {
-  return (static_cast<uint32_t>(mode) & static_cast<uint32_t>(file_open_mode::write)) != 0;
-}
-
-/**
- * @brief Check if a file_open_mode set contains the create flag.
- */
-[[nodiscard]] constexpr bool has_create(file_open_mode mode) noexcept {
-  return (static_cast<uint32_t>(mode) & static_cast<uint32_t>(file_open_mode::create)) != 0;
-}
-
-/**
- * @brief Check if a file_open_mode set contains the trunc flag.
- */
-[[nodiscard]] constexpr bool has_trunc(file_open_mode mode) noexcept {
-  return (static_cast<uint32_t>(mode) & static_cast<uint32_t>(file_open_mode::trunc)) != 0;
-}
-
-/**
- * @brief Check if a file_open_mode set contains the append flag.
- */
-[[nodiscard]] constexpr bool has_append(file_open_mode mode) noexcept {
-  return (static_cast<uint32_t>(mode) & static_cast<uint32_t>(file_open_mode::append)) != 0;
-}
 
 #if WIN_SOCKET
 

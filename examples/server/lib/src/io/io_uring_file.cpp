@@ -58,7 +58,7 @@ io_uring_file& io_uring_file::operator=(io_uring_file&& other) noexcept {
   return *this;
 }
 
-async_coro::task<expected<io_uring_file, std::string>> io_uring_file::open_coro(io_uring_reactor& reactor, std::string path, file_open_mode mode, int permissions) noexcept {
+async_coro::task<expected<io_uring_file, std::string>> io_uring_file::open_coro(io_uring_reactor& reactor, std::string path, file_open_mode mode, int permissions) noexcept {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): reactor lifetime guaranteed by io_uring_file owner
   int posix_flags = mode_to_posix_flags(mode);
   auto result = co_await async_coro::await_callback_with_result<expected<int, std::string>>([&](auto cont) {
     reactor.submit_open(path.c_str(), posix_flags, permissions, std::move(cont));
@@ -164,7 +164,7 @@ expected<size_t, std::string> io_uring_file::get_size() const {
     return expected<size_t, std::string>{unexpect, "File is closed"};
   }
 
-  struct stat stat_buf;
+  struct stat stat_buf{};
   if (::fstat(_fd, &stat_buf) != 0) {
     return expected<size_t, std::string>{unexpect, std::string(strerror(errno))};
   }
@@ -200,7 +200,7 @@ async_coro::task<expected<std::vector<std::byte>, std::string>> io_uring_file::r
   std::vector<std::byte> buffer;
   buffer.resize(file_size);
 
-  auto result = co_await read(std::span<uint8_t>{reinterpret_cast<uint8_t*>(buffer.data()), file_size});
+  auto result = co_await read(std::span<uint8_t>{reinterpret_cast<uint8_t*>(buffer.data()), file_size});  // NOLINT(*-reinterpret-cast)
   if (!result) {
     co_return expected<std::vector<std::byte>, std::string>{unexpect, std::move(result).error()};
   }

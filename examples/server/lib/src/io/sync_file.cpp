@@ -55,7 +55,8 @@ expected<sync_file, std::string> sync_file::open(const std::string& path, file_o
   return sync_file{handle};
 #else
   int posix_mode = mode_to_posix_flags(mode);
-  file_handle_t file_descriptor = ::open(path.c_str(), posix_mode, static_cast<int>(0644));  // NOLINT(*vararg*)
+  constexpr int default_open_mode = 0644;                                                                 // NOLINT(cppcoreguidelines-avoid-magic-numbers)
+  file_handle_t file_descriptor = ::open(path.c_str(), posix_mode, static_cast<int>(default_open_mode));  // NOLINT(*vararg*)
   if (file_descriptor == invalid_file_handle) {
     return expected<sync_file, std::string>{unexpect, std::string(strerror(errno))};
   }
@@ -64,7 +65,7 @@ expected<sync_file, std::string> sync_file::open(const std::string& path, file_o
 #endif
 }
 
-expected<size_t, std::string> sync_file::read(std::span<uint8_t> buffer) {
+expected<size_t, std::string> sync_file::read(std::span<uint8_t> buffer) const {
   if (_fd == invalid_file_handle) {
     return expected<size_t, std::string>{unexpect, "File is closed"};
   }
@@ -101,7 +102,7 @@ expected<size_t, std::string> sync_file::read(std::span<uint8_t> buffer) {
 #endif
 }
 
-expected<void, std::string> sync_file::write(std::span<const uint8_t> data) {
+expected<void, std::string> sync_file::write(std::span<const uint8_t> data) const {
   if (_fd == invalid_file_handle) {
     return expected<void, std::string>{unexpect, "File is closed"};
   }
@@ -226,7 +227,7 @@ expected<off_t, std::string> sync_file::seek(off_t offset, seek_whence whence) c
   const DWORD error = GetLastError();
   return expected<off_t, std::string>{unexpect, "SetFilePointerEx failed with error code " + std::to_string(error)};
 #else
-  int posix_whence;
+  int posix_whence = SEEK_SET;
   switch (whence) {
     case seek_whence::set:
       posix_whence = SEEK_SET;
@@ -251,7 +252,7 @@ expected<off_t, std::string> sync_file::seek(off_t offset, seek_whence whence) c
 #endif
 }
 
-expected<std::vector<std::byte>, std::string> sync_file::read_all() {
+expected<std::vector<std::byte>, std::string> sync_file::read_all() {  // NOLINT(readability-make-member-function-const): modifies file state by reading data
   if (_fd == invalid_file_handle) {
     return expected<std::vector<std::byte>, std::string>{unexpect, "File is closed"};
   }

@@ -9,7 +9,7 @@
 
 namespace server::web_socket {
 
-async_coro::task<expected<void, std::string>> request_frame::read_payload(core::i_read_connection& conn, std::span<const std::byte> rest_data_in_buffer) {
+async_coro::task<expected<void, std::string>> request_frame::read_payload(core::i_read_connection& conn, std::span<const std::byte> rest_data_in_buffer) {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): conn lifetime guaranteed by caller
   using result_t = expected<void, std::string>;
 
   if (payload_length == 0) {

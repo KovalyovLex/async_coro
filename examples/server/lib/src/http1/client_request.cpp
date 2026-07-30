@@ -103,7 +103,7 @@ void client_request::clear() {
 
 // very similar to response::send with adjusted first line
 // NOLINTBEGIN(*pointer*,*array-index*,*macro*)
-async_coro::task<expected<void, std::string>> client_request::send(server::core::i_write_connection &conn) {  // NOLINT(*complexity*)
+async_coro::task<expected<void, std::string>> client_request::send(server::core::i_write_connection &conn) {  // NOLINT(*complexity*,cppcoreguidelines-avoid-reference-coroutine-parameters): conn lifetime guaranteed by caller
   using res_t = expected<void, std::string>;
   using namespace std::string_view_literals;
 

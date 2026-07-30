@@ -184,7 +184,7 @@ void response::clear() {
 }
 
 // NOLINTBEGIN(*pointer*,*array-index*,*macro*)
-async_coro::task<expected<void, std::string>> response::send(core::i_write_connection &conn) {  // NOLINT(*complexity*)
+async_coro::task<expected<void, std::string>> response::send(core::i_write_connection &conn) {  // NOLINT(*complexity*): HTTP response serialization with compression and chunked encoding
   using res_t = expected<void, std::string>;
   using namespace std::string_view_literals;
 

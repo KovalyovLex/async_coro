@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
       },
       .keep_alive_timeout = std::chrono::minutes(2)};
 
-  const auto send_html = [](const auto& request, auto& resp) -> async_coro::task<> {
+  const auto send_html = [](const auto& request, auto& resp) -> async_coro::task<> {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): resp lifetime guaranteed by router
     std::string_view html_body = R"(<!doctype html>
 <html>
   <body>
@@ -57,18 +57,18 @@ int main(int argc, char** argv) {
     co_return;
   };
 
-  const auto say_hello = [](const auto& request, auto& resp) -> async_coro::task<> {
+  const auto say_hello = [](const auto& request, auto& resp) -> async_coro::task<> {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): resp lifetime guaranteed by router
     resp.set_body(server::static_string{"Hello world"}, server::http1::content_types::plain_text);
 
     co_return;
   };
 
-  const auto web_socket_communication = [](const auto& request, server::socket_layer::connection& connection) -> async_coro::task<> {
+  const auto web_socket_communication = [](const auto& request, server::socket_layer::connection& connection) -> async_coro::task<> {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): connection lifetime guaranteed by router
     using namespace server::web_socket;
 
     ws_session session{std::move(connection)};
 
-    co_await session.run(request, "", [](const request_frame& req_frame, auto& this_session) -> async_coro::task<> {
+    co_await session.run(request, "", [](const request_frame& req_frame, auto& this_session) -> async_coro::task<> {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): this_session lifetime guaranteed by ws_session
       if (req_frame.get_op_code() == ws_op_code::text_frame) {
         response_frame resp{ws_op_code::text_frame};
         std::string answer = "Hello from server!\n";

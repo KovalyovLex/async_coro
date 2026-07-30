@@ -97,9 +97,9 @@ void reactor::process_loop(std::chrono::nanoseconds max_wait) {
       const bool is_read_available = (event_flags & EPOLLIN) == EPOLLIN;
       const bool is_write_available = (event_flags & EPOLLOUT) == EPOLLOUT;
 
-      auto index = reinterpret_cast<uintptr_t>(user_data);
+      auto index = static_cast<size_t>(reinterpret_cast<uintptr_t>(user_data));  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast): converting user-data pointer back to index
 
-      auto& continue_struct = continuation_data[num_continuations];
+      auto& continue_struct = continuation_data[num_continuations];  // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index): dynamic index from event count is bounded by MAXEVENTS
 
       continue_struct.is_error = is_error;
       {
@@ -156,9 +156,9 @@ void reactor::process_loop(std::chrono::nanoseconds max_wait) {
       const bool is_read_available = !is_error;
       const bool is_write_available = !is_error;
 
-      auto index = reinterpret_cast<uintptr_t>(user_data);
+      auto index = static_cast<size_t>(reinterpret_cast<uintptr_t>(user_data));  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast): converting user-data pointer back to index
 
-      auto& continue_struct = continuation_data[num_continuations];
+      auto& continue_struct = continuation_data[num_continuations];  // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index): dynamic index from event count is bounded by MAXEVENTS
 
       continue_struct.is_error = is_error;
       {

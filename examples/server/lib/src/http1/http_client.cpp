@@ -53,7 +53,7 @@ client_request http_client::forward_request(request&& orig, const forwarding_par
   return req;
 }
 
-auto http_client::send_request(client_request& req, server::core::i_write_connection& write, server::core::i_read_connection& read) -> async_coro::task<expected<client_response, std::string>> {
+auto http_client::send_request(client_request& req, server::core::i_write_connection& write, server::core::i_read_connection& read) -> async_coro::task<expected<client_response, std::string>> {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): request lifetime managed by caller through session
   using res_t = expected<client_response, std::string>;
 
   // make sure request has correct version

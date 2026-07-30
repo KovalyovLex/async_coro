@@ -339,29 +339,29 @@ TEST(unique_function, rvalue_forward) {
   cleaner clean{};
 
   {
-    unique_function<void(test_struct&&, int)> f = [](auto&& s, auto i) {
-      EXPECT_NE(&s, nullptr);
-      EXPECT_EQ(i, 7);
+    unique_function<void(test_struct&&, int)> move_fn = [](auto&& test_struct_ref, int count) {
+      EXPECT_NE(&test_struct_ref, nullptr);
+      EXPECT_EQ(count, 7);  // NOLINT(readability-magic-numbers)
     };
 
     EXPECT_EQ(num_copies, 0);
     EXPECT_EQ(num_moves, 0);
 
-    f({}, 7);
+    move_fn({}, 7);  // NOLINT(readability-magic-numbers)
 
     EXPECT_EQ(num_copies, 0);
     EXPECT_EQ(num_moves, 0);
   }
 
   {
-    unique_function<void(test_struct&&)> f = [](auto s) {  // NOLINT(*-value-param*)
-      EXPECT_NE(&s, nullptr);
+    unique_function<void(test_struct&&)> move_only_fn = [](auto struct_value) {  // NOLINT(*-value-param*,readability-identifier-length)
+      EXPECT_NE(&struct_value, nullptr);
     };
 
     EXPECT_EQ(num_copies, 0);
     EXPECT_EQ(num_moves, 0);
 
-    f({});
+    move_only_fn({});
 
     EXPECT_EQ(num_copies, 0);
     EXPECT_EQ(num_moves, 1);
@@ -374,7 +374,7 @@ TEST(unique_function, mutable_f) {
   {
     int num_calls = 0;
 
-    unique_function<void()> f = [called = false, &num_calls]() mutable {
+    unique_function<void()> call_counter = [called = false, &num_calls]() mutable {
       if (!called) {
         called = true;
         num_calls++;
@@ -383,11 +383,11 @@ TEST(unique_function, mutable_f) {
 
     EXPECT_EQ(num_calls, 0);
 
-    f();
+    call_counter();
 
     EXPECT_EQ(num_calls, 1);
 
-    f();
+    call_counter();
 
     EXPECT_EQ(num_calls, 1);
   }
@@ -399,7 +399,7 @@ TEST(unique_function, mutable_noexcept_f) {
   {
     int num_calls = 0;
 
-    unique_function<void() noexcept> f = [called = false, &num_calls]() mutable noexcept {
+    unique_function<void() noexcept> noexcept_call_counter = [called = false, &num_calls]() mutable noexcept {
       if (!called) {
         called = true;
         num_calls++;
@@ -408,11 +408,11 @@ TEST(unique_function, mutable_noexcept_f) {
 
     EXPECT_EQ(num_calls, 0);
 
-    f();
+    noexcept_call_counter();
 
     EXPECT_EQ(num_calls, 1);
 
-    f();
+    noexcept_call_counter();
 
     EXPECT_EQ(num_calls, 1);
   }
@@ -423,11 +423,11 @@ TEST(unique_function, lref_arg) {
 
   static int val = 0;
 
-  unique_function<void(int&)> f = [](auto& i) mutable noexcept {
-    EXPECT_EQ(&i, &val);
+  unique_function<void(int&)> ref_fn = [](auto& int_ref) mutable noexcept {
+    EXPECT_EQ(&int_ref, &val);
   };
 
-  f(val);
+  ref_fn(val);
 }
 
 TEST(unique_function, const_lref_arg) {
@@ -435,11 +435,11 @@ TEST(unique_function, const_lref_arg) {
 
   static int val = 0;
 
-  unique_function<void(const int&)> f = [](auto& i) mutable noexcept {
-    EXPECT_EQ(&i, &val);
+  unique_function<void(const int&)> const_ref_fn = [](auto& int_ref) mutable noexcept {
+    EXPECT_EQ(&int_ref, &val);
   };
 
-  f(val);
+  const_ref_fn(val);
 }
 
 TEST(unique_function, rref_arg) {
@@ -447,11 +447,11 @@ TEST(unique_function, rref_arg) {
 
   static int val = 0;
 
-  unique_function<void(int&&)> f = [](auto&& i) mutable noexcept {
-    EXPECT_EQ(&i, &val);
+  unique_function<void(int&&)> rref_fn = [](auto&& int_rref) mutable noexcept {
+    EXPECT_EQ(&int_rref, &val);
   };
 
-  f(std::move(val));
+  rref_fn(std::move(val));
 }
 
 TEST(unique_function, val_arg) {
@@ -459,11 +459,11 @@ TEST(unique_function, val_arg) {
 
   static int val = 0;
 
-  unique_function<void(int)> f = [](auto&& i) mutable noexcept {
-    EXPECT_NE(&i, &val);
+  unique_function<void(int)> value_fn = [](auto&& int_value) mutable noexcept {
+    EXPECT_NE(&int_value, &val);
   };
 
-  f(val);
+  value_fn(val);
 }
 
 TEST(unique_function, speed_invoke_function) {
@@ -471,27 +471,29 @@ TEST(unique_function, speed_invoke_function) {
 
   static int val = 0;
 
-  unique_function<void(int)> f1 = [](auto&& i) mutable noexcept {
-    EXPECT_NE(&i, &val);
+  constexpr int benchmark_iterations = 100000;  // NOLINT(cppcoreguidelines-avoid-magic-numbers)
+
+  unique_function<void(int)> async_fn = [](auto&& int_ref) mutable noexcept {
+    EXPECT_NE(&int_ref, &val);
   };
 
-  std::function<void(int)> f2 = [](auto&& i) mutable noexcept {
-    EXPECT_NE(&i, &val);
+  std::function<void(int)> std_fn = [](auto&& int_ref) mutable noexcept {
+    EXPECT_NE(&int_ref, &val);
   };
 
-  const auto t1 = std::chrono::steady_clock::now();
-  for (int i = 0; i < 100000; i++) {
-    f1(val);
+  const auto benchmark_start = std::chrono::steady_clock::now();
+  for (int iter = 0; iter < benchmark_iterations; iter++) {
+    async_fn(val);
   }
-  const auto f1_time = std::chrono::steady_clock::now() - t1;
+  const auto async_duration = std::chrono::steady_clock::now() - benchmark_start;
 
-  const auto t2 = std::chrono::steady_clock::now();
-  for (int i = 0; i < 100000; i++) {
-    f2(val);
+  const auto std_benchmark_start = std::chrono::steady_clock::now();
+  for (int iter = 0; iter < benchmark_iterations; iter++) {
+    std_fn(val);
   }
-  const auto f2_time = std::chrono::steady_clock::now() - t2;
+  const auto std_duration = std::chrono::steady_clock::now() - std_benchmark_start;
 
-  std::cout << "unique_function time: " << f1_time.count() << ", std::function time: " << f2_time.count() << std::endl;
+  std::cout << "unique_function time: " << async_duration.count() << ", std::function time: " << std_duration.count() << '\n';
 }
 
 template <class FxSig, class Fx>
@@ -509,13 +511,13 @@ TEST(unique_function, compilation) {
     return false;
   };
 
-  auto testF3 = [a = 3]() mutable {
-    EXPECT_EQ(a, 3);
-    a = 4;
+  auto test_fn_capture = [capture_val = 3]() mutable {
+    EXPECT_EQ(capture_val, 3);
+    capture_val = 4;
   };
 
   static_assert(invocable<void(), decltype(testF1)>::value);
-  static_assert(invocable<void(), decltype(testF3)>::value);
+  static_assert(invocable<void(), decltype(test_fn_capture)>::value);
   static_assert(!invocable<void(), decltype(testF2)>::value);
   static_assert(invocable<void(int) noexcept, decltype(testF2)>::value);
   static_assert(!invocable<void() noexcept, decltype(testF1)>::value);
@@ -545,16 +547,17 @@ TEST(unique_function, store_storage) {
     unique_function_storage storage;
 
     {
-      unique_function<float(int)> f = [to_move = move_struct{}](auto&& i) noexcept {
+      constexpr float expected_result = 22.5F;  // NOLINT(cppcoreguidelines-avoid-magic-numbers)
+      unique_function<float(int)> storage_fn = [to_move = move_struct{}](auto&& int_param) noexcept {
         (void)to_move;
-        EXPECT_EQ(i, 34);
+        EXPECT_EQ(int_param, 34);
 
-        return 22.5f;
+        return expected_result;
       };
 
       EXPECT_EQ(num_alive, 1);
 
-      EXPECT_FLOAT_EQ(f.move_to_storage_and_call(storage, 34), 22.5f);
+      EXPECT_FLOAT_EQ(storage_fn.move_to_storage_and_call(storage, 34), expected_result);
     }
 
     EXPECT_EQ(num_alive, 1);
