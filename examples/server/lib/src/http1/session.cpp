@@ -77,7 +77,6 @@ async_coro::task<void> start_session(server::socket_layer::connection conn, cons
   while (!conn.is_closed() && keep_alive) {
     // Check if max requests reached
     if (config.max_requests && request_count >= *config.max_requests) {
-      keep_alive = false;
       conn.close_connection();
       break;
     }

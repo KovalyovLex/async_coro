@@ -92,8 +92,8 @@ inline std::string create_temp_binary_file(size_t size_bytes = 65536) {
  */
 inline std::string read_file_content(const std::string& path) {
   std::ifstream ifs(path, std::ios::binary);
-  return std::string(std::istreambuf_iterator<char>(ifs),
-                     std::istreambuf_iterator<char>());
+  return {std::istreambuf_iterator<char>(ifs),
+          std::istreambuf_iterator<char>()};
 }
 
 /**
@@ -102,7 +102,7 @@ inline std::string read_file_content(const std::string& path) {
  * Returns a string of exactly `size` bytes where each byte is derived
  * from (index + byte_position) % 256, making it easy to verify integrity.
  */
-inline std::string generate_test_data(size_t size, int index) {
+inline std::string generate_test_data(size_t size, int index) {  // NOLINT(*swappable*)
   std::string data(size, '\0');
   for (size_t i = 0; i < size; ++i) {
     data[i] = static_cast<char>((index + static_cast<int>(i)) % 256);

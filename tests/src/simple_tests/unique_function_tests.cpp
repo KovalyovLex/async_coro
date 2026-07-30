@@ -547,17 +547,16 @@ TEST(unique_function, store_storage) {
     unique_function_storage storage;
 
     {
-      constexpr float expected_result = 22.5F;  // NOLINT(cppcoreguidelines-avoid-magic-numbers)
       unique_function<float(int)> storage_fn = [to_move = move_struct{}](auto&& int_param) noexcept {
         (void)to_move;
         EXPECT_EQ(int_param, 34);
 
-        return expected_result;
+        return 22.5F;
       };
 
       EXPECT_EQ(num_alive, 1);
 
-      EXPECT_FLOAT_EQ(storage_fn.move_to_storage_and_call(storage, 34), expected_result);
+      EXPECT_FLOAT_EQ(storage_fn.move_to_storage_and_call(storage, 34), 22.5F);
     }
 
     EXPECT_EQ(num_alive, 1);

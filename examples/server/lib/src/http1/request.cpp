@@ -67,7 +67,7 @@ request::request(request&& other) noexcept
 
   if (_request_str.data() != old_str_ptr) {
     // fix pointers
-    fix_string_pointers(old_str_ptr, _request_str);
+    fix_string_pointers(old_str_ptr, _request_str);  // NOLINT(*-cplusplus.InnerPointer) its correct here
   }
 }
 
@@ -83,12 +83,12 @@ request& request::operator=(request&& other) noexcept {
   _version = other._version;
   _parsed = other._parsed;
 
-  auto* old_str_ptr = other._request_str.data();  // NOLINT(clang-analyzer-cplusplus.InnerPointer)
+  auto* old_str_ptr = other._request_str.data();
   _request_str = std::move(other._request_str);
 
   if (_request_str.data() != old_str_ptr) {
     // fix pointers
-    fix_string_pointers(old_str_ptr, _request_str);
+    fix_string_pointers(old_str_ptr, _request_str);  // NOLINT(*-cplusplus.InnerPointer) its correct here
   }
 
   return *this;
@@ -414,7 +414,7 @@ void request::begin_parse(parser_ptr& parser_p) {
 expected<void, http_error> request::parse_data_part(parser_ptr& parser_p, std::span<const std::byte> bytes) {
   ASYNC_CORO_ASSERT(parser_p != nullptr);
 
-  auto bytes_data_ptr = reinterpret_cast<const char*>(bytes.data());  // NOLINT(clang-analyzer-cplusplus.InnerPointer, cppcoreguidelines-pro-type-reinterpret-cast)
+  const auto* bytes_data_ptr = reinterpret_cast<const char*>(bytes.data());  // NOLINT(clang-analyzer-cplusplus.InnerPointer, cppcoreguidelines-pro-type-reinterpret-cast)
   std::string_view bytes_str{bytes_data_ptr, bytes.size()};
 
   std::ranges::copy(bytes_str, std::back_inserter(_request_str));
@@ -439,7 +439,7 @@ request::operator client_request() && noexcept {
 
   auto new_str = request.add_string(std::move(_request_str));
 
-  fix_string_pointers(old_data_start, new_str);
+  fix_string_pointers(old_data_start, new_str);  // NOLINT(*-cplusplus.InnerPointer) its correct here
 
   request.set_target(static_string{_target});
   request.set_body_without_content_headers(static_string{_body});

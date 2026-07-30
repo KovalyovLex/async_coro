@@ -67,7 +67,7 @@ class headers_holder {
    *
    * @return Number of headers in the collection.
    */
-  [[nodiscard]] virtual size_t get_number_of_headers() const noexcept { return _headers.size(); }
+  [[nodiscard]] size_t get_number_of_headers() const noexcept { return _headers.size(); }
 
   /**
    * @brief Get a const reference to the headers collection.

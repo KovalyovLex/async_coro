@@ -51,7 +51,7 @@ class CORO_THREAD_CAPABILITY("mutex") spin_mutex {
 
     size_t backoff_i = 0;
     while (true) {
-      auto constant = kBackoffConstants[backoff_i];
+      auto constant = kBackoffConstants[backoff_i];  // NOLINT(*-constant-array-index)
 
       for (uint32_t n_spins = 0; n_spins < constant.n_relaxed; n_spins++) {
         cpu_relax();

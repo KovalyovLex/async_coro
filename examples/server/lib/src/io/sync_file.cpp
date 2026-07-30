@@ -5,6 +5,9 @@
 #include <cerrno>
 #include <cstring>
 #include <string>
+#include <utility>
+
+#include "server/io/io_config.h"
 
 #if !WIN_SOCKET
 #include <fcntl.h>
@@ -21,6 +24,15 @@ namespace server::io {
 
 sync_file::sync_file(file_handle_t file_descriptor) noexcept  // NOLINT(*-swappable*)
     : _fd(file_descriptor) {
+}
+
+sync_file& sync_file::operator=(sync_file&& other) noexcept {
+  _fd = std::exchange(other._fd, -1);
+  return *this;
+}
+
+sync_file::~sync_file() noexcept {
+  close();
 }
 
 expected<sync_file, std::string> sync_file::open(const std::string& path, file_open_mode mode) noexcept {
@@ -164,11 +176,7 @@ expected<void, std::string> sync_file::flush() const {
 
 void sync_file::close() noexcept {
   if (_fd != invalid_file_handle) {
-#if WIN_SOCKET
-    ::CloseHandle(_fd);
-#else
-    ::close(_fd);
-#endif
+    close_file(_fd);
     _fd = invalid_file_handle;
   }
 }

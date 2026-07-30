@@ -47,6 +47,7 @@ static void epoll_ctl_impl(epoll_handle_t event_fd, socket_type file_descriptor,
 #endif
 }
 
+// NOLINTBEGIN(*-member-initializer)
 reactor::reactor() noexcept {
 #if EPOLL_SOCKET
   _epoll_fd = epoll_create1(0);
@@ -54,6 +55,7 @@ reactor::reactor() noexcept {
   _epoll_fd = kqueue();
 #endif
 }
+// NOLINTEND(*-member-initializer)
 
 reactor::~reactor() noexcept {
   close_epoll(_epoll_fd);
@@ -222,18 +224,20 @@ size_t reactor::add_sock(socket_type sock) {
     }
   }
 
+  auto* data_ptr = reinterpret_cast<void*>(index);  // NOLINT(*-reinterpret-cast, *int-to-ptr)
+
 #if WIN_SOCKET
-  epoll_ctl_impl(_epoll_fd, sock, EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLRDHUP, reinterpret_cast<void*>(static_cast<uintptr_t>(index)));
+  epoll_ctl_impl(_epoll_fd, sock, EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLRDHUP, data_ptr);
 #elif EPOLL_SOCKET
-  epoll_ctl_impl(_epoll_fd, sock, EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET, reinterpret_cast<void*>(static_cast<uintptr_t>(index)));
+  epoll_ctl_impl(_epoll_fd, sock, EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET, data_ptr);
 #elif KQUEUE_SOCKET
-  epoll_ctl_impl(_epoll_fd, sock, EV_ADD, EVFILT_READ | EVFILT_WRITE, reinterpret_cast<void*>(static_cast<uintptr_t>(index)));
+  epoll_ctl_impl(_epoll_fd, sock, EV_ADD, EVFILT_READ | EVFILT_WRITE, data_ptr);
 #endif
 
   return index;
 }
 
-void reactor::remove_sock(socket_type sock, size_t index) {
+void reactor::remove_sock(socket_type sock, size_t index) {  // NOLINT(*swappable*)
   {
     async_coro::unique_lock lock{_mutex};
 
