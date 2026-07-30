@@ -4,7 +4,7 @@
 #include <span>
 
 #include "fixtures/web_socket_integration_fixture.h"
-#include "fixtures/ws_test_client.h"
+#include "utils/ws_test_client.h"
 
 using namespace server;
 

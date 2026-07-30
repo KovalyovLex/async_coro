@@ -14,13 +14,16 @@
 namespace server::io {
 
 /**
- * @brief Common event reactor for both sockets and files.
+ * @brief Event reactor for sockets only.
  *
- * This reactor provides a unified interface for polling file descriptors using
- * epoll (Linux) or kqueue (macOS). It supports both socket and regular file
- * descriptors, with appropriate event filtering for each type.
+ * This reactor provides an interface for polling socket file descriptors using
+ * epoll (Linux) or kqueue (macOS). It does NOT support regular files — epoll/kqueue
+ * are designed for network I/O and do not provide meaningful async notifications
+ * for regular file operations.
  *
- * @note The reactor must outlive any file or socket that is registered with it.
+ * For synchronous file I/O, use server::io::sync_file instead.
+ *
+ * @note The reactor must outlive any socket that is registered with it.
  *       The caller is responsible for ensuring proper lifetime management.
  * @note This class is not copyable or movable to prevent accidental sharing.
  */
@@ -52,24 +55,6 @@ class reactor {
   void process_loop(std::chrono::nanoseconds max_wait);
 
   /**
-   * @brief Add a file descriptor to the reactor for polling.
-   *
-   * @param file_descriptor The file descriptor to add (regular file).
-   * @return The index of the registered fd, or invalid_index on failure.
-   * @note The fd will be set to non-blocking mode if not already.
-   */
-  size_t add_fd(file_handle_t file_descriptor);
-
-  /**
-   * @brief Remove a file descriptor from the reactor.
-   *
-   * @param file_descriptor The file descriptor to remove.
-   * @param index The index returned by add_fd.
-   * @note The fd is closed after removal.
-   */
-  void remove_fd(file_handle_t file_descriptor, size_t index);
-
-  /**
    * @brief Add a socket descriptor to the reactor for polling.
    *
    * @param sock The socket id to add.
@@ -86,24 +71,6 @@ class reactor {
    * @note The socket is closed after removal.
    */
   void remove_sock(socket_type sock, size_t index);
-
-  /**
-   * @brief Register a callback for when data is available for reading.
-   *
-   * @param file_descriptor The file descriptor.
-   * @param index The index returned by add_fd.
-   * @param callback The callback to invoke when data is available.
-   */
-  void continue_after_read_data_ready(file_handle_t file_descriptor, size_t index, continue_callback_t&& callback);
-
-  /**
-   * @brief Register a callback for when data can be written.
-   *
-   * @param file_descriptor The file descriptor.
-   * @param index The index returned by add_fd.
-   * @param callback The callback to invoke when write is possible.
-   */
-  void continue_after_write_data(file_handle_t file_descriptor, size_t index, continue_callback_t&& callback);
 
   /**
    * @brief Register a callback for when data is available for reading.
@@ -134,6 +101,9 @@ class reactor {
     socket_type sock = invalid_socket_id;
     await_type await = await_type::no_await;
   };
+
+  // File descriptor support removed — epoll/kqueue do not support regular files.
+  // Use server::io::sync_file for synchronous file I/O instead.
 
   async_coro::mutex _mutex;
   std::vector<handled_fd> _handled_fds CORO_THREAD_GUARDED_BY(_mutex);

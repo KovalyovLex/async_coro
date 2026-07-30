@@ -8,7 +8,7 @@
 #include <span>
 #include <string_view>
 
-#include "fixtures/http_test_client.h"
+#include "utils/http_test_client.h"
 
 namespace {
 

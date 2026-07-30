@@ -205,26 +205,6 @@ void reactor::process_loop(std::chrono::nanoseconds max_wait) {
   }
 }
 
-size_t reactor::add_fd(file_handle_t file_descriptor) {
-#if WIN_SOCKET
-  (void)file_descriptor;
-  ASYNC_CORO_ASSERT(false && "Windows has no support for async I\\O for files");
-  return -1;
-#else
-  return add_sock(file_descriptor);
-#endif
-}
-
-void reactor::remove_fd(file_handle_t file_descriptor, size_t index) {
-#if WIN_SOCKET
-  (void)file_descriptor;
-  (void)index;
-  ASYNC_CORO_ASSERT(false && "Windows has no support for async I\\O for files");
-#else
-  return remove_sock(file_descriptor, index);
-#endif
-}
-
 size_t reactor::add_sock(socket_type sock) {
   size_t index = 0;
   {
@@ -274,28 +254,6 @@ void reactor::remove_sock(socket_type sock, size_t index) {
 #endif
 
   close_socket(sock);
-}
-
-void reactor::continue_after_read_data_ready(file_handle_t file_descriptor, size_t index, continue_callback_t&& callback) {
-#if WIN_SOCKET
-  // There is no async io support
-  if (callback) {
-    callback(connection_state::available_read);
-  }
-#else
-  continue_after_receive_data(file_descriptor, index, std::move(callback));
-#endif
-}
-
-void reactor::continue_after_write_data(file_handle_t file_descriptor, size_t index, continue_callback_t&& callback) {
-#if WIN_SOCKET
-  // There is no async io support
-  if (callback) {
-    callback(connection_state::available_write);
-  }
-#else
-  continue_after_sent_data(file_descriptor, index, std::move(callback));
-#endif
 }
 
 void reactor::continue_after_receive_data(socket_type sock, size_t index, continue_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters)

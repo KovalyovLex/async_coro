@@ -4,7 +4,7 @@
 #include <gtest/gtest.h>
 #include <server/http1/http_server.h>
 
-#include "fixtures/http_test_client.h"
+#include "utils/http_test_client.h"
 
 class http_integration_fixture : public ::testing::Test {
  protected:

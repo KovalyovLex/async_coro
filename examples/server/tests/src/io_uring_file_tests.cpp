@@ -11,39 +11,18 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
-#include <filesystem>
-#include <fstream>
-#include <random>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include "utils/io_helpers.h"
+#include "utils/temp_file.h"
+
 namespace fs = std::filesystem;
-
-// Helper to create a temporary file with given content
-static std::string create_temp_file(const std::string& content) {
-  static thread_local std::mt19937 gen(std::random_device{}());
-  static thread_local std::uniform_int_distribution<int> dist(0, 999999);
-  auto path = fs::temp_directory_path() / ("io_uring_test_" + std::to_string(getpid()) + "_" + std::to_string(dist(gen)));
-  std::ofstream ofs(path, std::ios::binary);
-  ofs.write(content.data(), static_cast<std::streamsize>(content.size()));
-  ofs.close();
-  return path.string();
-}
-
-// Helper to run a coroutine task and wait for completion
-static bool run_task(async_coro::task<int> task, async_coro::scheduler& scheduler, server::io::io_uring_reactor& reactor) {
-  auto handle = scheduler.start_task(std::move(task), async_coro::execution_queues::main);
-  for (int i = 0; i < 2000 && !handle.done(); ++i) {
-    scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
-    reactor.process_loop(std::chrono::nanoseconds(1000000));  // 1ms in nanoseconds
-  }
-  return handle.done();
-}
 
 TEST(io_uring_file_tests, open_and_close) {
   const std::string content = "Hello, io_uring!";
-  auto path = create_temp_file(content);
+  auto path = test_utils::create_temp_file(content);
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::io_uring_reactor::create();
@@ -69,13 +48,13 @@ TEST(io_uring_file_tests, open_and_close) {
     co_return 0;
   };
 
-  ASSERT_TRUE(run_task(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
   fs::remove(path);
 }
 
 TEST(io_uring_file_tests, read_file_content) {
   const std::string content = "Test content for io_uring read";
-  auto path = create_temp_file(content);
+  auto path = test_utils::create_temp_file(content);
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::io_uring_reactor::create();
@@ -108,12 +87,12 @@ TEST(io_uring_file_tests, read_file_content) {
     co_return 0;
   };
 
-  ASSERT_TRUE(run_task(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
   fs::remove(path);
 }
 
 TEST(io_uring_file_tests, write_to_file) {
-  auto path = create_temp_file("");
+  auto path = test_utils::create_temp_file("");
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::io_uring_reactor::create();
@@ -149,7 +128,7 @@ TEST(io_uring_file_tests, write_to_file) {
     co_return 0;
   };
 
-  ASSERT_TRUE(run_task(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
 
   // Verify the file was written correctly
   std::ifstream in(path, std::ios::binary);
@@ -161,7 +140,7 @@ TEST(io_uring_file_tests, write_to_file) {
 
 TEST(io_uring_file_tests, get_file_size) {
   const std::string content = "Size test content";
-  auto path = create_temp_file(content);
+  auto path = test_utils::create_temp_file(content);
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::io_uring_reactor::create();
@@ -186,13 +165,13 @@ TEST(io_uring_file_tests, get_file_size) {
     co_return 0;
   };
 
-  ASSERT_TRUE(run_task(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
   fs::remove(path);
 }
 
 TEST(io_uring_file_tests, seek_and_read) {
   const std::string content = "0123456789ABCDEF";
-  auto path = create_temp_file(content);
+  auto path = test_utils::create_temp_file(content);
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::io_uring_reactor::create();
@@ -228,12 +207,12 @@ TEST(io_uring_file_tests, seek_and_read) {
     co_return 0;
   };
 
-  ASSERT_TRUE(run_task(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
   fs::remove(path);
 }
 
 TEST(io_uring_file_tests, read_empty_file) {
-  auto path = create_temp_file("");
+  auto path = test_utils::create_temp_file("");
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::io_uring_reactor::create();
@@ -257,13 +236,13 @@ TEST(io_uring_file_tests, read_empty_file) {
     co_return 0;
   };
 
-  ASSERT_TRUE(run_task(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
   fs::remove(path);
 }
 
 TEST(io_uring_file_tests, read_closed_file) {
   const std::string content = "Test";
-  auto path = create_temp_file(content);
+  auto path = test_utils::create_temp_file(content);
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::io_uring_reactor::create();
@@ -295,7 +274,7 @@ TEST(io_uring_file_tests, read_closed_file) {
     co_return 0;
   };
 
-  ASSERT_TRUE(run_task(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
   fs::remove(path);
 }
 

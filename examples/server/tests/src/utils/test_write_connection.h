@@ -1,5 +1,6 @@
+// Fake connection used to capture outgoing bytes
+#pragma once
 
-// fake connection used to capture outgoing bytes
 #include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/task.h>

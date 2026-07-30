@@ -9,7 +9,7 @@
 #include <string_view>
 
 #include "fixtures/web_socket_integration_fixture.h"
-#include "fixtures/ws_test_client.h"
+#include "utils/ws_test_client.h"
 
 // Test fixture for permessage-deflate compression tests
 class web_socket_deflate_tests : public web_socket_integration_tests {

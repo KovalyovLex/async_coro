@@ -10,7 +10,7 @@
 #include <span>
 #include <string_view>
 
-#include "fixtures/test_write_connection.h"
+#include "utils/test_write_connection.h"
 
 TEST(client_integration, request_to_string) {
   using namespace server::http1;

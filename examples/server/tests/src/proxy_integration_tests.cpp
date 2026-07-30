@@ -10,7 +10,7 @@
 #include <server/http1/request.h>
 #include <server/http1/response.h>
 
-#include "fixtures/test_write_connection.h"
+#include "utils/test_write_connection.h"
 
 TEST(proxy_example, forward_inserts_attributes) {
   using namespace server::http1;
