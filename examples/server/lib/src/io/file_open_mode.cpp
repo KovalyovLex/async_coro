@@ -45,6 +45,7 @@ int mode_to_posix_flags(file_open_mode mode) noexcept {
   int flags = 0;
   constexpr auto rw_mode = file_open_mode::read & file_open_mode::write;
 
+  // NOLINTBEGIN(*-signed-bitwise*)
   if ((mode & rw_mode) == rw_mode) {
     flags |= O_RDWR;
   } else if ((mode & file_open_mode::write) == file_open_mode::write) {
@@ -62,6 +63,7 @@ int mode_to_posix_flags(file_open_mode mode) noexcept {
   if ((mode & file_open_mode::append) == file_open_mode::append) {
     flags |= O_APPEND;
   }
+  // NOLINTEND(*-signed-bitwise*)
 
   return flags;
 }
