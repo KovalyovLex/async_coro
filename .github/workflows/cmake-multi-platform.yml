@@ -267,8 +267,8 @@ jobs:
       timeout-minutes: 20
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
-        chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
-        ${{ github.workspace }}/.github/scripts/run_tests.sh "${{ steps.strings.outputs.build-output-dir }}"
+        WS="$(echo "/${{ github.workspace }}" | sed -e 's/\\/\//g' -e 's/://')"
+        "$WS/.github/scripts/run_tests.sh" ./
     
     - name: Archive run logs
       if: always()
