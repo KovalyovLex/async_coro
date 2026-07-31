@@ -79,6 +79,7 @@ jobs:
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --parallel
 
     - name: Test
+      shell: bash
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       timeout-minutes: 20
       run: |
@@ -96,7 +97,7 @@ jobs:
       uses: actions/upload-artifact@v6
       with:
         name: gcc-run-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
-        path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
+        path: ${{ steps.strings.outputs.build-output-dir }}/test_output.log
         if-no-files-found: ignore
 
   build-clang:
@@ -182,6 +183,7 @@ jobs:
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --parallel
 
     - name: Test
+      shell: bash
       timeout-minutes: 20
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
@@ -190,6 +192,7 @@ jobs:
     
     - name: Signal cleanup on job cancellation
       if: cancelled()
+      shell: bash
       run: |
         chmod +x ${{ github.workspace }}/.github/scripts/signal_cleanup.sh
         ${{ github.workspace }}/.github/scripts/signal_cleanup.sh "${{ steps.strings.outputs.build-output-dir }}"
@@ -199,7 +202,7 @@ jobs:
       uses: actions/upload-artifact@v6
       with:
         name: ${{matrix.os.name}}-clang-run-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
-        path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
+        path: ${{ steps.strings.outputs.build-output-dir }}/test_output.log
         if-no-files-found: ignore
     
   build-msvc:
@@ -260,18 +263,20 @@ jobs:
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config RelWithDebInfo --parallel
 
     - name: Test
+      shell: bash
       timeout-minutes: 20
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
-      # Execute tests defined by the CMake configuration. Note that --build-config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
-      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: ctest --build-config RelWithDebInfo --output-on-failure
+      run: |
+        chmod +x ${{ github.workspace }}/.github/scripts/run_tests.sh
+        ${{ github.workspace }}/.github/scripts/run_tests.sh "${{ steps.strings.outputs.build-output-dir }}"
     
     - name: Archive run logs
       if: always()
       uses: actions/upload-artifact@v6
       with:
         name: msvc-run-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
-        path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
+        path: ${{ steps.strings.outputs.build-output-dir }}/test_output.log
+        if-no-files-found: ignore
 
   build-android:
     if: false  # Temporarily disabled - testing clang only
@@ -369,6 +374,7 @@ jobs:
       run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --parallel
 
     - name: Test
+      shell: bash
       timeout-minutes: 20
       working-directory: ${{ steps.strings.outputs.build-output-dir }}
       run: |
@@ -377,6 +383,7 @@ jobs:
     
     - name: Signal cleanup on job cancellation
       if: cancelled()
+      shell: bash
       run: |
         chmod +x ${{ github.workspace }}/.github/scripts/signal_cleanup.sh
         ${{ github.workspace }}/.github/scripts/signal_cleanup.sh "${{ steps.strings.outputs.build-output-dir }}"
@@ -386,7 +393,7 @@ jobs:
       uses: actions/upload-artifact@v6
       with:
         name: ${{matrix.os}}-run-logs${{matrix.sanitizers.name}}${{matrix.exceptions.name}}
-        path: ${{ steps.strings.outputs.build-output-dir }}/Testing/Temporary/LastTest.log
+        path: ${{ steps.strings.outputs.build-output-dir }}/test_output.log
         if-no-files-found: ignore
 
   dispatch-pr:
