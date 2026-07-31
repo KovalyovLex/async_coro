@@ -411,6 +411,7 @@ TEST(tcp_server_accept, multiple_connections_round_robin) {
     close_client_socket(fd);
   }
 
+  scheduler.stop();
   server.stop();
 }
 

@@ -48,8 +48,13 @@ class scheduler {
   explicit scheduler(i_execution_system::ptr system) noexcept;
 
   /**
-   * @brief Destroys the scheduler, destroying all managed coroutines.
+   * @brief Stops the scheduler and cancels all managed coroutines.
+   * @details Cancels all running coroutines and releases the execution system.
+   * This method can be called manually to cleanly shut down the scheduler
+   * before destruction, ensuring the right order of resource cleanup.
    */
+  void stop() noexcept;
+
   ~scheduler();
 
   scheduler& operator=(const scheduler&) = delete;
