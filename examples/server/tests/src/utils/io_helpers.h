@@ -9,6 +9,8 @@
 
 namespace test_utils {
 
+#if IO_URING_ENABLED
+
 /**
  * @brief Helper to run a coroutine task with the io_uring reactor.
  *
@@ -22,7 +24,7 @@ namespace test_utils {
  */
 inline bool run_task_io_uring(async_coro::task<int> task,
                               async_coro::scheduler& scheduler,
-                              ::server::io::io_uring_reactor& reactor) {
+                              server::io::io_uring_reactor& reactor) {
   auto handle = scheduler.start_task(std::move(task), async_coro::execution_queues::main);
   for (int i = 0; i < 2000 && !handle.done(); ++i) {
     scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
@@ -30,5 +32,7 @@ inline bool run_task_io_uring(async_coro::task<int> task,
   }
   return handle.done();
 }
+
+#endif
 
 }  // namespace test_utils
