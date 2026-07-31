@@ -517,6 +517,7 @@ TEST(tcp_server_accept, concurrent_client_connections) {
   EXPECT_EQ(success_count.load(), num_clients)
       << "Expected " << num_clients << " successful round-trips but got " << success_count.load();
 
+  scheduler.stop();
   server.stop();
 }
 
