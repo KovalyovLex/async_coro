@@ -67,7 +67,9 @@ endif()
 if(SERVER_ENABLE_DEFLATE_GZIP)
     target_compile_definitions(server_lib PUBLIC SERVER_ENABLE_DEFLATE_GZIP=1)
 
-    set(ZLIB_BUILD_EXAMPLES OFF)
+    set(ZLIB_BUILD_TESTING OFF CACHE BOOL "Disable zlib examples")
+    set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "Disable zlib examples")
+    set(ZLIB_BUILD_SHARED OFF CACHE BOOL "Disable zlib shared libraries")
 
     FetchContent_Declare(
         ZLIB
@@ -81,16 +83,18 @@ if(SERVER_ENABLE_DEFLATE_GZIP)
 
     find_package(ZLIB REQUIRED)
 
-    if (TARGET ZLIB::ZLIB)
-        message(STATUS "Using predefined ZLIB::ZLIB target")
-
-        set(zlib_targets ZLIB::ZLIB)
-    else()
-        if (NOT TARGET zlibstatic)
-            message(FATAL_ERROR "Unable to find zlibstatic target")
-        endif()
-        
+    if (TARGET zlibstatic)
         set(zlib_targets zlibstatic)
+    else()
+        if (TARGET ZLIB::ZLIB)
+            message(STATUS "Using predefined ZLIB::ZLIB target")
+
+            set(zlib_targets ZLIB::ZLIB)
+        else()
+            message(FATAL_ERROR "Unable to find zlibstatic neither ZLIB::ZLIB target")
+
+            set(zlib_targets zlibstatic)
+        endif()
     endif()
 
     target_link_libraries(server_lib PUBLIC ${zlib_targets})
@@ -157,13 +161,13 @@ if(SERVER_ENABLE_ZSTD)
         if(NOT TARGET zstd)
             message(STATUS "Going to fetch zstd from source")
 
-            set(ZSTD_BUILD_STATIC ON)
-            set(ZSTD_BUILD_SHARED OFF)
-            set(ZSTD_FRAMEWORK OFF)
-            set(ZSTD_BUILD_PROGRAMS OFF)
-            set(ZSTD_BUILD_TESTS OFF)
-            set(ZSTD_BUILD_CONTRIB OFF)
-            set(ZSTD_LEGACY_SUPPORT OFF)
+            set(ZSTD_BUILD_STATIC ON CACHE BOOL "Enable zsd static lib")
+            set(ZSTD_BUILD_SHARED OFF CACHE BOOL "Disable zsd shared lib")
+            set(ZSTD_FRAMEWORK OFF CACHE BOOL "Disable zsd framework mode")
+            set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "Minify zsd dependencies")
+            set(ZSTD_BUILD_TESTS OFF CACHE BOOL "Minify zsd dependencies")
+            set(ZSTD_BUILD_CONTRIB OFF CACHE BOOL "Minify zsd dependencies")
+            set(ZSTD_LEGACY_SUPPORT OFF CACHE BOOL "Minify zsd dependencies")
 
             FetchContent_Declare(
                 zstd
