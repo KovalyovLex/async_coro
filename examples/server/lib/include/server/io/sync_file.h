@@ -102,7 +102,7 @@ class sync_file {
   sync_file& operator=(const sync_file&) = delete;
 
   // Movable - ownership transfers to the new object.
-  sync_file(sync_file&& other) noexcept = default;
+  sync_file(sync_file&& other) noexcept;
   sync_file& operator=(sync_file&& other) noexcept;
 
   ~sync_file() noexcept;
