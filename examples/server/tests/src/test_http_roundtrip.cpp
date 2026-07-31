@@ -706,7 +706,7 @@ TEST_F(http_roundtrip_fixture, large_response_body) {
   // The server's response::send uses 4KB internal buffers; large bodies
   // require multiple write_buffer calls which can fail with the current
   // test setup. Using ~3KB ensures the entire body + headers fit in one chunk.
-  constexpr auto k_expected_size = static_cast<const size_t>(3 * 1024);  // 3 KB
+  constexpr auto k_expected_size = static_cast<size_t>(3 * 1024);  // 3 KB
 
   std::string req =
       "GET /data HTTP/1.1\r\n"
