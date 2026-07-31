@@ -188,6 +188,11 @@ class execution_system : public i_execution_system {
   [[nodiscard]] bool is_thread_fits(execution_queue_mark execution_queue, std::thread::id thread_id) const noexcept override;
 
   /**
+   * @brief Stops the execution system and shuts down all worker threads
+   */
+  void stop() noexcept override;
+
+  /**
    * @brief Processes one task from the main thread's execution queues
    *
    * Attempts to execute one pending task that is appropriate for the main thread.

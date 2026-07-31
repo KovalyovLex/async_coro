@@ -31,8 +31,10 @@ void scheduler::stop() noexcept {
   for (auto& coro : coros) {
     coro->request_cancel();
   }
-  _execution_system = nullptr;
-  coros.clear();
+
+  if (_execution_system) {
+    _execution_system->stop();
+  }
 }
 
 scheduler::~scheduler() {

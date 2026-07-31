@@ -93,7 +93,14 @@ execution_system::execution_system(const execution_system_config& config, const 
 }
 
 execution_system::~execution_system() noexcept {
-  _is_stopping.store(true, std::memory_order::release);
+  stop();
+}
+
+void execution_system::stop() noexcept {
+  if (_is_stopping.exchange(true, std::memory_order::release)) {
+    // already stopping or stopped
+    return;
+  }
 
   for (std::uint32_t i = 0; i < _num_workers; i++) {
     _thread_data[i].notifier.notify();
