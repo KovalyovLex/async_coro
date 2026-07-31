@@ -95,12 +95,21 @@ request& request::operator=(request&& other) noexcept {
 }
 
 void request::fix_string_pointers(const char* old_str_ptr, std::span<const char> new_str) {
-  _body = {&new_str[_body.data() - old_str_ptr], _body.size()};
-  _target = {&new_str[_target.data() - old_str_ptr], _target.size()};
+  const auto get_string_view = [&](auto str) {
+    const auto index = str.data() - old_str_ptr;
+
+    ASYNC_CORO_ASSERT(index < new_str.size() || (index == new_str.size() && str.empty()));
+
+    using StrType = decltype(str);
+    return StrType{new_str.data() + index, str.size()};
+  };
+
+  _body = get_string_view(_body);
+  _target = get_string_view(_target);
 
   for (auto& pair : _headers) {
-    pair.first = {&new_str[pair.first.data() - old_str_ptr], pair.first.size()};
-    pair.second = {&new_str[pair.second.data() - old_str_ptr], pair.second.size()};
+    pair.first = get_string_view(pair.first);
+    pair.second = get_string_view(pair.second);
   }
 }
 
