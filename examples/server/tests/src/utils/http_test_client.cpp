@@ -116,7 +116,7 @@ bool http_test_client::recv_bytes(std::span<std::byte>& bytes) noexcept {
 }
 
 std::string http_test_client::read_response() {
-  // simple read until CRLFCRLF
+  // simple read until CRLFCRLF, then read body based on Content-Length
   std::string out;
   std::array<char, 1024> buf;  // NOLINT(*init)
   constexpr std::string_view k_split_str = "\r\n\r\n";
@@ -125,6 +125,7 @@ std::string http_test_client::read_response() {
   size_t offset = 0;
   std::optional<size_t> cnt_len = {};
   size_t body_start = 0;
+  bool headers_parsed = false;
   while (true) {
     auto bytes = std::as_writable_bytes(std::span<char>{buf});
     if (!recv_bytes(bytes)) {
@@ -133,41 +134,53 @@ std::string http_test_client::read_response() {
     }
     out.append(buf.data(), buf.data() + buf.size() - bytes.size());
 
-    auto it = body_start == 0 ? out.find(k_split_str, offset) : std::string::npos;
-    if (it != std::string::npos) {
-      offset = body_start = it + k_split_str.size();
-      if (out.size() >= body_start) {
+    if (!headers_parsed) {
+      auto it = out.find(k_split_str, offset);
+      if (it != std::string::npos) {
+        body_start = it + k_split_str.size();
+        headers_parsed = true;
+
+        // Parse Content-Length header
         const auto headers = std::string_view{out.data(), body_start};
         const auto cnt_start_i = headers.find(k_content_len);
-        std::string_view cnt_len_str;
         if (cnt_start_i != std::string_view::npos) {
-          cnt_len_str = headers.substr(cnt_start_i + k_content_len.size());
-          cnt_len_str = cnt_len_str.substr(0, cnt_len_str.find('\n'));
+          std::string_view cnt_len_str = headers.substr(cnt_start_i + k_content_len.size());
+          // Find end of line (handle both \n and \r\n)
+          const auto newline_pos = cnt_len_str.find('\n');
+          if (newline_pos != std::string_view::npos) {
+            cnt_len_str = cnt_len_str.substr(0, newline_pos);
+          }
+          // Trim leading spaces
           while (!cnt_len_str.empty() && cnt_len_str.front() == ' ') {
             cnt_len_str.remove_prefix(1);
           }
-          while (!cnt_len_str.empty() && (cnt_len_str.back() == '\r' || cnt_len_str.front() == ' ')) {
+          // Trim trailing \r (HTTP uses CRLF line endings)
+          while (!cnt_len_str.empty() && cnt_len_str.back() == '\r') {
             cnt_len_str.remove_suffix(1);
           }
-        }
-        if (!cnt_len_str.empty()) {
-          size_t len = 0;
-          auto res = std::from_chars(cnt_len_str.data(), cnt_len_str.data() + cnt_len_str.size(), len);
-          if (res.ec == std::errc{}) {
-            cnt_len = len;
+          if (!cnt_len_str.empty()) {
+            size_t len = 0;
+            auto res = std::from_chars(cnt_len_str.data(), cnt_len_str.data() + cnt_len_str.size(), len);
+            if (res.ec == std::errc{}) {
+              cnt_len = len;
+            }
           }
         }
-      }
-    } else {
-      offset = out.size();
-      while (offset > 0 && (out[offset - 1] == '\r' || out[offset - 1] == '\n')) {
-        offset--;
+      } else {
+        // No header terminator yet; advance search offset past trailing partial newlines
+        offset = out.size();
+        while (offset > 0 && (out[offset - 1] == '\r' || out[offset - 1] == '\n')) {
+          offset--;
+        }
       }
     }
 
-    if (body_start > 0 && (!cnt_len || out.size() >= body_start + *cnt_len)) {
-      // end
-      break;
+    // Check if we have the complete response
+    if (headers_parsed) {
+      if (!cnt_len.has_value() || out.size() >= body_start + *cnt_len) {
+        // No content-length (e.g., HEAD, 204, 304) or body fully received
+        break;
+      }
     }
   }
   return out;
