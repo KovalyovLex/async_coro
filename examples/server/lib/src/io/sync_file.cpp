@@ -27,7 +27,7 @@ sync_file::sync_file(file_handle_t file_descriptor) noexcept  // NOLINT(*-swappa
 }
 
 sync_file& sync_file::operator=(sync_file&& other) noexcept {
-  _fd = std::exchange(other._fd, -1);
+  _fd = std::exchange(other._fd, invalid_file_handle);
   return *this;
 }
 
