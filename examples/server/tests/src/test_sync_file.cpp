@@ -3,10 +3,10 @@
 #include <server/io/sync_file.h>
 #include <server/utils/expected.h>
 
+#include <array>
 #include <cstdio>
 #include <cstring>
 #include <string>
-#include <vector>
 
 #include "utils/temp_file.h"
 
@@ -20,7 +20,7 @@ TEST(sync_file_io, open_and_read_file) {
   ASSERT_TRUE(result) << "Failed to open file: " << result.error();
 
   auto file = std::move(*result);
-  std::vector<uint8_t> buffer(1024);
+  std::array<std::byte, 1024> buffer;
   auto read_result = file.read(buffer);
 
   ASSERT_TRUE(read_result) << "Failed to read: " << read_result.error();
@@ -31,7 +31,7 @@ TEST(sync_file_io, open_and_read_file) {
 }
 
 TEST(sync_file_io, write_and_read_file) {
-  const std::string content = "Write and read test";
+  const std::string_view content = "Write and read test";
   auto path = test_utils::create_temp_file("");
 
   auto open_result = server::io::sync_file::open(
@@ -40,8 +40,7 @@ TEST(sync_file_io, write_and_read_file) {
   ASSERT_TRUE(open_result) << "Failed to open file for writing: " << open_result.error();
 
   auto file = std::move(*open_result);
-  std::vector<uint8_t> data(content.begin(), content.end());
-  auto write_result = file.write(data);
+  auto write_result = file.write(std::as_bytes(std::span{content}));
 
   ASSERT_TRUE(write_result) << "Failed to write: " << write_result.error();
   auto flush_result1 = file.flush();
@@ -74,7 +73,7 @@ TEST(sync_file_io, close_file) {
   EXPECT_TRUE(file.is_closed());
 
   // Reading after close should fail
-  std::vector<uint8_t> buffer(1024);
+  std::array<std::byte, 1024> buffer;
   auto read_result = file.read(buffer);
   ASSERT_FALSE(read_result);
 
@@ -88,7 +87,7 @@ TEST(sync_file_io, read_empty_file) {
   ASSERT_TRUE(result);
 
   auto file = std::move(*result);
-  std::vector<uint8_t> buffer(1024);
+  std::array<std::byte, 1024> buffer;
   auto read_result = file.read(buffer);
 
   ASSERT_TRUE(read_result);
@@ -153,12 +152,14 @@ TEST(sync_file_io, seek_moves_position) {
   EXPECT_EQ(seek_result.value(), static_cast<off_t>(5));
 
   // Read remaining content
-  std::vector<uint8_t> buffer(20);
+  std::array<std::byte, 20> buffer{};
   auto read_result = file.read(buffer);
   ASSERT_TRUE(read_result);
   EXPECT_EQ(read_result.value(), static_cast<size_t>(15));  // 20 - 5 = 15
 
-  std::string actual_content(buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(read_result.value()));
+  std::string actual_content(
+      reinterpret_cast<const char*>(buffer.data()),
+      static_cast<std::size_t>(read_result.value()));
   EXPECT_EQ(actual_content, "56789ABCDEFGHIJ");
 
   file.close();
@@ -175,7 +176,7 @@ TEST(sync_file_io, seek_from_current) {
   auto file = std::move(*result);
 
   // Read first 5 bytes
-  std::vector<uint8_t> buffer(5);
+  std::array<std::byte, 5> buffer{};
   auto read_result = file.read(buffer);
   ASSERT_TRUE(read_result);
   EXPECT_EQ(read_result.value(), static_cast<size_t>(5));
@@ -204,12 +205,14 @@ TEST(sync_file_io, seek_from_end) {
   EXPECT_EQ(seek_result.value(), static_cast<off_t>(15));
 
   // Read those 5 bytes
-  std::vector<uint8_t> buffer(10);
+  std::array<std::byte, 10> buffer{};
   auto read_result = file.read(buffer);
   ASSERT_TRUE(read_result);
   EXPECT_EQ(read_result.value(), static_cast<size_t>(5));
 
-  std::string actual_content(buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(read_result.value()));
+  std::string actual_content(
+      reinterpret_cast<const char*>(buffer.data()),
+      static_cast<std::size_t>(read_result.value()));
   EXPECT_EQ(actual_content, "FGHIJ");
 
   file.close();
@@ -247,17 +250,17 @@ TEST(sync_file_io, write_multiple_chunks) {
   auto file = std::move(*result);
 
   // Write in multiple chunks
-  std::string chunk1 = "Hello, ";
-  std::string chunk2 = "world! ";
-  std::string chunk3 = "This is a test.";
+  std::string_view chunk1 = "Hello, ";
+  std::string_view chunk2 = "world! ";
+  std::string_view chunk3 = "This is a test.";
 
-  auto write1 = file.write(std::span<const uint8_t>{reinterpret_cast<const uint8_t*>(chunk1.data()), chunk1.size()});
+  auto write1 = file.write(std::as_bytes(std::span{chunk1}));
   ASSERT_TRUE(write1);
 
-  auto write2 = file.write(std::span<const uint8_t>{reinterpret_cast<const uint8_t*>(chunk2.data()), chunk2.size()});
+  auto write2 = file.write(std::as_bytes(std::span{chunk2}));
   ASSERT_TRUE(write2);
 
-  auto write3 = file.write(std::span<const uint8_t>{reinterpret_cast<const uint8_t*>(chunk3.data()), chunk3.size()});
+  auto write3 = file.write(std::as_bytes(std::span{chunk3}));
   ASSERT_TRUE(write3);
 
   auto flush_result = file.flush();
@@ -288,8 +291,7 @@ TEST(sync_file_io, get_size_after_write) {
   EXPECT_EQ(size_before.value(), static_cast<size_t>(0));
 
   // Write data
-  std::vector<uint8_t> data(content.begin(), content.end());
-  auto write_result = file.write(data);
+  auto write_result = file.write(std::as_bytes(std::span{reinterpret_cast<const char*>(content.data()), content.size()}));
   ASSERT_TRUE(write_result);
 
   // Flush to ensure size is updated
@@ -331,7 +333,7 @@ TEST(sync_file_io, read_closed_file) {
   file.close();
 
   // Reading closed file should fail
-  std::vector<uint8_t> buffer(1024);
+  std::array<std::byte, 1024> buffer{};
   auto read_result = file.read(buffer);
   ASSERT_FALSE(read_result);
   EXPECT_EQ(read_result.error(), "File is closed");

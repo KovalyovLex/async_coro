@@ -64,7 +64,7 @@ class io_uring_file {
    * @return An awaitable that resolves to an expected<size_t, std::string>.
    *         On success, contains the number of bytes read. On failure, contains an error message.
    */
-  [[nodiscard]] async_coro::task<expected<size_t, std::string>> read(std::span<uint8_t> buffer);
+  [[nodiscard]] async_coro::task<expected<size_t, std::string>> read(std::span<std::byte> buffer);
 
   /**
    * @brief Write data to the file.
@@ -74,7 +74,7 @@ class io_uring_file {
    * @return An awaitable that resolves to an expected<void, std::string>.
    *         On success, contains void. On failure, contains an error message.
    */
-  [[nodiscard]] async_coro::task<expected<void, std::string>> write(std::span<const uint8_t> data);
+  [[nodiscard]] async_coro::task<expected<void, std::string>> write(std::span<const std::byte> data);
 
   /**
    * @brief Flush the file to ensure all data is written to disk.

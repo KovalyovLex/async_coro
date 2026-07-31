@@ -9,6 +9,34 @@
 
 namespace test_utils {
 
+#if WIN_IOCP_ENABLED
+
+#include <server/io/iocp_reactor.h>
+
+/**
+ * @brief Helper to run a coroutine task with the IOCP reactor.
+ *
+ * Drives both the scheduler's execution system and the IOCP reactor's
+ * event loop until the task finishes or the iteration budget is exhausted.
+ *
+ * @param task      The coroutine to execute.
+ * @param scheduler Reference to the async_coro scheduler.
+ * @param reactor   Reference to the IOCP reactor.
+ * @return true if the task completed within the budget, false otherwise.
+ */
+inline bool run_task_iocp(async_coro::task<int> task,
+                          async_coro::scheduler& scheduler,
+                          server::io::iocp_reactor& reactor) {
+  auto handle = scheduler.start_task(std::move(task), async_coro::execution_queues::main);
+  for (int i = 0; i < 2000 && !handle.done(); ++i) {
+    scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
+    reactor.process_loop(std::chrono::milliseconds(1));
+  }
+  return handle.done();
+}
+
+#endif
+
 #if IO_URING_ENABLED
 
 /**

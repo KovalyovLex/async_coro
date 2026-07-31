@@ -213,7 +213,7 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOL
   }
 }
 
-void io_uring_reactor::submit_read(int file_descriptor, uint64_t offset, std::span<uint8_t> buffer, continue_size_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters): order matches POSIX read(fd, buf, len) semantics
+void io_uring_reactor::submit_read(int file_descriptor, uint64_t offset, std::span<std::byte> buffer, continue_size_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters): order matches POSIX read(fd, buf, len) semantics
   request_entry entry;
   entry.fd = file_descriptor;
   entry.operation = operation_type::receive_data;
@@ -224,7 +224,7 @@ void io_uring_reactor::submit_read(int file_descriptor, uint64_t offset, std::sp
   _requests.push(std::move(entry));
 }
 
-void io_uring_reactor::submit_write(int file_descriptor, uint64_t offset, std::span<const uint8_t> buffer, continue_size_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters): order matches POSIX write(fd, buf, len) semantics
+void io_uring_reactor::submit_write(int file_descriptor, uint64_t offset, std::span<const std::byte> buffer, continue_size_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters): order matches POSIX write(fd, buf, len) semantics
   request_entry entry;
   entry.fd = file_descriptor;
   entry.operation = operation_type::send_data;
@@ -254,11 +254,13 @@ void io_uring_reactor::submit_close(int file_descriptor, continue_void_callback_
   _requests.push(std::move(entry));
 }
 
-void io_uring_reactor::submit_open(const char* path, int flags, int mode, continue_file_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters): order matches POSIX open(path, flags, mode) semantics
+void io_uring_reactor::submit_open(const char* path, file_open_mode open_mode, int permissions, continue_file_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters): order matches POSIX open(path, flags, mode) semantics
+  int posix_flags = mode_to_posix_flags(open_mode);
+
   request_entry entry;
   entry.file_path = path;
-  entry.open_flags = flags;
-  entry.open_mode = mode;
+  entry.open_flags = posix_flags;
+  entry.open_mode = permissions;
   entry.operation = operation_type::open_file;
   entry.callback = std::move(callback);
 

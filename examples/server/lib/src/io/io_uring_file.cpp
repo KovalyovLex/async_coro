@@ -59,9 +59,8 @@ io_uring_file& io_uring_file::operator=(io_uring_file&& other) noexcept {
 }
 
 async_coro::task<expected<io_uring_file, std::string>> io_uring_file::open_coro(io_uring_reactor& reactor, std::string path, file_open_mode mode, int permissions) noexcept {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): reactor lifetime guaranteed by io_uring_file owner
-  int posix_flags = mode_to_posix_flags(mode);
   auto result = co_await async_coro::await_callback_with_result<expected<int, std::string>>([&](auto cont) {
-    reactor.submit_open(path.c_str(), posix_flags, permissions, std::move(cont));
+    reactor.submit_open(path.c_str(), mode, permissions, std::move(cont));
   });
 
   if (!result) {
@@ -98,7 +97,7 @@ async_coro::task<expected<size_t, std::string>> io_uring_file::read(std::span<ui
   co_return total_bytes_read;
 }
 
-async_coro::task<expected<void, std::string>> io_uring_file::write(std::span<const uint8_t> data) {
+async_coro::task<expected<void, std::string>> io_uring_file::write(std::span<const std::byte> data) {
   if (_fd == -1) {
     co_return expected<void, std::string>{unexpect, "File is closed"};
   }

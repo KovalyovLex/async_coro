@@ -99,7 +99,7 @@ class io_uring_reactor {
    * @param callback Continuation callback will be called after read complete.
    * @note The buffer must outlive the callback invocation. The reactor stores a non-owning span.
    */
-  void submit_read(int file_descriptor, uint64_t offset, std::span<uint8_t> buffer, continue_size_callback_t&& callback);
+  void submit_read(int file_descriptor, uint64_t offset, std::span<std::byte> buffer, continue_size_callback_t&& callback);
 
   /**
    * @brief Submit an async write operation.
@@ -110,7 +110,7 @@ class io_uring_reactor {
    * @param callback Continuation callback will be called after write complete.
    * @note The buffer must outlive the callback invocation. The reactor stores a non-owning span.
    */
-  void submit_write(int file_descriptor, uint64_t offset, std::span<const uint8_t> buffer, continue_size_callback_t&& callback);
+  void submit_write(int file_descriptor, uint64_t offset, std::span<const std::byte> buffer, continue_size_callback_t&& callback);
 
   /**
    * @brief Submit an async fsync operation.
@@ -132,11 +132,11 @@ class io_uring_reactor {
    * @brief Submit an async open operation.
    *
    * @param path Path to the file to open.
-   * @param flags Open flags (e.g., O_RDONLY, O_WRONLY, O_RDWR).
-   * @param mode File permissions.
+   * @param open_mode Open mode.
+   * @param permissions File permissions.
    * @return The index of the registered operation, or invalid_index on failure.
    */
-  void submit_open(const char* path, int flags, int mode, continue_file_callback_t&& callback);
+  void submit_open(const char* path, file_open_mode open_mode, int permissions, continue_file_callback_t&& callback);
 
  private:
   io_uring_reactor() noexcept;
@@ -153,7 +153,7 @@ class io_uring_reactor {
     uint64_t offset = 0;
 
     // Buffer data for read/write operations
-    std::span<uint8_t> buffer_data;
+    std::span<std::byte> buffer_data;
 
     // callback to run after complete
     std::variant<continue_file_callback_t, continue_size_callback_t, continue_void_callback_t> callback;

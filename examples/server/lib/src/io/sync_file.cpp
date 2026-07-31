@@ -75,7 +75,7 @@ expected<sync_file, std::string> sync_file::open(const std::string& path, file_o
 #endif
 }
 
-expected<size_t, std::string> sync_file::read(std::span<uint8_t> buffer) const {
+expected<size_t, std::string> sync_file::read(std::span<std::byte> buffer) const {
   if (_fd == invalid_file_handle) {
     return expected<size_t, std::string>{unexpect, "File is closed"};
   }
@@ -112,7 +112,7 @@ expected<size_t, std::string> sync_file::read(std::span<uint8_t> buffer) const {
 #endif
 }
 
-expected<void, std::string> sync_file::write(std::span<const uint8_t> data) const {
+expected<void, std::string> sync_file::write(std::span<const std::byte> data) const {
   if (_fd == invalid_file_handle) {
     return expected<void, std::string>{unexpect, "File is closed"};
   }

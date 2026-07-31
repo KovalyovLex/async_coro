@@ -57,7 +57,7 @@ class sync_file {
    * @return An expected<size_t, std::string>.
    *         On success, contains the number of bytes read. On failure, contains an error message.
    */
-  [[nodiscard]] expected<size_t, std::string> read(std::span<uint8_t> buffer) const;
+  [[nodiscard]] expected<size_t, std::string> read(std::span<std::byte> buffer) const;
 
   /**
    * @brief Write data to the file.
@@ -66,7 +66,7 @@ class sync_file {
    * @return An expected<void, std::string>.
    *         On success, contains void. On failure, contains an error message.
    */
-  [[nodiscard]] expected<void, std::string> write(std::span<const uint8_t> data) const;
+  [[nodiscard]] expected<void, std::string> write(std::span<const std::byte> data) const;
 
   /**
    * @brief Flush the file to ensure all data is written to disk.
