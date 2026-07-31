@@ -53,7 +53,7 @@ static server::io::socket_type create_client_socket(const char* host, uint16_t p
 
 #if !WIN_SOCKET
   // Close the socket automatically when this process exits
-  fcntl(sock, F_SETFD, FD_CLOEXEC);
+  fcntl(sock, F_SETFD, FD_CLOEXEC);  // NOLINT(*-vararg)
 #endif
 
   sockaddr_in sa{};
@@ -109,14 +109,10 @@ static bool send_all(server::io::socket_type sock, const char* data, size_t len)
 #else
     auto n = ::send(sock, data + sent, len - sent, MSG_NOSIGNAL);
     if (n < 0) {
-#if WIN_SOCKET
-      return false;
-#else
       if (errno == EINTR) {
         continue;
       }
       return false;
-#endif
     }
 #endif
     sent += static_cast<size_t>(n);
@@ -278,7 +274,7 @@ class tcp_server_handle {
 // ============================================================================
 TEST(tcp_server_accept, single_connection_accept) {
   const uint16_t port = find_available_port();
-  ASSERT_NE(port, 0u) << "Failed to find an available port";
+  ASSERT_NE(port, 0U) << "Failed to find an available port";
 
   std::atomic<bool> connection_accepted{false};
 
@@ -331,7 +327,7 @@ TEST(tcp_server_accept, single_connection_accept) {
 // ============================================================================
 TEST(tcp_server_accept, multiple_connections_round_robin) {
   const uint16_t port = find_available_port();
-  ASSERT_NE(port, 0u) << "Failed to find an available port";
+  ASSERT_NE(port, 0U) << "Failed to find an available port";
 
   constexpr int num_clients = 5;
   std::atomic<int> accepted_count{0};
@@ -429,7 +425,7 @@ TEST(tcp_server_accept, multiple_connections_round_robin) {
 // ============================================================================
 TEST(tcp_server_accept, concurrent_client_connections) {
   const uint16_t port = find_available_port();
-  ASSERT_NE(port, 0u) << "Failed to find an available port";
+  ASSERT_NE(port, 0U) << "Failed to find an available port";
 
   constexpr int num_clients = 10;
   std::atomic<int> accepted_count{0};
@@ -483,7 +479,7 @@ TEST(tcp_server_accept, concurrent_client_connections) {
 
   client_threads.reserve(num_clients);
   for (int i = 0; i < num_clients; ++i) {
-    client_threads.emplace_back(std::thread([this_port = port, idx = i, &success_count]() {
+    client_threads.emplace_back([this_port = port, idx = i, &success_count]() -> void {
       auto fd = create_client_socket("127.0.0.1", this_port, std::chrono::seconds{5});
       if (fd < 0) {
         return;
@@ -506,7 +502,7 @@ TEST(tcp_server_accept, concurrent_client_connections) {
       }
 
       close_client_socket(fd);
-    }));
+    });
   }
 
   // Wait for all client threads to complete.
@@ -534,7 +530,7 @@ TEST(tcp_server_accept, concurrent_client_connections) {
 // ============================================================================
 TEST(tcp_server_accept, accept_then_close_gracefully) {
   const uint16_t port = find_available_port();
-  ASSERT_NE(port, 0u) << "Failed to find an available port";
+  ASSERT_NE(port, 0U) << "Failed to find an available port";
 
   std::atomic<bool> connection_accepted{false};
 
@@ -585,7 +581,7 @@ TEST(tcp_server_accept, accept_then_close_gracefully) {
 // ============================================================================
 TEST(tcp_server_accept, rapid_connect_disconnect) {
   const uint16_t port = find_available_port();
-  ASSERT_NE(port, 0u) << "Failed to find an available port";
+  ASSERT_NE(port, 0U) << "Failed to find an available port";
 
   constexpr int num_rapid_clients = 20;
   std::atomic<int> accepted_count{0};
@@ -648,7 +644,7 @@ TEST(tcp_server_accept, rapid_connect_disconnect) {
 // ============================================================================
 TEST(tcp_server_accept, server_termination) {
   const uint16_t port = find_available_port();
-  ASSERT_NE(port, 0u) << "Failed to find an available port";
+  ASSERT_NE(port, 0U) << "Failed to find an available port";
 
   std::atomic<int> accepted_count{0};
 

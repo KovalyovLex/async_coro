@@ -158,7 +158,7 @@ TEST(sync_file_io, seek_moves_position) {
   ASSERT_TRUE(read_result);
   EXPECT_EQ(read_result.value(), static_cast<size_t>(15));  // 20 - 5 = 15
 
-  std::string actual_content(buffer.begin(), buffer.begin() + read_result.value());
+  std::string actual_content(buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(read_result.value()));
   EXPECT_EQ(actual_content, "56789ABCDEFGHIJ");
 
   file.close();
@@ -209,7 +209,7 @@ TEST(sync_file_io, seek_from_end) {
   ASSERT_TRUE(read_result);
   EXPECT_EQ(read_result.value(), static_cast<size_t>(5));
 
-  std::string actual_content(buffer.begin(), buffer.begin() + read_result.value());
+  std::string actual_content(buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(read_result.value()));
   EXPECT_EQ(actual_content, "FGHIJ");
 
   file.close();

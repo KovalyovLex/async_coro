@@ -231,7 +231,7 @@ TEST(io_uring_file_tests, read_empty_file) {
     if (!data_result) {
       co_return -1;
     }
-    EXPECT_EQ(data_result.value().size(), 0u);
+    EXPECT_EQ(data_result.value().size(), 0U);
 
     co_return 0;
   };

@@ -1,13 +1,9 @@
 
+#include <server/io/io_config.h>
+
 #include "utils/has_open_ssl.h"
 
 #if SERVER_HAS_SSL
-#ifdef _WIN32
-// avoid all this windows junk from openssl
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#endif
-
 #include <openssl/ssl.h>
 #endif
 

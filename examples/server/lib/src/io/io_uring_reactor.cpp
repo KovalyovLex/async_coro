@@ -25,7 +25,7 @@ io_uring_reactor::io_uring_reactor() noexcept = default;
 expected<io_uring_reactor, std::string> io_uring_reactor::create(size_t ring_size) noexcept {
   io_uring_reactor reactor;
   reactor._ring_size = ring_size;
-  reactor._local_ring = std::make_unique<request_entry[]>(ring_size);  // NOLINT(cppcoreguidelines-avoid-c-arrays): io_uring requires contiguous heap allocation managed by unique_ptr
+  reactor._local_ring = std::make_unique<request_entry[]>(ring_size);  // NOLINT(*-c-arrays): io_uring requires contiguous heap allocation managed by unique_ptr
   reactor._free_indices.reserve(ring_size);
   reactor._events_to_push.reserve(ring_size);
 

@@ -10,6 +10,7 @@
 #include <atomic>
 #include <charconv>
 #include <chrono>
+#include <cstddef>
 #include <cstring>
 #include <semaphore>
 #include <string>
@@ -54,7 +55,7 @@ static server::io::socket_type create_client_socket(const char* host, uint16_t p
 
 #if !WIN_SOCKET
   // Close the socket automatically when this process exits
-  fcntl(sock, F_SETFD, FD_CLOEXEC);
+  fcntl(sock, F_SETFD, FD_CLOEXEC);  // NOLINT(*vararg*)
 #endif
 
   sockaddr_in sa{};
@@ -113,8 +114,8 @@ static int receive_bytes(server::io::socket_type sock, std::span<std::byte> buf)
   if (buf.empty()) {
     return 0;
   }
-  auto r = ::recv(sock, reinterpret_cast<char*>(buf.data()), static_cast<int>(buf.size()), 0);
-  return r;
+  auto n_bytes = ::recv(sock, reinterpret_cast<char*>(buf.data()), static_cast<int>(buf.size()), 0);
+  return static_cast<int>(n_bytes);
 }
 
 /**
@@ -237,10 +238,10 @@ static std::string_view get_body(std::string_view resp) {
 /**
  * @brief Extract a header value from an HTTP response string.
  */
-static std::optional<std::string> get_header(std::string_view resp, std::string_view header_name) {
+static std::optional<std::string> get_header(std::string_view resp, std::string_view header_name, char delimiter = ':') {  // NOLINT(*swappable*)
   std::string target{header_name};
-  if (target.empty() || target.back() != ':') {
-    target.push_back(':');
+  if (target.empty() || target.back() != delimiter) {
+    target.push_back(delimiter);
   }
   auto pos = resp.find(target);
   if (pos == std::string_view::npos) {
@@ -298,6 +299,7 @@ class http_roundtrip_fixture : public ::testing::Test {
   }
 
  private:
+  // NOLINTBEGIN(*-reference-coroutine-*)
   void setup_routes() {
     // GET /hello — returns "Hello World"
     server.get_router().add_route(server::http1::http_method::Get, "/hello",
@@ -421,6 +423,7 @@ class http_roundtrip_fixture : public ::testing::Test {
                                     co_return;
                                   });
   }
+  // NOLINTEND(*-reference-coroutine-*)
 
   void start_server() {
     std::binary_semaphore sem{0};
@@ -471,6 +474,9 @@ TEST_F(http_roundtrip_fixture, get_request_response) {
 
   auto status = parse_status_code(resp);
   ASSERT_TRUE(status) << "Could not parse status code from response";
+  if (!status.has_value()) {
+    GTEST_FAIL() << "Status check failed";
+  }
   EXPECT_EQ(*status, static_cast<uint16_t>(server::http1::status_code::ok));
 
   auto body = get_body(resp);
@@ -508,6 +514,9 @@ TEST_F(http_roundtrip_fixture, post_with_body) {
 
   auto status = parse_status_code(resp);
   ASSERT_TRUE(status) << "Could not parse status code from response";
+  if (!status.has_value()) {
+    GTEST_FAIL() << "Status check failed";
+  }
   EXPECT_EQ(*status, static_cast<uint16_t>(server::http1::status_code::ok));
 
   auto resp_body = get_body(resp);
@@ -544,6 +553,9 @@ TEST_F(http_roundtrip_fixture, multiple_requests_same_connection) {
 
     auto status = parse_status_code(resp);
     ASSERT_TRUE(status) << "Could not parse status code for request " << i;
+    if (!status.has_value()) {
+      GTEST_FAIL() << "Status check failed for request " << i;
+    }
     EXPECT_EQ(*status, static_cast<uint16_t>(server::http1::status_code::ok));
 
     auto body = get_body(resp);
@@ -641,6 +653,9 @@ TEST_F(http_roundtrip_fixture, error_responses) {
 
   auto status_404 = parse_status_code(resp_404);
   ASSERT_TRUE(status_404) << "Could not parse status code for 404 test";
+  if (!status_404.has_value()) {
+    GTEST_FAIL() << "Status check failed for 404";
+  }
   // The server may return 404 or 501 for unregistered routes; verify it's an error code
   EXPECT_NE(*status_404, static_cast<uint16_t>(server::http1::status_code::ok));
 
@@ -663,6 +678,9 @@ TEST_F(http_roundtrip_fixture, error_responses) {
   if (!resp_405.empty()) {
     auto status_405 = parse_status_code(resp_405);
     ASSERT_TRUE(status_405) << "Could not parse status code for 405 test";
+    if (!status_405.has_value()) {
+      GTEST_FAIL() << "Status check failed for 405";
+    }
     EXPECT_NE(*status_405, static_cast<uint16_t>(server::http1::status_code::ok));
   }
 
@@ -688,7 +706,7 @@ TEST_F(http_roundtrip_fixture, large_response_body) {
   // The server's response::send uses 4KB internal buffers; large bodies
   // require multiple write_buffer calls which can fail with the current
   // test setup. Using ~3KB ensures the entire body + headers fit in one chunk.
-  constexpr size_t k_expected_size = 3 * 1024;  // 3 KB
+  constexpr auto k_expected_size = static_cast<const size_t>(3 * 1024);  // 3 KB
 
   std::string req =
       "GET /data HTTP/1.1\r\n"
@@ -701,12 +719,14 @@ TEST_F(http_roundtrip_fixture, large_response_body) {
   EXPECT_FALSE(resp.empty()) << "Expected non-empty response for large body";
 
   auto status = parse_status_code(resp);
-  ASSERT_TRUE(status) << "Could not parse status code from response";
+  ASSERT_TRUE(status.has_value()) << "Could not parse status code from response";
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): guarded by ASSERT above
   EXPECT_EQ(*status, static_cast<uint16_t>(server::http1::status_code::ok));
 
   // Verify Content-Length header matches expected size
   auto cl_header = get_header(resp, "Content-Length");
-  ASSERT_TRUE(cl_header) << "Expected Content-Length header in response";
+  ASSERT_TRUE(cl_header.has_value()) << "Expected Content-Length header in response";
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): guarded by ASSERT above
   EXPECT_EQ(*cl_header, std::to_string(k_expected_size))
       << "Content-Length should match expected body size of " << k_expected_size;
 

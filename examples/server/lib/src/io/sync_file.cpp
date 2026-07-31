@@ -1,4 +1,5 @@
 #include <server/io/file_open_mode.h>
+#include <server/io/io_config.h>
 #include <server/io/sync_file.h>
 #include <server/utils/expected.h>
 
@@ -7,17 +8,10 @@
 #include <string>
 #include <utility>
 
-#include "server/io/io_config.h"
-
 #if !WIN_SOCKET
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
-#else
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
 #endif
 
 namespace server::io {

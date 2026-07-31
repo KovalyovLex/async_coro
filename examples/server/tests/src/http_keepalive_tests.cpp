@@ -72,7 +72,7 @@ class max_requests_fixture : public http_integration_fixture {
  protected:
   void SetUp() override {
     server_config.keep_alive_timeout = std::chrono::seconds{60};
-    server_config.max_requests = 2u;
+    server_config.max_requests = 2U;
     http_integration_fixture::SetUp();
   }
 };
@@ -81,7 +81,7 @@ class max_one_fixture : public http_integration_fixture {
  protected:
   void SetUp() override {
     server_config.keep_alive_timeout = std::chrono::seconds{60};
-    server_config.max_requests = 1u;
+    server_config.max_requests = 1U;
     http_integration_fixture::SetUp();
   }
 };
@@ -126,7 +126,9 @@ TEST_F(timeout_fixture, keep_alive_header_and_multiple_requests) {
   auto first = send_get(test_client);
   auto header = get_header(first, "Keep-Alive");
   ASSERT_TRUE(header);
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): guarded by ASSERT above
   EXPECT_NE(header->find("timeout="), std::string_view::npos);
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): guarded by ASSERT above
   EXPECT_EQ(header->find("max="), std::string_view::npos);
 
   // verifying first response header is sufficient for timeout behavior
@@ -143,13 +145,17 @@ TEST_F(max_requests_fixture, header_updates_and_close_after_limit) {
   auto first = send_get(test_client);
   auto h1 = get_header(first, "Keep-Alive");
   ASSERT_TRUE(h1);
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): guarded by ASSERT above
   EXPECT_TRUE(h1->find("timeout=60") != std::string_view::npos);
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): guarded by ASSERT above
   EXPECT_TRUE(h1->find("max=1") != std::string_view::npos);
 
   auto second = send_get(test_client);
   auto h2 = get_header(second, "Keep-Alive");
   ASSERT_TRUE(h2);
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): guarded by ASSERT above
   EXPECT_TRUE(h2->find("timeout=60") != std::string_view::npos);
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): guarded by ASSERT above
   EXPECT_TRUE(h2->find("max=0") != std::string_view::npos);
 
   // after second response connection should close; subsequent attempt yields empty
@@ -167,6 +173,7 @@ TEST_F(max_one_fixture, immediate_close_when_max_one) {
   auto resp = send_get(test_client);
   auto hdr = get_header(resp, "Keep-Alive");
   ASSERT_TRUE(hdr);
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): guarded by ASSERT above
   EXPECT_TRUE(hdr->find("max=0") != std::string_view::npos);
 
   // second request should yield no data
