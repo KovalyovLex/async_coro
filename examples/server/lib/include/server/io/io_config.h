@@ -55,7 +55,7 @@ static constexpr socket_type invalid_socket_id = INVALID_SOCKET;
 static const epoll_handle_t invalid_epoll_handle = INVALID_HANDLE_VALUE;
 static const file_handle_t invalid_file_handle = INVALID_HANDLE_VALUE;
 
-static_assert(sizeof(socket_type) == sizeof(file_handle_t), "Wring platform, SDK?");
+static_assert(sizeof(socket_type) == sizeof(file_handle_t), "Wrong platform/SDK?");
 
 #else
 

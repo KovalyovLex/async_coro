@@ -12,7 +12,6 @@
 #include <span>
 #include <string>
 
-
 // Windows socket headers — already included via io_config.h when WIN_SOCKET is defined.
 #if WIN_SOCKET
 #ifndef WIN32_LEAN_AND_MEAN

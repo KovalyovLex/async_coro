@@ -1,5 +1,6 @@
 #include <async_coro/config.h>
 #include <server/io/io_config.h>
+#include <server/io/winsock_init.h>
 #include <server/socket_layer/connection_id.h>
 #include <server/socket_layer/listener.h>
 
@@ -37,16 +38,6 @@
 
 namespace server::socket_layer {
 
-#if WIN_SOCKET
-enum class socket_init_state : uint8_t {
-  not_initialized,
-  initialized,
-  fatal_error
-};
-
-static auto win_sock_init_state = socket_init_state::not_initialized;  // NOLINT(*-non-const-*)
-#endif
-
 static bool set_non_blocking_mode(io::socket_type sock, std::string* error_message) {
 #if WIN_SOCKET
   u_long set_on = 1;
@@ -74,14 +65,18 @@ static bool set_non_blocking_mode(io::socket_type sock, std::string* error_messa
 }
 
 static io::socket_type open_socket_impl(const std::string& ip_address, uint16_t port, bool non_block, std::string* error_message) {  // NOLINT(*-complexity*)
+
 #if WIN_SOCKET
-  if (win_sock_init_state == socket_init_state::fatal_error) {
-    if (error_message != nullptr) {
-      *error_message = "WSAStartup failed";
+  {
+    auto& initialized = server::io::init_winsock();
+    if (!initialized) {
+      if (error_message != nullptr) {
+        *error_message = initialized.error();
+      }
+      return io::invalid_socket_id;
     }
-    return io::invalid_socket_id;
+    ASYNC_CORO_ASSERT(initialized);
   }
-  ASYNC_CORO_ASSERT(win_sock_init_state == socket_init_state::initialized);
 #endif
 
   io::socket_type listen_socket = io::invalid_socket_id;
@@ -233,30 +228,7 @@ static io::socket_type open_socket_impl(const std::string& ip_address, uint16_t 
 
 listener::listener() {
 #if WIN_SOCKET
-  if (win_sock_init_state == socket_init_state::not_initialized) {
-    struct socket_initializer {
-      socket_initializer() {
-        // Start the winsock DLL
-        WSADATA wsaData;
-        WORD wVersionRequested = MAKEWORD(2, 2);
-        const auto err = WSAStartup(wVersionRequested, &wsaData);
-        if (err != 0) {
-          win_sock_init_state = socket_init_state::fatal_error;
-
-#if ASYNC_CORO_COMPILE_WITH_EXCEPTIONS
-          throw std::runtime_error(std::string{"WSAStartup failed with error: "} + std::to_string(err));
-#else
-          std::cerr << "WSAStartup failed with error: " << err << std::endl;
-          return;
-#endif
-        }
-
-        win_sock_init_state = socket_init_state::initialized;
-      }
-    };
-
-    static auto initializer = socket_initializer{};
-  }
+  server::io::init_winsock();
 #endif
 }
 

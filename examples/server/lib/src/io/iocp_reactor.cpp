@@ -28,24 +28,44 @@
 namespace server::io {
 
 // ============================================================================
-// WinSock extension function pointers for AcceptEx / ConnectEx
-// ============================================================================
+// AcceptEx / ConnectEx — cached in _winsock_extensions, queried once during create().
+// No system calls in the hot path.
+// ==============================================================================
 
-using LPFN_ACCEPTEX = BOOL(WSAAPI*)(SOCKET, SOCKET, PVOID, DWORD, DWORD, DWORD, LPDWORD, LPOVERLAPPED);
-using LPFN_CONNECTEX = BOOL(WSAAPI*)(SOCKET, const sockaddr*, int, PVOID, DWORD, LPDWORD, LPOVERLAPPED);
+template <typename OpType>
+void iocp_reactor::dispatch_completion_for_op(DWORD bytes_transferred, bool success, OpType& op) noexcept {
+  // Index recycling is handled by the caller in process_loop.
+  if (!op.callback) {
+    return;
+  }
 
-static bool get_accept_ex_function(SOCKET sock, LPFN_ACCEPTEX& fn) noexcept {
-  GUID guid = WSAID_ACCEPTEX;
-  DWORD bytes = 0;
-  return WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid),
-                  &fn, sizeof(fn), &bytes, nullptr, nullptr) == 0;
-}
-
-static bool get_connect_ex_function(SOCKET sock, LPFN_CONNECTEX& fn) noexcept {
-  GUID guid = WSAID_CONNECTEX;
-  DWORD bytes = 0;
-  return WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid),
-                  &fn, sizeof(fn), &bytes, nullptr, nullptr) == 0;
+  if constexpr (std::is_same_v<OpType, op_read> || std::is_same_v<OpType, op_write> ||
+                std::is_same_v<OpType, op_send_socket> || std::is_same_v<OpType, op_receive_socket>) {
+    if (!success) {
+      op.callback(expected<size_t, std::string>{unexpect, format_windows_error()});
+    } else {
+      op.callback(static_cast<size_t>(bytes_transferred));
+    }
+  } else if constexpr (std::is_same_v<OpType, op_open>) {
+    if (!success) {
+      op.callback(expected<file_handle_t, std::string>{unexpect, format_windows_error()});
+    } else {
+      op.callback(op.fd);
+    }
+  } else if constexpr (std::is_same_v<OpType, op_accept_socket>) {
+    if (!success) {
+      op.callback(expected<socket_type, std::string>{unexpect, format_windows_error()});
+    } else {
+      op.callback(op.accept_socket_fd);
+    }
+  } else if constexpr (std::is_same_v<OpType, op_connect_socket>) {
+    if (!success) {
+      op.callback(expected<void, std::string>{unexpect, format_windows_error()});
+    } else {
+      op.callback(expected<void, std::string>{});
+    }
+  }
+  op.callback = nullptr;
 }
 
 // ============================================================================
@@ -103,10 +123,18 @@ iocp_reactor::iocp_reactor() noexcept = default;
 
 expected<iocp_reactor, std::string> iocp_reactor::create(size_t ring_size) noexcept {
   iocp_reactor reactor;
+
+  // Initialize WinSock and query AcceptEx / ConnectEx (lazy, one-time).
+  auto ws_result = io::init_winsock();
+  if (!ws_result) {
+    return expected<iocp_reactor, std::string>{unexpect, std::move(ws_result).error()};
+  }
+
   reactor._ring_size = ring_size;
   reactor._local_ring = std::make_unique<ring_entry[]>(ring_size);
   reactor._free_indices.reserve(ring_size);
   reactor._events_to_push.reserve(ring_size);
+  reactor._winsock_extensions = *ws_result;
 
   for (size_t i = 0; i < ring_size; ++i) {
     reactor._free_indices.push_back(i);
@@ -135,9 +163,13 @@ iocp_reactor::iocp_reactor(iocp_reactor&& other) noexcept
       _ring_size(other._ring_size),
       _local_ring(std::move(other._local_ring)),
       _free_indices(std::move(other._free_indices)),
-      _events_to_push(std::move(other._events_to_push)) {
+      _events_to_push(std::move(other._events_to_push)),
+      _temp_w_path(std::move(other._temp_w_path)),
+      _winsock_extensions(other._winsock_extensions) {
   other._completion_port = INVALID_HANDLE_VALUE;
   other._ring_size = 0;
+
+  ASYNC_CORO_ASSERT(!other._requests.has_value());
 }
 
 iocp_reactor& iocp_reactor::operator=(iocp_reactor&& other) noexcept {
@@ -152,6 +184,10 @@ iocp_reactor& iocp_reactor::operator=(iocp_reactor&& other) noexcept {
     _local_ring = std::move(other._local_ring);
     _free_indices = std::move(other._free_indices);
     _events_to_push = std::move(other._events_to_push);
+    _temp_w_path = std::move(other._temp_w_path);
+    _winsock_extensions = std::move(other._winsock_extensions);
+
+    ASYNC_CORO_ASSERT(!other._requests.has_value());
 
     other._completion_port = INVALID_HANDLE_VALUE;
     other._ring_size = 0;
@@ -172,7 +208,7 @@ iocp_reactor::~iocp_reactor() noexcept {
 void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT(readability-function-cognitive-complexity): complex but well-structured 4-phase IOCP processing loop
   // Phase 1: Drain atomic_queue into local ring buffer.
   while (!_free_indices.empty()) {
-    request_entry entry;
+    request_variant entry;
     if (!_requests.try_pop(entry)) {
       break;
     }
@@ -189,79 +225,65 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
     _events_to_push.pop_back();
     auto& entry = _local_ring[index];
 
-    DWORD bytes_written = 0;
+    std::visit([&](auto& op) {
+      using op_type = std::decay_t<decltype(op)>;
 
-    switch (entry.request.operation) {
-      case operation_type::receive_data: {
-        // Initialize the OVERLAPPED struct embedded in request_entry.
-        // This guarantees correct lifetime — Windows accesses it asynchronously.
-        entry.overlapped = {};  // Zero-initialize.
-        entry.overlapped.Offset = static_cast<DWORD>(entry.request.offset & 0xFFFFFFFF);
-        entry.overlapped.OffsetHigh = static_cast<DWORD>((entry.request.offset >> 32) & 0xFFFFFFFF);
+      if constexpr (std::is_same_v<op_type, op_read>) {
+        // Initialize the OVERLAPPED struct — guarantees correct lifetime for async I/O.
+        entry.overlapped = {};
+        entry.overlapped.Offset = static_cast<DWORD>(op.offset & 0xFFFFFFFF);
+        entry.overlapped.OffsetHigh = static_cast<DWORD>((op.offset >> 32) & 0xFFFFFFFF);
 
+        DWORD bytes_written = 0;
         BOOL read_result = ReadFile(
-            entry.request.fd,
-            entry.request.buffer_data.data(),
-            static_cast<DWORD>(entry.request.buffer_data.size()),
+            op.fd,
+            op.buffer_data.data(),
+            static_cast<DWORD>(op.buffer_data.size()),
             &bytes_written,
             &entry.overlapped);
 
         if (read_result) {
-          // Synchronous completion — I/O finished immediately.
-          // No completion packet is queued to IOCP; dispatch directly.
-          dispatch_completion(index, bytes_written, true);
+          dispatch_completion_for_op(bytes_written, true, op);
         } else {
           const auto error = GetLastError();
           if (error == ERROR_IO_PENDING) {
-            // Asynchronous pending — will complete via IOCP notification.
-            break;
+            return;  // Asynchronous pending — will complete via IOCP notification.
           } else if (error == ERROR_HANDLE_EOF) {
-            // EOF reached — treat as successful zero-byte read.
-            dispatch_completion(index, 0, true);
+            dispatch_completion_for_op(0, true, op);
           } else {
-            // Actual error — dispatch failure immediately.
-            dispatch_completion(index, 0, false);
+            dispatch_completion_for_op(0, false, op);
           }
         }
         _free_indices.push_back(index);
-        break;
-      }
 
-      case operation_type::send_data: {
-        // Initialize the OVERLAPPED struct embedded in request_entry.
-        entry.overlapped = {};  // Zero-initialize.
-        entry.overlapped.Offset = static_cast<DWORD>(entry.request.offset & 0xFFFFFFFF);
-        entry.overlapped.OffsetHigh = static_cast<DWORD>((entry.request.offset >> 32) & 0xFFFFFFFF);
+      } else if constexpr (std::is_same_v<op_type, op_write>) {
+        entry.overlapped = {};
+        entry.overlapped.Offset = static_cast<DWORD>(op.offset & 0xFFFFFFFF);
+        entry.overlapped.OffsetHigh = static_cast<DWORD>((op.offset >> 32) & 0xFFFFFFFF);
 
+        DWORD bytes_written = 0;
         BOOL write_result = WriteFile(
-            entry.request.fd,
-            entry.request.buffer_data.data(),
-            static_cast<DWORD>(entry.request.buffer_data.size()),
+            op.fd,
+            op.buffer_data.data(),
+            static_cast<DWORD>(op.buffer_data.size()),
             &bytes_written,
             &entry.overlapped);
 
         if (write_result) {
-          // Synchronous completion — I/O finished immediately.
-          // No completion packet is queued to IOCP; dispatch directly.
-          dispatch_completion(index, bytes_written, true);
-
+          dispatch_completion_for_op(bytes_written, true, op);
         } else if (GetLastError() == ERROR_IO_PENDING) {
-          // Asynchronous pending — will complete via IOCP notification.
-          break;
+          return;  // Asynchronous pending.
         } else {
-          // Actual error — dispatch failure immediately.
-          dispatch_completion(index, 0, false);
+          dispatch_completion_for_op(0, false, op);
         }
         _free_indices.push_back(index);
-        break;
-      }
 
-      case operation_type::send_socket: {
-        SOCKET sock = entry.request.socket_fd;
+      } else if constexpr (std::is_same_v<op_type, op_send_socket>) {
+        SOCKET sock = op.socket_fd;
 
         WSABUF wsa_buf;
-        wsa_buf.buf = reinterpret_cast<char*>(entry.request.buffer_data.data());
-        wsa_buf.len = static_cast<ULONG>(entry.request.buffer_data.size());
+        wsa_buf.buf = reinterpret_cast<char*>(op.buffer_data.data());
+        wsa_buf.len = static_cast<ULONG>(op.buffer_data.size());
 
         DWORD bytes_sent = 0;
         DWORD flags = 0;
@@ -272,30 +294,28 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
             &wsa_buf,
             1,
             &bytes_sent,
-            flags,  // lpFlags is DWORD by value
+            flags,
             &entry.overlapped,
-            nullptr);  // no completion routine
+            nullptr);
 
         if (send_result) {
-          dispatch_completion(index, bytes_sent, true);
+          dispatch_completion_for_op(bytes_sent, true, op);
         } else {
           const auto error = GetLastError();
           if (error == ERROR_IO_PENDING) {
-            break;
+            return;
           } else {
-            dispatch_completion(index, 0, false);
+            dispatch_completion_for_op(0, false, op);
           }
         }
         _free_indices.push_back(index);
-        break;
-      }
 
-      case operation_type::receive_socket: {
-        SOCKET sock = entry.request.socket_fd;
+      } else if constexpr (std::is_same_v<op_type, op_receive_socket>) {
+        SOCKET sock = op.socket_fd;
 
         WSABUF wsa_buf;
-        wsa_buf.buf = reinterpret_cast<char*>(entry.request.buffer_data.data());
-        wsa_buf.len = static_cast<ULONG>(entry.request.buffer_data.size());
+        wsa_buf.buf = reinterpret_cast<char*>(op.buffer_data.data());
+        wsa_buf.len = static_cast<ULONG>(op.buffer_data.size());
 
         DWORD bytes_recv = 0;
         DWORD flags = 0;
@@ -306,119 +326,92 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
             &wsa_buf,
             1,
             &bytes_recv,
-            &flags,  // lpFlags is LPDWORD for WSARecv
+            &flags,
             &entry.overlapped,
-            nullptr);  // no completion routine
+            nullptr);
 
         if (recv_result) {
-          dispatch_completion(index, bytes_recv, true);
+          dispatch_completion_for_op(bytes_recv, true, op);
         } else {
           const auto error = GetLastError();
           if (error == ERROR_IO_PENDING) {
-            break;
+            return;
           } else if (error == WSAECONNRESET || error == WSAECONNABORTED) {
-            // Connection reset/abort — treat as EOF (successful close with zero bytes).
-            dispatch_completion(index, 0, true);
+            dispatch_completion_for_op(0, true, op);
           } else {
-            dispatch_completion(index, 0, false);
+            dispatch_completion_for_op(0, false, op);
           }
         }
         _free_indices.push_back(index);
-        break;
-      }
 
-      case operation_type::accept_socket: {
-        SOCKET listen_sock = entry.request.socket_fd;
-        SOCKET accept_sock = entry.request.accept_socket_fd;
-
-        // Get AcceptEx function pointer from the listen socket.
-        LPFN_ACCEPTEX accept_fn = nullptr;
-        if (!get_accept_ex_function(listen_sock, accept_fn)) {
-          dispatch_completion(index, 0, false);
-          _free_indices.push_back(index);
-          break;
-        }
+      } else if constexpr (std::is_same_v<op_type, op_accept_socket>) {
+        SOCKET listen_sock = op.listen_socket_fd;
+        SOCKET accept_sock = op.accept_socket_fd;
 
         entry.overlapped = {};
 
-        // AcceptEx requires the listen socket and accept socket to be in AF_INET or AF_INET6 family.
-        // The local/remote address buffers are packed together: local addr + remote addr + embedded sockaddr_storage.
-        BOOL accept_result = accept_fn(
+        BOOL accept_result = _winsock_extensions.accept_ex(
             listen_sock,
             accept_sock,
-            entry.request.local_address_buffer.data(),
-            static_cast<DWORD>(entry.request.buffer_data.size()),
-            static_cast<DWORD>(entry.request.local_address_buffer.size()),
-            static_cast<DWORD>(entry.request.remote_address_buffer.size()),
-            nullptr,  // bytes_received (output — will be set by IOCP)
+            op.local_address_buffer.data(),
+            static_cast<DWORD>(op.buffer_data.size()),
+            static_cast<DWORD>(op.local_address_buffer.size()),
+            static_cast<DWORD>(op.remote_address_buffer.size()),
+            nullptr,
             &entry.overlapped);
 
         if (accept_result) {
-          dispatch_completion(index, 0, true);
+          dispatch_completion_for_op(0, true, op);
         } else {
           const auto error = GetLastError();
           if (error == ERROR_IO_PENDING) {
-            break;
+            return;
           } else {
-            dispatch_completion(index, 0, false);
+            dispatch_completion_for_op(0, false, op);
           }
         }
         _free_indices.push_back(index);
-        break;
-      }
 
-      case operation_type::connect_socket: {
-        SOCKET sock = entry.request.socket_fd;
-
-        // Get ConnectEx function pointer from the socket.
-        // Requires the socket to be bound to a local address first.
-        LPFN_CONNECTEX connect_fn = nullptr;
-        if (!get_connect_ex_function(sock, connect_fn)) {
-          dispatch_completion(index, 0, false);
-          _free_indices.push_back(index);
-          break;
-        }
+      } else if constexpr (std::is_same_v<op_type, op_connect_socket>) {
+        SOCKET sock = op.socket_fd;
 
         entry.overlapped = {};
 
-        BOOL connect_result = connect_fn(
+        BOOL connect_result = _winsock_extensions.connect_ex(
             sock,
-            reinterpret_cast<const sockaddr*>(entry.request.remote_address.data()),
-            static_cast<int>(entry.request.remote_address.size() / sizeof(std::byte)),
-            nullptr,  // send buffer (none for connect)
-            0,        // send length
-            nullptr,  // bytes_sent (output)
+            reinterpret_cast<const sockaddr*>(op.remote_address.data()),
+            static_cast<int>(op.remote_address.size() / sizeof(std::byte)),
+            nullptr,
+            0,
+            nullptr,
             &entry.overlapped);
 
         if (connect_result) {
-          dispatch_completion(index, 0, true);
+          dispatch_completion_for_op(0, true, op);
         } else {
           const auto error = GetLastError();
           if (error == ERROR_IO_PENDING) {
-            break;
+            return;
           } else {
-            dispatch_completion(index, 0, false);
+            dispatch_completion_for_op(0, false, op);
           }
         }
         _free_indices.push_back(index);
-        break;
-      }
 
-      case operation_type::open_file: {
-        // Convert UTF-8 path to wide string.
-        int wide_len = MultiByteToWideChar(CP_UTF8, 0, entry.request.file_path, -1, nullptr, 0);
+      } else if constexpr (std::is_same_v<op_type, op_open>) {
+        int wide_len = MultiByteToWideChar(CP_UTF8, 0, op.file_path, -1, nullptr, 0);
         if (wide_len <= 0) {
-          dispatch_completion(index, 0, false);
+          dispatch_completion_for_op(0, false, op);
           _free_indices.push_back(index);
-          break;
+          return;
         }
 
         _temp_w_path.resize(wide_len);
-        MultiByteToWideChar(CP_UTF8, 0, entry.request.file_path, -1, _temp_w_path.data(), wide_len);
+        MultiByteToWideChar(CP_UTF8, 0, op.file_path, -1, _temp_w_path.data(), wide_len);
 
         DWORD access = 0;
         DWORD creation_disposition = 0;
-        mode_to_win_flags(entry.request.open_flags, access, creation_disposition);
+        mode_to_win_flags(op.open_flags, access, creation_disposition);
 
         HANDLE file_handle = CreateFileW(
             _temp_w_path.data(),
@@ -426,15 +419,12 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             nullptr,
             creation_disposition,
-            FILE_FLAG_OVERLAPPED,  // Required for async I/O
+            FILE_FLAG_OVERLAPPED,
             nullptr);
 
         if (file_handle == INVALID_HANDLE_VALUE) {
-          dispatch_completion(index, 0, false);
+          dispatch_completion_for_op(0, false, op);
         } else {
-          // Associate the file handle with IOCP BEFORE any overlapped I/O operations.
-          // This is required by Windows - the handle must be registered with the
-          // completion port before ReadFile/WriteFile can use it for async I/O.
           HANDLE iocp_handle = CreateIoCompletionPort(
               file_handle,
               _completion_port,
@@ -442,21 +432,17 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
               0);
 
           if (iocp_handle == nullptr) {
-            // Association failed - close the handle and report error.
-            dispatch_completion(index, 0, false);
-
-            (void)close_file(file_handle);
+            dispatch_completion_for_op(0, false, op);
+            (void)::server::io::close_file(file_handle);
           } else {
-            // Store the handle back into the entry.
-            entry.request.fd = file_handle;
-
-            dispatch_completion(index, 0, true);
+            op.fd = file_handle;
+            dispatch_completion_for_op(0, true, op);
           }
         }
         _free_indices.push_back(index);
-        break;
       }
-    }
+    },
+               entry.request);
   }
 
   // Phase 3: Wait for completion events via GetQueuedCompletionStatus.
@@ -486,17 +472,23 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
       bool op_succeeded = result == TRUE;
 
       // File reads: EOF is treated as success.
-      if (!op_succeeded && entry.request.operation == operation_type::receive_data) {
+      if (!op_succeeded && std::holds_alternative<op_read>(entry.request)) {
         op_succeeded = (GetLastError() == ERROR_HANDLE_EOF);
       }
 
       // Socket receives: connection reset/abort is treated as graceful close.
-      if (!op_succeeded && entry.request.operation == operation_type::receive_socket) {
+      if (!op_succeeded && std::holds_alternative<op_receive_socket>(entry.request)) {
         const auto wsa_error = WSAGetLastError();
         op_succeeded = (wsa_error == WSAECONNRESET || wsa_error == WSAECONNABORTED);
       }
 
-      dispatch_completion(index, bytes_transferred, op_succeeded);
+      std::visit([&](auto& op) {
+        using op_type = std::decay_t<decltype(op)>;
+
+        dispatch_completion_for_op(bytes_transferred, op_succeeded, op);
+      },
+                 entry.request);
+
       _free_indices.push_back(index);
     }
 
@@ -512,87 +504,20 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
 }
 
 // ============================================================================
-// dispatch_completion — invokes callback and recycles index
-// ============================================================================
-
-void iocp_reactor::dispatch_completion(size_t index, DWORD bytes_transferred, bool success) noexcept {
-  auto& entry = _local_ring[index];
-
-  std::string error_msg;
-  if (!success) {
-    error_msg = format_windows_error();
-  }
-
-  std::visit([&](auto& var) {
-    using T = std::decay_t<decltype(var)>;
-
-    if constexpr (std::is_same_v<T, continue_size_callback_t>) {
-      if (!var) {
-        return;
-      }
-      if (!success) {
-        var(expected<size_t, std::string>{unexpect, std::move(error_msg)});
-      } else {
-        var(static_cast<size_t>(bytes_transferred));
-      }
-    } else if constexpr (std::is_same_v<T, continue_file_callback_t>) {
-      if (!var) {
-        return;
-      }
-      if (!success) {
-        var(expected<file_handle_t, std::string>{unexpect, std::move(error_msg)});
-      } else if (entry.request.operation == operation_type::accept_socket) {
-        // For accept operations, return the accept socket (not the listen socket).
-        // Cast socket_type to file_handle_t for the callback.
-        var(expected<file_handle_t, std::string>{
-            reinterpret_cast<file_handle_t>(static_cast<uintptr_t>(entry.request.accept_socket_fd))});
-      } else {
-        var(entry.request.fd);
-      }
-    } else if constexpr (std::is_same_v<T, continue_void_callback_t>) {
-      if (!var) {
-        return;
-      }
-      if (!success) {
-        var(expected<void, std::string>{unexpect, std::move(error_msg)});
-      } else {
-        var(expected<void, std::string>{});
-      }
-    } else {
-      static_assert(async_coro::always_false<T>::value, "Unsupported callback type");
-    }
-  },
-             entry.request.callback);
-
-  // Recycle the index for reuse.
-  _free_indices.push_back(index);
-}
-
-// ============================================================================
 // Submit operations
 // ============================================================================
 
 void iocp_reactor::submit_read(file_handle_t file_descriptor, uint64_t offset, std::span<std::byte> buffer, continue_size_callback_t&& callback) {
-  request_entry entry;
-  entry.fd = file_descriptor;
-  entry.operation = operation_type::receive_data;
-  entry.callback = std::move(callback);
-  entry.buffer_data = buffer;
-  entry.offset = offset;
-
-  _requests.push(std::move(entry));
+  op_read op{file_descriptor, offset, buffer, std::move(callback)};
+  _requests.push(std::move(op));
 }
 
 void iocp_reactor::submit_write(file_handle_t file_descriptor, uint64_t offset, std::span<const std::byte> buffer, continue_size_callback_t&& callback) {
-  request_entry entry;
-  entry.fd = file_descriptor;
-  entry.operation = operation_type::send_data;
-  entry.callback = std::move(callback);
   // IOCP requires mutable buffers for write operations.
-  entry.buffer_data = std::span<std::byte>{const_cast<std::byte*>(buffer.data()), buffer.size()};  // NOLINT(cppcoreguidelines-pro-type-const-cast): Windows API requires non-const buffer pointer
-  entry.offset = offset;
-
-  _requests.push(std::move(entry));
+  op_write op{file_descriptor, offset,
+              std::span<std::byte>{const_cast<std::byte*>(buffer.data()), buffer.size()},  // NOLINT(cppcoreguidelines-pro-type-const-cast): Windows API requires non-const buffer pointer
+              std::move(callback)};
+  _requests.push(std::move(op));
 }
 
 expected<void, std::string> iocp_reactor::flush(file_handle_t file_descriptor) noexcept {
@@ -603,26 +528,48 @@ expected<void, std::string> iocp_reactor::flush(file_handle_t file_descriptor) n
   return expected<void, std::string>{};
 }
 
-expected<void, std::string> iocp_reactor::close(file_handle_t file_descriptor) noexcept {
-  if (!close_file(file_descriptor)) {
+expected<void, std::string> iocp_reactor::close_file(file_handle_t file_descriptor) noexcept {
+  if (!::server::io::close_file(file_descriptor)) {
     return expected<void, std::string>{unexpect, format_windows_error()};
   }
   return expected<void, std::string>{};
 }
 
-void iocp_reactor::submit_open(const char* path, file_open_mode open_mode, continue_file_callback_t&& callback) {
-  request_entry entry;
-  entry.file_path = path;
-  entry.open_flags = open_mode;
-  entry.operation = operation_type::open_file;
-  entry.callback = std::move(callback);
+bool iocp_reactor::cancel_socket_io(socket_type socket_handle) noexcept {
+  if (socket_handle == invalid_socket_id) {
+    return true;
+  }
 
-  _requests.push(std::move(entry));
+  // shutdown(SD_BOTH) aborts both sends and receives, causing any pending
+  // overlapped operations to complete with an error via IOCP.
+  int result = shutdown(socket_handle, SD_BOTH);
+  return result != SOCKET_ERROR;
 }
 
-expected<socket_type, std::string> iocp_reactor::create_socket(socket_kind kind, int protocol) noexcept {
+expected<void, std::string> iocp_reactor::close_socket(socket_type socket_handle) noexcept {
+  if (socket_handle == invalid_socket_id) {
+    return expected<void, std::string>{};
+  }
+
+  // Cancel all pending IO operations first.
+  (void)cancel_socket_io(socket_handle);
+
+  // Then close the socket handle.
+  if (!io::close_socket(socket_handle)) {
+    return expected<void, std::string>{unexpect, format_windows_error()};
+  }
+
+  return expected<void, std::string>{};
+}
+
+void iocp_reactor::submit_open(const char* path, file_open_mode open_mode, continue_file_callback_t&& callback) {
+  op_open op{invalid_file_handle, path, open_mode, std::move(callback)};
+  _requests.push(std::move(op));
+}
+
+expected<socket_type, std::string> iocp_reactor::create_socket(socket_type_id kind, int protocol) noexcept {
   int addr_family = AF_INET;
-  int socket_type_val = (kind == socket_kind::stream) ? SOCK_STREAM : SOCK_DGRAM;
+  int socket_type_val = (kind == socket_type_id::tcp) ? SOCK_STREAM : SOCK_DGRAM;
 
   SOCKET sock = WSASocket(addr_family, socket_type_val, protocol, nullptr, 0, WSA_FLAG_OVERLAPPED);
   if (sock == INVALID_SOCKET) {
@@ -635,7 +582,7 @@ expected<socket_type, std::string> iocp_reactor::create_socket(socket_kind kind,
           _completion_port,
           0,
           0) == nullptr) {
-    closesocket(sock);
+    io::close_socket(sock);
     return expected<socket_type, std::string>{unexpect, std::string("CreateIoCompletionPort failed: ") + format_windows_error()};
   }
 
@@ -668,60 +615,36 @@ expected<void, std::string> iocp_reactor::listen_socket(socket_type socket_handl
 }
 
 void iocp_reactor::submit_send_socket(socket_type socket_handle, std::span<std::byte> buffer, continue_size_callback_t&& callback) {
-  request_entry entry;
-  entry.socket_fd = socket_handle;
-  entry.operation = operation_type::send_socket;
-  entry.callback = std::move(callback);
-  entry.buffer_data = buffer;
-
-  _requests.push(std::move(entry));
+  op_send_socket op{socket_handle, buffer, std::move(callback)};
+  _requests.push(std::move(op));
 }
 
 void iocp_reactor::submit_receive_socket(socket_type socket_handle, std::span<std::byte> buffer, continue_size_callback_t&& callback) {
-  request_entry entry;
-  entry.socket_fd = socket_handle;
-  entry.operation = operation_type::receive_socket;
-  entry.callback = std::move(callback);
-  entry.buffer_data = buffer;
-
-  _requests.push(std::move(entry));
+  op_receive_socket op{socket_handle, buffer, std::move(callback)};
+  _requests.push(std::move(op));
 }
 
 void iocp_reactor::submit_accept_socket(socket_type listen_socket,
                                         std::span<std::byte> local_address_buffer,
                                         std::span<std::byte> remote_address_buffer,
                                         std::span<std::byte> buffer_data,
-                                        continue_file_callback_t&& callback) {
+                                        continue_socket_callback_t&& callback) {
   // Create the accept socket internally.
-  auto accept_sock_result = create_socket(socket_kind::stream, IPPROTO_TCP);
+  auto accept_sock_result = create_socket(socket_type_id::tcp, IPPROTO_TCP);
   if (!accept_sock_result) {
-    // Cannot create accept socket - invoke callback with error immediately.
-    callback(expected<file_handle_t, std::string>{unexpect, std::move(accept_sock_result).error()});
+    callback(expected<socket_type, std::string>{unexpect, std::move(accept_sock_result).error()});
     return;
   }
 
   socket_type accept_sock = accept_sock_result.value();
 
-  request_entry entry;
-  entry.socket_fd = listen_socket;
-  entry.accept_socket_fd = accept_sock;
-  entry.operation = operation_type::accept_socket;
-  entry.callback = std::move(callback);
-  entry.local_address_buffer = local_address_buffer;
-  entry.remote_address_buffer = remote_address_buffer;
-  entry.buffer_data = buffer_data;
-
-  _requests.push(std::move(entry));
+  op_accept_socket op{listen_socket, accept_sock, local_address_buffer, remote_address_buffer, buffer_data, std::move(callback)};
+  _requests.push(std::move(op));
 }
 
 void iocp_reactor::submit_connect_socket(socket_type socket_handle, std::span<const std::byte> remote_address, continue_void_callback_t&& callback) {
-  request_entry entry;
-  entry.socket_fd = socket_handle;
-  entry.operation = operation_type::connect_socket;
-  entry.callback = std::move(callback);
-  entry.remote_address = remote_address;
-
-  _requests.push(std::move(entry));
+  op_connect_socket op{socket_handle, remote_address, std::move(callback)};
+  _requests.push(std::move(op));
 }
 
 }  // namespace server::io

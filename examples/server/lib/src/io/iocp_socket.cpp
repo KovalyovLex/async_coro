@@ -46,8 +46,8 @@ void iocp_socket::close_sync() {
     return;
   }
 
-  // Use close_socket for sockets (calls closesocket on Windows).
-  (void)close_socket(std::exchange(_sock, invalid_socket_id));
+  // Close via reactor to cancel all pending IO operations first.
+  (void)_reactor.close_socket(std::exchange(_sock, invalid_socket_id));
 }
 
 // ============================================================================
@@ -57,7 +57,7 @@ void iocp_socket::close_sync() {
 async_coro::task<expected<iocp_socket, std::string>> iocp_socket::connect_coro(
     iocp_reactor& reactor, const void* remote_address, socklen_t address_length) noexcept {
   // Create a TCP socket via the reactor.
-  auto sock_result = reactor.create_socket(iocp_reactor::socket_kind::stream, IPPROTO_TCP);
+  auto sock_result = reactor.create_socket(socket_type_id::tcp, IPPROTO_TCP);
   if (!sock_result) {
     co_return expected<iocp_socket, std::string>{unexpect, std::move(sock_result).error()};
   }
@@ -75,7 +75,7 @@ async_coro::task<expected<iocp_socket, std::string>> iocp_socket::connect_coro(
           reinterpret_cast<const std::byte*>(&bind_addr),
           sizeof(bind_addr)));
   if (!bind_result) {
-    (void)close_socket(sock);
+    (void)reactor.close_socket(sock);
     co_return expected<iocp_socket, std::string>{unexpect, std::move(bind_result).error()};
   }
 
@@ -91,7 +91,7 @@ async_coro::task<expected<iocp_socket, std::string>> iocp_socket::connect_coro(
       });
 
   if (!result) {
-    (void)close_socket(sock);
+    (void)reactor.close_socket(sock);
     co_return expected<iocp_socket, std::string>{unexpect, std::move(result).error()};
   }
 
@@ -105,18 +105,17 @@ async_coro::task<expected<iocp_socket, std::string>> iocp_socket::connect_coro(
 async_coro::task<expected<iocp_socket, std::string>> iocp_socket::accept_coro(
     iocp_reactor& reactor, socket_type listen_socket) noexcept {
   // Create buffers for local/remote addresses (sockaddr_in is 16 bytes).
-  std::vector<std::byte> local_addr_buf(16);
-  std::vector<std::byte> remote_addr_buf(16);
-  std::vector<std::byte> recv_buf(0);  // Empty receive buffer for AcceptEx
+  std::array<std::byte, 16> local_addr_buf;
+  std::array<std::byte, 16> remote_addr_buf;
 
   // Submit async accept operation (reactor creates the accept socket internally).
-  auto result = co_await async_coro::await_callback_with_result<expected<file_handle_t, std::string>>(
+  auto result = co_await async_coro::await_callback_with_result<expected<socket_type, std::string>>(
       [&](auto cont) {
         reactor.submit_accept_socket(
             listen_socket,
             local_addr_buf,
             remote_addr_buf,
-            recv_buf,
+            {},
             std::move(cont));
       });
 
@@ -124,7 +123,7 @@ async_coro::task<expected<iocp_socket, std::string>> iocp_socket::accept_coro(
     co_return expected<iocp_socket, std::string>{unexpect, std::move(result).error()};
   }
 
-  co_return iocp_socket{reactor, reinterpret_cast<socket_type>(result.value())};
+  co_return iocp_socket{reactor, result.value()};
 }
 
 // ============================================================================
@@ -206,9 +205,10 @@ expected<void, std::string> iocp_socket::close() {
     return expected<void, std::string>{};
   }
 
-  // Use close_socket for sockets (calls closesocket on Windows).
-  if (!close_socket(std::exchange(_sock, invalid_socket_id))) {
-    return expected<void, std::string>{unexpect, iocp_reactor::format_windows_error()};
+  // Close via reactor to cancel all pending IO operations first.
+  auto result = _reactor.close_socket(std::exchange(_sock, invalid_socket_id));
+  if (!result) {
+    return expected<void, std::string>{unexpect, std::move(result).error()};
   }
 
   return expected<void, std::string>{};

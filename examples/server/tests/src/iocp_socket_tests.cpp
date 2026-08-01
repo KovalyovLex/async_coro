@@ -7,6 +7,7 @@
 #include <server/io/iocp_listener.h>
 #include <server/io/iocp_reactor.h>
 #include <server/io/iocp_socket.h>
+#include <server/io/winsock_init.h>
 
 #include <array>
 #include <cstddef>
@@ -28,40 +29,12 @@
 #include "utils/temp_file.h"
 
 // ============================================================================
-// Winsock initialization helper
+// Winsock initialization — single lazy call, reused by reactor and raw socket APIs.
 // ============================================================================
 
-// Global flags for tracking WSAStartup failures (set inside lambda, checked in tests)
-static bool _wsa_startup_failed = false;
-static int _wsa_error_code = 0;
-
-/**
- * @brief Ensure Winsock is initialized before any socket operations.
- *
- * Uses std::call_once to guarantee exactly one WSAStartup call across all tests.
- * This is required because iocp_listener and iocp_socket use raw Winsock APIs
- * without internal initialization.
- */
-static void ensure_winsock_initialized() {
-  static std::once_flag init_flag;
-
-  std::call_once(init_flag, []() {
-    WSADATA wsa_data{};
-    int result = WSAStartup(MAKEWORD(2, 2), &wsa_data);
-    // Note: In test context, we expect success. If this fails, tests will fail.
-    if (result != 0) {
-      // Set a global failure flag that will be checked in tests
-      _wsa_startup_failed = true;
-      _wsa_error_code = result;
-    }
-  });
-}
-
 TEST(iocp_socket_tests, socket_basic_lifecycle) {
-  ensure_winsock_initialized();
-  if (_wsa_startup_failed) {
-    FAIL() << "WSAStartup failed with error code: " << _wsa_error_code;
-  }
+  auto& ws_result = server::io::init_winsock();
+  ASSERT_TRUE(ws_result) << ws_result.error();
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::iocp_reactor::create();
@@ -132,10 +105,8 @@ TEST(iocp_socket_tests, socket_basic_lifecycle) {
 }
 
 TEST(iocp_socket_tests, socket_send_receive_small) {
-  ensure_winsock_initialized();
-  if (_wsa_startup_failed) {
-    FAIL() << "WSAStartup failed with error code: " << _wsa_error_code;
-  }
+  auto& ws_result = server::io::init_winsock();
+  ASSERT_TRUE(ws_result) << ws_result.error();
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::iocp_reactor::create();
@@ -216,10 +187,8 @@ TEST(iocp_socket_tests, socket_send_receive_small) {
 }
 
 TEST(iocp_socket_tests, socket_send_receive_large) {
-  ensure_winsock_initialized();
-  if (_wsa_startup_failed) {
-    FAIL() << "WSAStartup failed with error code: " << _wsa_error_code;
-  }
+  auto& ws_result = server::io::init_winsock();
+  ASSERT_TRUE(ws_result) << ws_result.error();
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::iocp_reactor::create();
@@ -305,10 +274,8 @@ TEST(iocp_socket_tests, socket_send_receive_large) {
 }
 
 TEST(iocp_socket_tests, socket_multiple_messages) {
-  ensure_winsock_initialized();
-  if (_wsa_startup_failed) {
-    FAIL() << "WSAStartup failed with error code: " << _wsa_error_code;
-  }
+  auto& ws_result = server::io::init_winsock();
+  ASSERT_TRUE(ws_result) << ws_result.error();
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::iocp_reactor::create();
@@ -393,10 +360,8 @@ TEST(iocp_socket_tests, socket_multiple_messages) {
 }
 
 TEST(iocp_socket_tests, socket_partial_send) {
-  ensure_winsock_initialized();
-  if (_wsa_startup_failed) {
-    FAIL() << "WSAStartup failed with error code: " << _wsa_error_code;
-  }
+  auto& ws_result = server::io::init_winsock();
+  ASSERT_TRUE(ws_result) << ws_result.error();
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::iocp_reactor::create();
@@ -481,10 +446,8 @@ TEST(iocp_socket_tests, socket_partial_send) {
 }
 
 TEST(iocp_socket_tests, socket_connection_refused) {
-  ensure_winsock_initialized();
-  if (_wsa_startup_failed) {
-    FAIL() << "WSAStartup failed with error code: " << _wsa_error_code;
-  }
+  auto& ws_result = server::io::init_winsock();
+  ASSERT_TRUE(ws_result) << ws_result.error();
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::iocp_reactor::create();
@@ -517,10 +480,8 @@ TEST(iocp_socket_tests, socket_connection_refused) {
 }
 
 TEST(iocp_socket_tests, socket_set_no_delay) {
-  ensure_winsock_initialized();
-  if (_wsa_startup_failed) {
-    FAIL() << "WSAStartup failed with error code: " << _wsa_error_code;
-  }
+  auto& ws_result = server::io::init_winsock();
+  ASSERT_TRUE(ws_result) << ws_result.error();
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::iocp_reactor::create();
@@ -590,10 +551,8 @@ TEST(iocp_socket_tests, socket_set_no_delay) {
 }
 
 TEST(iocp_socket_tests, socket_move_semantics) {
-  ensure_winsock_initialized();
-  if (_wsa_startup_failed) {
-    FAIL() << "WSAStartup failed with error code: " << _wsa_error_code;
-  }
+  auto& ws_result = server::io::init_winsock();
+  ASSERT_TRUE(ws_result) << ws_result.error();
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::iocp_reactor::create();
@@ -673,10 +632,8 @@ TEST(iocp_socket_tests, socket_move_semantics) {
 }
 
 TEST(iocp_socket_tests, listener_open_close) {
-  ensure_winsock_initialized();
-  if (_wsa_startup_failed) {
-    FAIL() << "WSAStartup failed with error code: " << _wsa_error_code;
-  }
+  auto& ws_result = server::io::init_winsock();
+  ASSERT_TRUE(ws_result) << ws_result.error();
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::iocp_reactor::create();
@@ -730,10 +687,8 @@ TEST(iocp_socket_tests, listener_open_close) {
 }
 
 TEST(iocp_socket_tests, socket_echo_server) {
-  ensure_winsock_initialized();
-  if (_wsa_startup_failed) {
-    FAIL() << "WSAStartup failed with error code: " << _wsa_error_code;
-  }
+  auto& ws_result = server::io::init_winsock();
+  ASSERT_TRUE(ws_result) << ws_result.error();
 
   async_coro::scheduler scheduler;
   auto reactor_result = server::io::iocp_reactor::create();

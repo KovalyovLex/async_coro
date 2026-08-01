@@ -7,6 +7,8 @@
 #include <async_coro/utils/unique_function.h>
 #include <server/io/file_open_mode.h>
 #include <server/io/io_config.h>
+#include <server/io/socket_type.h>
+#include <server/io/winsock_init.h>
 #include <server/utils/expected.h>
 
 #include <chrono>
@@ -17,16 +19,6 @@
 #include <string>
 #include <variant>
 #include <vector>
-
-// Windows headers — already included via io_config.h when WIN_SOCKET is defined,
-// but we need additional IOCP-specific symbols.
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
 
 namespace server::io {
 
@@ -59,12 +51,9 @@ class iocp_reactor {
   using continue_file_callback_t = async_coro::unique_function<void(expected<file_handle_t, std::string>)>;
 
   /**
-   * @brief Socket kind enumeration for socket operations.
+   * @brief Callback type for IOCP socket completion events. Returns socket handle or error.
    */
-  enum class socket_kind : uint8_t {
-    stream,    // TCP (SOCK_STREAM)
-    datagram,  // UDP (SOCK_DGRAM)
-  };
+  using continue_socket_callback_t = async_coro::unique_function<void(expected<socket_type, std::string>)>;
 
   /**
    * @brief Factory method to create a new IOCP reactor.
@@ -134,7 +123,34 @@ class iocp_reactor {
    * @return An expected<void, std::string>. On success, contains void.
    *         On failure, contains an error message describing the failure.
    */
-  [[nodiscard]] expected<void, std::string> close(file_handle_t file_descriptor) noexcept;
+  [[nodiscard]] expected<void, std::string> close_file(file_handle_t file_descriptor) noexcept;
+
+  /**
+   * @brief Cancel all pending overlapped IO operations on a socket.
+   *
+   * Calls shutdown(SD_BOTH) to signal both directions are closed. This causes
+   * any pending WSASend/WSARecv/AcceptEx/ConnectEx operations to complete with
+   * an error via the IOCP completion port.
+   *
+   * @param socket_handle The socket to cancel operations on.
+   * @return true if shutdown succeeded or socket was already invalid/closed.
+   * @return false if shutdown failed.
+   */
+  [[nodiscard]] bool cancel_socket_io(socket_type socket_handle) noexcept;
+
+  /**
+   * @brief Synchronously close a socket and cancel all pending IO operations.
+   *
+   * Calls shutdown() to abort any pending send/receive/accept/connect operations,
+   * then calls closesocket() to release the socket handle. Pending overlapped
+   * operations will complete with an error (e.g., WSAECONNRESET) and their
+   * callbacks will be invoked via the normal IOCP completion path.
+   *
+   * @param socket_handle Socket handle to close.
+   * @return An expected<void, std::string>. On success, contains void.
+   *         On failure, contains an error message describing the failure.
+   */
+  [[nodiscard]] expected<void, std::string> close_socket(socket_type socket_handle) noexcept;
 
   /**
    * @brief Submit an async open operation.
@@ -155,7 +171,7 @@ class iocp_reactor {
    * @return An expected<socket_type, std::string>. On success, contains the new socket handle.
    *         On failure, contains an error message describing the creation failure.
    */
-  [[nodiscard]] expected<socket_type, std::string> create_socket(socket_kind kind, int protocol = 0) noexcept;
+  [[nodiscard]] expected<socket_type, std::string> create_socket(socket_type_id kind, int protocol = 0) noexcept;
 
   /**
    * @brief Bind a socket to a local address.
@@ -214,7 +230,7 @@ class iocp_reactor {
                             std::span<std::byte> local_address_buffer,
                             std::span<std::byte> remote_address_buffer,
                             std::span<std::byte> buffer_data,
-                            continue_file_callback_t&& callback);
+                            continue_socket_callback_t&& callback);
 
   /**
    * @brief Submit an async connect operation on a socket.
@@ -235,100 +251,125 @@ class iocp_reactor {
    */
   [[nodiscard]] static std::string format_windows_error() noexcept;
 
-  /**
-   * @brief Convert a wide string (UTF-16) to UTF-8.
-   * @param wide The wide string to convert.
-   * @return The UTF-8 encoded string.
-   */
-  [[nodiscard]] static std::string wide_to_utf8(const wchar_t* wide, int length) noexcept;
-
  private:
   iocp_reactor() noexcept;
 
+  [[nodiscard]] static std::string wide_to_utf8(const wchar_t* wide, int length) noexcept;
+
   /**
-   * @brief Dispatch a completed request entry to its callback.
+   * @brief Dispatch completion for a known operation type (used in process_loop submit phase).
    *
-   * Handles the variant callback type and converts the result to expected<T>.
-   * Recycles the index back into _free_indices for reuse.
-   * @param index The index in _local_ring of the completed entry.
-   * @param bytes_transferred Number of bytes transferred (0 on error).
-   * @param success Whether the operation succeeded.
+   * Invokes the callback directly without std::visit since the operation type is already known.
+   * Template parameter T is the specific operation struct type (e.g., op_read, op_write).
    */
-  void dispatch_completion(size_t index, DWORD bytes_transferred, bool success) noexcept;
+  template <typename OpType>
+  void dispatch_completion_for_op(DWORD bytes_transferred, bool success, OpType& op) noexcept;
 
  private:
-  enum class operation_type : uint8_t {
-    none,
-    send_data,       // file write
-    receive_data,    // file read
-    open_file,       // file open
-    send_socket,     // WSASend for sockets
-    receive_socket,  // WSARecv for sockets
-    accept_socket,   // AcceptEx for listening sockets
-    connect_socket,  // ConnectEx for client connections
+  /**
+   * @brief Async file read operation.
+   *
+   * Reads data from a file handle at the specified offset using overlapped I/O.
+   */
+  struct op_read {
+    file_handle_t fd = invalid_file_handle;
+    uint64_t offset = 0;
+    std::span<std::byte> buffer_data;
+    continue_size_callback_t callback;
   };
 
   /**
-   * @brief A request entry stored in the atomic_queue or local ring.
+   * @brief Async file write operation.
    *
-   * Holds all request data by value — no heap allocation per request.
-   * Callbacks live here in the atomic_queue until dispatched to _local_ring.
-   *
-   * @note The OVERLAPPED struct is embedded here to ensure it remains valid
-   *       for the lifetime of the overlapped I/O operation. Windows will access
-   *       this struct asynchronously via the worker thread completion handler.
+   * Writes data to a file handle at the specified offset using overlapped I/O.
    */
-  struct request_entry {
-    /** Offset in file to read from/to. */
-    uint64_t offset = 0;
-
-    /** Buffer data for read/write operations. */
-    std::span<std::byte> buffer_data;
-
-    /** Callback to run after completion. */
-    std::variant<continue_file_callback_t, continue_size_callback_t, continue_void_callback_t> callback;
-
-    /** Path data for open operations (UTF-8 encoded). */
-    const char* file_path = nullptr;
-    file_open_mode open_flags = file_open_mode::append;
-
-    /** File handle (for file operations). */
+  struct op_write {
     file_handle_t fd = invalid_file_handle;
-
-    /** Socket handle (for socket operations). */
-    socket_type socket_fd = invalid_socket_id;
-
-    /** Socket kind (for socket operations). */
-    socket_kind sock_kind = socket_kind::stream;
-
-    /** Operation type. */
-    operation_type operation = operation_type::none;
-
-    // --- Socket-specific fields ---
-
-    /** Pre-created accept socket handle (for accept operations). */
-    socket_type accept_socket_fd = invalid_socket_id;
-
-    /** Buffer for local sockaddr (accept operations). */
-    std::span<std::byte> local_address_buffer;
-
-    /** Buffer for remote sockaddr (accept operations). */
-    std::span<std::byte> remote_address_buffer;
-
-    /** Destination address for connect operations. */
-    std::span<const std::byte> remote_address;
+    uint64_t offset = 0;
+    std::span<std::byte> buffer_data;  // cast from const for Windows API
+    continue_size_callback_t callback;
   };
 
-  struct ring_entry {
-    request_entry request;
+  /**
+   * @brief Async file open operation.
+   *
+   * Opens a file with FILE_FLAG_OVERLAPPED and associates it with the IOCP port.
+   */
+  struct op_open {
+    file_handle_t fd = invalid_file_handle;
+    const char* file_path = nullptr;
+    file_open_mode open_flags = file_open_mode::append;
+    continue_file_callback_t callback;
+  };
 
-    /**
-     * @brief Overlapped I/O state for async operations.
-     *
-     * This OVERLAPPED struct must remain valid from the time ReadFile/WriteFile
-     * is called until the worker thread processes the completion event. By storing
-     * it here in _local_ring, we guarantee the correct lifetime.
-     */
+  /**
+   * @brief Async socket send operation.
+   *
+   * Sends data using WSASend with overlapped I/O.
+   */
+  struct op_send_socket {
+    socket_type socket_fd = invalid_socket_id;
+    std::span<std::byte> buffer_data;
+    continue_size_callback_t callback;
+  };
+
+  /**
+   * @brief Async socket receive operation.
+   *
+   * Receives data using WSARecv with overlapped I/O.
+   */
+  struct op_receive_socket {
+    socket_type socket_fd = invalid_socket_id;
+    std::span<std::byte> buffer_data;
+    continue_size_callback_t callback;
+  };
+
+  /**
+   * @brief Async socket accept operation.
+   *
+   * Accepts a connection using AcceptEx with overlapped I/O.
+   * Creates an accept socket internally and associates it with the IOCP port.
+   */
+  struct op_accept_socket {
+    socket_type listen_socket_fd = invalid_socket_id;
+    socket_type accept_socket_fd = invalid_socket_id;
+    std::span<std::byte> local_address_buffer;
+    std::span<std::byte> remote_address_buffer;
+    std::span<std::byte> buffer_data;  // extra receive buffer for client data
+    continue_socket_callback_t callback;
+  };
+
+  /**
+   * @brief Async socket connect operation.
+   *
+   * Connects a client socket using ConnectEx with overlapped I/O.
+   */
+  struct op_connect_socket {
+    socket_type socket_fd = invalid_socket_id;
+    std::span<const std::byte> remote_address;
+    continue_void_callback_t callback;
+  };
+
+  /**
+   * @brief Variant holding all possible IOCP operation types.
+   *
+   * Each operation type is a struct containing only the fields it needs,
+   * eliminating the need for an explicit operation_type enum and reducing
+   * wasted space in request_entry.
+   */
+  using request_variant = std::variant<op_read, op_write, op_open,
+                                       op_send_socket, op_receive_socket,
+                                       op_accept_socket, op_connect_socket>;
+
+  /**
+   * @brief A ring buffer entry combining a request variant with its OVERLAPPED state.
+   *
+   * The OVERLAPPED struct must remain valid from the time the I/O call is made
+   * until the worker thread processes the completion event. By storing it here
+   * in _local_ring, we guarantee the correct lifetime.
+   */
+  struct ring_entry {
+    request_variant request;
     OVERLAPPED overlapped{};
   };
 
@@ -364,9 +405,11 @@ class iocp_reactor {
    *
    * Submit threads push entries here. Worker threads drain them.
    */
-  async_coro::atomic_queue<request_entry> _requests;
+  async_coro::atomic_queue<request_variant> _requests;
 
   std::vector<wchar_t> _temp_w_path;
+
+  winsock_extensions _winsock_extensions{};
 };
 
 }  // namespace server::io

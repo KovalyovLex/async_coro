@@ -41,7 +41,7 @@ iocp_listener::~iocp_listener() {
 
 expected<void, std::string> iocp_listener::open(std::string_view ip_address, uint16_t port) {
   // Create a TCP socket via the reactor.
-  auto sock_result = _reactor.create_socket(iocp_reactor::socket_kind::stream, IPPROTO_TCP);
+  auto sock_result = _reactor.create_socket(socket_type_id::tcp, IPPROTO_TCP);
   if (!sock_result) {
     return expected<void, std::string>{unexpect, std::move(sock_result).error()};
   }
@@ -57,7 +57,7 @@ expected<void, std::string> iocp_listener::open(std::string_view ip_address, uin
       reinterpret_cast<const char*>(&reuse_addr),
       sizeof(reuse_addr));
   if (result == SOCKET_ERROR) {
-    (void)close_socket(sock);
+    (void)_reactor.close_socket(sock);
     return expected<void, std::string>{unexpect, std::string("setsockopt(SO_REUSEADDR) failed: ") + iocp_reactor::format_windows_error()};
   }
 
@@ -66,7 +66,7 @@ expected<void, std::string> iocp_listener::open(std::string_view ip_address, uin
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
   if (inet_pton(AF_INET, ip_address.data(), &addr.sin_addr) != 1) {
-    (void)close_socket(sock);
+    (void)_reactor.close_socket(sock);
     return expected<void, std::string>{unexpect, "inet_pton failed: invalid IP address"};
   }
 
@@ -77,14 +77,14 @@ expected<void, std::string> iocp_listener::open(std::string_view ip_address, uin
           reinterpret_cast<const std::byte*>(&addr),
           sizeof(addr)));
   if (!bind_result) {
-    (void)close_socket(sock);
+    (void)_reactor.close_socket(sock);
     return expected<void, std::string>{unexpect, std::move(bind_result).error()};
   }
 
   // Listen with default backlog.
   auto listen_result = _reactor.listen_socket(sock, SOMAXCONN);
   if (!listen_result) {
-    (void)close_socket(sock);
+    (void)_reactor.close_socket(sock);
     return expected<void, std::string>{unexpect, std::move(listen_result).error()};
   }
 
@@ -103,31 +103,30 @@ async_coro::task<expected<iocp_socket, std::string>> iocp_listener::accept() {
 
   // Create buffers for local and remote addresses.
   // AcceptEx requires each address buffer to have extra space beyond sizeof(sockaddr_in).
-  // The layout is: [local_addr][remote_addr][recv_data] in a single contiguous buffer.
   // We need at least sizeof(sockaddr_in) + 16 bytes for each address.
   constexpr size_t k_addr_len = sizeof(sockaddr_in) + 16;
-  constexpr size_t k_recv_len = 0;  // No extra receive data
 
   // Single contiguous buffer: local_addr + remote_addr + recv_data
-  std::vector<std::byte> recv_buf(k_addr_len * 2 + k_recv_len);
+  std::array<std::byte, k_addr_len> local_recv_buf;
+  std::array<std::byte, k_addr_len> remote_recv_buf;
 
   // Submit async accept operation (reactor creates the accept socket internally).
-  auto result = co_await async_coro::await_callback_with_result<expected<file_handle_t, std::string>>(
-      [this, &recv_buf](auto cont) {
+  auto result = co_await async_coro::await_callback_with_result<expected<socket_type, std::string>>(
+      [&](auto cont) {
         // Local address starts at offset 0, remote address starts after local address
         _reactor.submit_accept_socket(
             _sock,
-            std::span(recv_buf.data(), k_addr_len),                   // local address buffer
-            std::span(recv_buf.data() + k_addr_len, k_addr_len),      // remote address buffer
-            std::span(recv_buf.data() + k_addr_len * 2, k_recv_len),  // extra receive buffer
-            std::move(cont));                                         // callback
+            local_recv_buf,    // local address buffer
+            remote_recv_buf,   // remote address buffer
+            {},                // extra receive buffer
+            std::move(cont));  // callback
       });
 
   if (!result) {
     co_return expected<iocp_socket, std::string>{unexpect, std::move(result.error())};
   }
 
-  co_return iocp_socket{_reactor, reinterpret_cast<socket_type>(result.value())};
+  co_return iocp_socket{_reactor, result.value()};
 }
 
 // ============================================================================
@@ -139,10 +138,10 @@ expected<void, std::string> iocp_listener::close() {
     return expected<void, std::string>{};
   }
 
-  SOCKET sock = std::exchange(_sock, invalid_socket_id);
-  if (closesocket(sock) == SOCKET_ERROR) {
-    return expected<void, std::string>{unexpect, std::string("closesocket failed: ") +
-                                                     iocp_reactor::format_windows_error()};
+  // Close via reactor to cancel all pending IO operations (e.g., in-flight accepts).
+  auto result = _reactor.close_socket(std::exchange(_sock, invalid_socket_id));
+  if (!result) {
+    return expected<void, std::string>{unexpect, std::move(result).error()};
   }
 
   return expected<void, std::string>{};

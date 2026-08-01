@@ -47,7 +47,7 @@ void iocp_file::close_sync() noexcept {
     return;
   }
 
-  auto val = _reactor.close(std::exchange(_fd, invalid_file_handle));
+  auto val = _reactor.close_file(std::exchange(_fd, invalid_file_handle));
 
   ASYNC_CORO_ASSERT(val);
 }
@@ -155,7 +155,7 @@ expected<void, std::string> iocp_file::close() {
     return expected<void, std::string>{};
   }
 
-  return _reactor.close(std::exchange(_fd, invalid_file_handle));
+  return _reactor.close_file(std::exchange(_fd, invalid_file_handle));
 }
 
 // ============================================================================
