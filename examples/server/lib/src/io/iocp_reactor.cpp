@@ -1,5 +1,8 @@
-#include <async_coro/config.h>
 #include <server/io/iocp_reactor.h>
+
+#if WIN_IOCP_ENABLED
+
+#include <async_coro/config.h>
 #include <server/utils/expected.h>
 
 #include <cstddef>
@@ -10,26 +13,6 @@
 #include <type_traits>
 #include <variant>
 #include <vector>
-
-#if WIN_IOCP_ENABLED
-
-// POSIX-style open flags for Windows compatibility layer.
-// These match the flags used by io_uring_file and sync_file on Linux.
-#ifndef O_RDONLY
-#define O_RDONLY 0x0000
-#endif
-#ifndef O_RDWR
-#define O_RDWR 0x0002
-#endif
-#ifndef O_WRONLY
-#define O_WRONLY 0x0001
-#endif
-#ifndef O_CREAT
-#define O_CREAT 0x0100
-#endif
-#ifndef O_TRUNC
-#define O_TRUNC 0x0400
-#endif
 
 namespace server::io {
 
@@ -75,9 +58,8 @@ std::string iocp_reactor::wide_to_utf8(const wchar_t* wide, int length) noexcept
   }
 
   std::string utf8;
-  utf8.resize(static_cast<size_t>(utf8_len) + 1);
+  utf8.resize(static_cast<size_t>(utf8_len));
   WideCharToMultiByte(CP_UTF8, 0, wide, length, utf8.data(), utf8_len, nullptr, nullptr);
-  utf8[utf8_len] = '\0';
   return utf8;
 }
 
@@ -172,9 +154,9 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
   // Phase 2: Submit overlapped I/O operations.
   while (!_events_to_push.empty()) {
     const auto index = _events_to_push.back();
+    _events_to_push.pop_back();
     auto& entry = _local_ring[index];
 
-    bool success = false;
     DWORD bytes_written = 0;
 
     switch (entry.request.operation) {
@@ -184,8 +166,6 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
         entry.overlapped = {};  // Zero-initialize.
         entry.overlapped.Offset = static_cast<DWORD>(entry.request.offset & 0xFFFFFFFF);
         entry.overlapped.OffsetHigh = static_cast<DWORD>((entry.request.offset >> 32) & 0xFFFFFFFF);
-        // Store index in hEvent for worker thread to retrieve on completion.
-        entry.overlapped.hEvent = reinterpret_cast<HANDLE>(index);
 
         BOOL read_result = ReadFile(
             entry.request.fd,
@@ -194,9 +174,24 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
             &bytes_written,
             &entry.overlapped);
 
-        if (read_result || GetLastError() == ERROR_IO_PENDING) {
-          success = true;
+        if (read_result) {
+          // Synchronous completion — I/O finished immediately.
+          // No completion packet is queued to IOCP; dispatch directly.
+          dispatch_completion(index, bytes_written, true);
+        } else {
+          const auto error = GetLastError();
+          if (error == ERROR_IO_PENDING) {
+            // Asynchronous pending — will complete via IOCP notification.
+            break;
+          } else if (error == ERROR_HANDLE_EOF) {
+            // EOF reached — treat as successful zero-byte read.
+            dispatch_completion(index, 0, true);
+          } else {
+            // Actual error — dispatch failure immediately.
+            dispatch_completion(index, 0, false);
+          }
         }
+        _free_indices.push_back(index);
         break;
       }
 
@@ -205,7 +200,6 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
         entry.overlapped = {};  // Zero-initialize.
         entry.overlapped.Offset = static_cast<DWORD>(entry.request.offset & 0xFFFFFFFF);
         entry.overlapped.OffsetHigh = static_cast<DWORD>((entry.request.offset >> 32) & 0xFFFFFFFF);
-        entry.overlapped.hEvent = reinterpret_cast<HANDLE>(index);
 
         BOOL write_result = WriteFile(
             entry.request.fd,
@@ -214,9 +208,19 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
             &bytes_written,
             &entry.overlapped);
 
-        if (write_result || GetLastError() == ERROR_IO_PENDING) {
-          success = true;
+        if (write_result) {
+          // Synchronous completion — I/O finished immediately.
+          // No completion packet is queued to IOCP; dispatch directly.
+          dispatch_completion(index, bytes_written, true);
+
+        } else if (GetLastError() == ERROR_IO_PENDING) {
+          // Asynchronous pending — will complete via IOCP notification.
+          break;
+        } else {
+          // Actual error — dispatch failure immediately.
+          dispatch_completion(index, 0, false);
         }
+        _free_indices.push_back(index);
         break;
       }
 
@@ -225,9 +229,8 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
         int wide_len = MultiByteToWideChar(CP_UTF8, 0, entry.request.file_path, -1, nullptr, 0);
         if (wide_len <= 0) {
           dispatch_completion(index, 0, false);
-          _events_to_push.pop_back();
           _free_indices.push_back(index);
-          continue;
+          break;
         }
 
         _temp_w_path.resize(wide_len);
@@ -249,23 +252,31 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
         if (file_handle == INVALID_HANDLE_VALUE) {
           dispatch_completion(index, 0, false);
         } else {
-          // Store the handle back into the entry.
-          entry.request.fd = file_handle;
-          dispatch_completion(index, 0, true);
+          // Associate the file handle with IOCP BEFORE any overlapped I/O operations.
+          // This is required by Windows - the handle must be registered with the
+          // completion port before ReadFile/WriteFile can use it for async I/O.
+          HANDLE iocp_handle = CreateIoCompletionPort(
+              file_handle,
+              _completion_port,
+              0,
+              0);
+
+          if (iocp_handle == nullptr) {
+            // Association failed - close the handle and report error.
+            dispatch_completion(index, 0, false);
+
+            (void)close_file(file_handle);
+          } else {
+            // Store the handle back into the entry.
+            entry.request.fd = file_handle;
+
+            dispatch_completion(index, 0, true);
+          }
         }
-        _events_to_push.pop_back();
         _free_indices.push_back(index);
-        continue;
+        break;
       }
     }
-
-    if (success) {
-      // Associate the file handle with the completion port so worker threads
-      // can receive completion notifications.
-      CreateIoCompletionPort(entry.request.fd, _completion_port, static_cast<ULONG_PTR>(index), 0);
-    }
-
-    _events_to_push.pop_back();
   }
 
   // Phase 3: Wait for completion events via GetQueuedCompletionStatus.
@@ -281,32 +292,29 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
       static_cast<DWORD>(max_wait.count()));
 
   // Phase 4: Process completed operations.
-  // GetQueuedCompletionStatus returns TRUE on success, FALSE on timeout/error.
+  // GetQueuedCompletionStatus returns TRUE on success, FALSE on timeout/error in queue operation or I\O operation.
   // Even on timeout, there might be completions available.
-  if (overlapped_ptr != nullptr || !result) {
-    while (overlapped_ptr != nullptr) {
-      // Retrieve the index from the OVERLAPPED struct's hEvent field.
-      const size_t index = static_cast<size_t>(
-          reinterpret_cast<uintptr_t>(overlapped_ptr->hEvent));  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast): retrieving stored index from OVERLAPPED.hEvent
+  while (overlapped_ptr != nullptr) {
+    // Retrieve the index from the OVERLAPPED struct's hEvent field.
+    const size_t index = (reinterpret_cast<const char*>(overlapped_ptr) - reinterpret_cast<const char*>(&_local_ring[0].overlapped)) / sizeof(ring_entry);  // NOLINT(*-reinterpret-cast)
+    ASYNC_CORO_ASSERT(index < _ring_size);
 
-      if (index < _ring_size) {
-        auto& entry = _local_ring[index];
-        const bool success = (result != FALSE);
-        dispatch_completion(index, bytes_transferred, success);
-      }
-
-      // Check for more completions without blocking.
-      BOOL more_result = GetQueuedCompletionStatus(
-          _completion_port,
-          &bytes_transferred,
-          &completion_key,
-          &overlapped_ptr,
-          0);  // 0ms timeout = non-blocking peek
-
-      if (!more_result && overlapped_ptr == nullptr) {
-        break;
-      }
+    if (index < _ring_size) {
+      auto& entry = _local_ring[index];
+      // read with EOF count successful
+      const auto op_succeeded = result == TRUE || (entry.request.operation == operation_type::receive_data && GetLastError() == ERROR_HANDLE_EOF);
+      dispatch_completion(index, bytes_transferred, op_succeeded);
+      _free_indices.push_back(index);
     }
+
+    // Check for more completions without blocking.
+    overlapped_ptr = nullptr;
+    result = GetQueuedCompletionStatus(
+        _completion_port,
+        &bytes_transferred,
+        &completion_key,
+        &overlapped_ptr,
+        0);  // 0ms timeout = non-blocking peek
   }
 }
 
@@ -366,7 +374,7 @@ void iocp_reactor::dispatch_completion(size_t index, DWORD bytes_transferred, bo
 // Submit operations
 // ============================================================================
 
-void iocp_reactor::submit_read(file_handle_t file_descriptor, uint64_t offset, std::span<std::byte> buffer, continue_size_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters): order matches POSIX read(fd, buf, len) semantics
+void iocp_reactor::submit_read(file_handle_t file_descriptor, uint64_t offset, std::span<std::byte> buffer, continue_size_callback_t&& callback) {
   request_entry entry;
   entry.fd = file_descriptor;
   entry.operation = operation_type::receive_data;
@@ -377,7 +385,7 @@ void iocp_reactor::submit_read(file_handle_t file_descriptor, uint64_t offset, s
   _requests.push(std::move(entry));
 }
 
-void iocp_reactor::submit_write(file_handle_t file_descriptor, uint64_t offset, std::span<const std::byte> buffer, continue_size_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters): order matches POSIX write(fd, buf, len) semantics
+void iocp_reactor::submit_write(file_handle_t file_descriptor, uint64_t offset, std::span<const std::byte> buffer, continue_size_callback_t&& callback) {
   request_entry entry;
   entry.fd = file_descriptor;
   entry.operation = operation_type::send_data;
@@ -398,14 +406,13 @@ expected<void, std::string> iocp_reactor::flush(file_handle_t file_descriptor) n
 }
 
 expected<void, std::string> iocp_reactor::close(file_handle_t file_descriptor) noexcept {
-  BOOL close_result = CloseHandle(file_descriptor);
-  if (!close_result) {
+  if (!close_file(file_descriptor)) {
     return expected<void, std::string>{unexpect, format_windows_error()};
   }
   return expected<void, std::string>{};
 }
 
-void iocp_reactor::submit_open(const char* path, file_open_mode open_mode, continue_file_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters): order matches POSIX open(path, flags, mode) semantics
+void iocp_reactor::submit_open(const char* path, file_open_mode open_mode, continue_file_callback_t&& callback) {
   request_entry entry;
   entry.file_path = path;
   entry.open_flags = open_mode;

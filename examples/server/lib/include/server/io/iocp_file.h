@@ -52,7 +52,7 @@ class iocp_file {
   iocp_file& operator=(const iocp_file&) = delete;
 
   // Movable - ownership of the file handle transfers; reactor reference is preserved.
-  ~iocp_file();
+  ~iocp_file() noexcept;
   iocp_file(iocp_file&& other) noexcept;
   iocp_file& operator=(iocp_file&& other) noexcept;
 

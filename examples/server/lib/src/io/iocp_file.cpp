@@ -21,7 +21,7 @@ iocp_file::iocp_file(iocp_reactor& reactor, file_handle_t file_descriptor) noexc
   // The fd is already opened via IOCP in iocp_file::open_coro.
 }
 
-iocp_file::~iocp_file() {
+iocp_file::~iocp_file() noexcept {
   close_sync();
 }
 
@@ -43,7 +43,7 @@ iocp_file& iocp_file::operator=(iocp_file&& other) noexcept {
 }
 
 void iocp_file::close_sync() noexcept {
-  if (_fd == invalid_file_handle) {
+  if (is_closed()) {
     return;
   }
 
@@ -74,7 +74,7 @@ async_coro::task<expected<iocp_file, std::string>> iocp_file::open_coro(iocp_rea
 // ============================================================================
 
 async_coro::task<expected<size_t, std::string>> iocp_file::read(std::span<std::byte> buffer) {
-  if (_fd == invalid_file_handle) {
+  if (is_closed()) {
     co_return expected<size_t, std::string>{unexpect, "File is closed"};
   }
 
@@ -92,6 +92,9 @@ async_coro::task<expected<size_t, std::string>> iocp_file::read(std::span<std::b
     }
 
     const auto read = result.value();
+    if (read == 0) {
+      break;  // EOF reached
+    }
     _seek_cur += read;
     total_bytes_read += read;
     current_buffer = current_buffer.subspan(read);
@@ -105,7 +108,7 @@ async_coro::task<expected<size_t, std::string>> iocp_file::read(std::span<std::b
 // ============================================================================
 
 async_coro::task<expected<void, std::string>> iocp_file::write(std::span<const std::byte> data) {
-  if (_fd == invalid_file_handle) {
+  if (is_closed()) {
     co_return expected<void, std::string>{unexpect, "File is closed"};
   }
 
@@ -114,8 +117,7 @@ async_coro::task<expected<void, std::string>> iocp_file::write(std::span<const s
 
   while (total_bytes_written < data.size()) {
     // Submit async write operation.
-    using write_callback = async_coro::internal::await_continue_callback<expected<size_t, std::string>>;
-    auto result = co_await async_coro::await_callback_with_result<expected<size_t, std::string>>([this, &current_data](write_callback cont) {
+    auto result = co_await async_coro::await_callback_with_result<expected<size_t, std::string>>([this, &current_data](auto cont) {
       _reactor.submit_write(_fd, _seek_cur, current_data, std::move(cont));
     });
 
@@ -137,7 +139,7 @@ async_coro::task<expected<void, std::string>> iocp_file::write(std::span<const s
 // ============================================================================
 
 expected<void, std::string> iocp_file::flush() {
-  if (_fd == invalid_file_handle) {
+  if (is_closed()) {
     return expected<void, std::string>{unexpect, "File is closed"};
   }
 
@@ -149,7 +151,7 @@ expected<void, std::string> iocp_file::flush() {
 // ============================================================================
 
 expected<void, std::string> iocp_file::close() {
-  if (_fd == invalid_file_handle) {
+  if (is_closed()) {
     return expected<void, std::string>{};
   }
 
@@ -161,7 +163,7 @@ expected<void, std::string> iocp_file::close() {
 // ============================================================================
 
 expected<size_t, std::string> iocp_file::get_size() const {
-  if (_fd == invalid_file_handle) {
+  if (is_closed()) {
     return expected<size_t, std::string>{unexpect, "File is closed"};
   }
 
@@ -175,7 +177,7 @@ expected<size_t, std::string> iocp_file::get_size() const {
 }
 
 expected<uint64_t, std::string> iocp_file::seek(uint64_t offset) {
-  if (_fd == invalid_file_handle) {
+  if (is_closed()) {
     return expected<uint64_t, std::string>{unexpect, "File is closed"};
   }
 
@@ -184,7 +186,7 @@ expected<uint64_t, std::string> iocp_file::seek(uint64_t offset) {
 }
 
 async_coro::task<expected<std::vector<std::byte>, std::string>> iocp_file::read_all() {
-  if (_fd == invalid_file_handle) {
+  if (is_closed()) {
     co_return expected<std::vector<std::byte>, std::string>{unexpect, "File is closed"};
   }
 

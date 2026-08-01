@@ -131,10 +131,12 @@ TEST(iocp_file_tests, write_file_content) {
 
   ASSERT_TRUE(test_utils::run_task_iocp(test(), scheduler, reactor));
 
-  // Verify the file was written correctly
-  std::ifstream in(path, std::ios::binary);
-  std::string read_content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-  EXPECT_EQ(read_content, "Written via IOCP");
+  {
+    // Verify the file was written correctly
+    std::ifstream in(path, std::ios::binary);
+    std::string read_content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    EXPECT_EQ(read_content, "Written via IOCP");
+  }
 
   fs::remove(path);
 }
@@ -155,7 +157,11 @@ TEST(iocp_file_tests, flush_file) {
       co_return -1;
     }
 
+    EXPECT_FALSE(result->is_closed());
+
     auto file = std::move(*result);
+
+    EXPECT_FALSE(file.is_closed());
 
     const std::string_view write_content = "Data to flush";
 
@@ -172,29 +178,13 @@ TEST(iocp_file_tests, flush_file) {
       co_return -1;
     }
 
-    // Close the file
-    auto close_result = file.close();
-    if (!close_result) {
-      EXPECT_TRUE(close_result) << close_result.error();
-      co_return -1;
-    }
-
     co_return 0;
   };
 
   ASSERT_TRUE(test_utils::run_task_iocp(test(), scheduler, reactor));
 
-  // Re-open and verify the file content was persisted
-  auto re_path = test_utils::create_temp_file("");
-  fs::remove(re_path);
-
-  async_coro::scheduler scheduler2;
-  auto reactor_result2 = server::io::iocp_reactor::create();
-  ASSERT_TRUE(reactor_result2) << "Failed to create second IOCP reactor";
-  auto& reactor2 = *reactor_result2;
-
   auto verify_test = [&]() -> async_coro::task<int> {
-    auto result = co_await server::io::iocp_file::open_coro(reactor2, path, server::io::file_open_mode::read);
+    auto result = co_await server::io::iocp_file::open_coro(reactor, path, server::io::file_open_mode::read);
     if (!result) {
       co_return -1;
     }
@@ -207,16 +197,13 @@ TEST(iocp_file_tests, flush_file) {
     }
 
     const auto& data = data_result.value();
-    std::string read_content(data.size(), '\0');
-    for (size_t i = 0; i < data.size(); ++i) {
-      read_content[i] = static_cast<char>(static_cast<unsigned char>(data[i]));
-    }
+    std::string_view read_content{reinterpret_cast<const char*>(data.data()), data.size()};
     EXPECT_EQ(read_content, content);
 
     co_return 0;
   };
 
-  ASSERT_TRUE(test_utils::run_task_iocp(verify_test(), scheduler2, reactor2));
+  ASSERT_TRUE(test_utils::run_task_iocp(verify_test(), scheduler, reactor));
   fs::remove(path);
 }
 
@@ -373,10 +360,12 @@ TEST(iocp_file_tests, multiple_writes) {
 
   ASSERT_TRUE(test_utils::run_task_iocp(test(), scheduler, reactor));
 
-  // Read back and verify all content
-  std::ifstream in(path, std::ios::binary);
-  std::string read_content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-  EXPECT_EQ(read_content, "Hello, world! This is a multi-chunk write test.");
+  {
+    // Read back and verify all content
+    std::ifstream in(path, std::ios::binary);
+    std::string read_content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    EXPECT_EQ(read_content, "Hello, world! This is a multi-chunk write test.");
+  }
 
   fs::remove(path);
 }

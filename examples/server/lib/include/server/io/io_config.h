@@ -69,8 +69,37 @@ static constexpr file_handle_t invalid_file_handle = -1;
 
 #endif
 
-void close_socket(socket_type socket_id) noexcept;
-void close_epoll(epoll_handle_t handle) noexcept;
-void close_file(file_handle_t handle) noexcept;
+/**
+ * @brief Closes a socket descriptor.
+ *
+ * Closes the given socket and releases the associated resource.
+ *
+ * @param socket_id The socket to close.
+ * @return true if the socket was closed successfully or was already invalid.
+ * @return false if the close operation failed.
+ */
+bool close_socket(socket_type socket_id) noexcept;
+
+/**
+ * @brief Closes an epoll/kqueue file descriptor (or Windows HANDLE on non-Windows).
+ *
+ * Closes the given event-loop handle and releases the associated resource.
+ *
+ * @param handle The epoll/kqueue handle to close.
+ * @return true if the handle was closed successfully or was already invalid.
+ * @return false if the close operation failed.
+ */
+bool close_epoll(epoll_handle_t handle) noexcept;
+
+/**
+ * @brief Closes a file handle/descriptor.
+ *
+ * Closes the given file handle and releases the associated resource.
+ *
+ * @param handle The file handle to close.
+ * @return true if the handle was closed successfully or was already invalid.
+ * @return false if the close operation failed.
+ */
+bool close_file(file_handle_t handle) noexcept;
 
 }  // namespace server::io

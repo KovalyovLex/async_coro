@@ -82,7 +82,7 @@ async_coro::task<expected<size_t, std::string>> io_uring_file::read(std::span<ui
     // Submit async read operation
     auto result = co_await async_coro::await_callback_with_result<expected<size_t, std::string>>([this, &current_buffer](auto cont) {
       _reactor.submit_read(_fd, _seek_cur, current_buffer, std::move(cont));
-    });  // NOLINT(bugprone-easily-swappable-parameters)
+    });
 
     if (!result) {
       co_return expected<size_t, std::string>{unexpect, std::move(result.error())};
@@ -109,7 +109,7 @@ async_coro::task<expected<void, std::string>> io_uring_file::write(std::span<con
     // Submit async write operation
     auto result = co_await async_coro::await_callback_with_result<expected<size_t, std::string>>([this, &current_data](auto cont) {
       _reactor.submit_write(_fd, _seek_cur, current_data, std::move(cont));
-    });  // NOLINT(bugprone-easily-swappable-parameters)
+    });
 
     if (!result) {
       co_return expected<void, std::string>{unexpect, std::move(result.error())};
