@@ -59,6 +59,14 @@ class iocp_reactor {
   using continue_file_callback_t = async_coro::unique_function<void(expected<file_handle_t, std::string>)>;
 
   /**
+   * @brief Socket kind enumeration for socket operations.
+   */
+  enum class socket_kind : uint8_t {
+    stream,    // TCP (SOCK_STREAM)
+    datagram,  // UDP (SOCK_DGRAM)
+  };
+
+  /**
    * @brief Factory method to create a new IOCP reactor.
    *
    * Creates an IOCP completion port with the specified number of worker threads.
@@ -139,6 +147,87 @@ class iocp_reactor {
   void submit_open(const char* path, file_open_mode open_mode, continue_file_callback_t&& callback);
 
   /**
+   * @brief Create a new socket and associate it with the IOCP port.
+   *
+   * Creates a socket using WSASocket and associates it with this reactor's completion port.
+   * @param kind The socket kind (stream/TCP or datagram/UDP).
+   * @param protocol The protocol to use (e.g., IPPROTO_TCP, IPPROTO_UDP). Pass 0 for default.
+   * @return An expected<socket_type, std::string>. On success, contains the new socket handle.
+   *         On failure, contains an error message describing the creation failure.
+   */
+  [[nodiscard]] expected<socket_type, std::string> create_socket(socket_kind kind, int protocol = 0) noexcept;
+
+  /**
+   * @brief Bind a socket to a local address.
+   *
+   * Binds the socket to the specified sockaddr. The socket must already be created.
+   * @param socket_handle The socket handle to bind.
+   * @param address Buffer containing the local sockaddr structure.
+   * @return An expected<void, std::string>. On success, contains void.
+   *         On failure, contains an error message describing the bind failure.
+   */
+  [[nodiscard]] expected<void, std::string> bind_socket(socket_type socket_handle, std::span<const std::byte> address) noexcept;
+
+  /**
+   * @brief Set a socket to listening mode.
+   *
+   * Calls listen() on the socket with the specified backlog.
+   * @param socket_handle The listening socket handle.
+   * @param backlog Maximum length of the pending connections queue.
+   * @return An expected<void, std::string>. On success, contains void.
+   *         On failure, contains an error message describing the listen failure.
+   */
+  [[nodiscard]] expected<void, std::string> listen_socket(socket_type socket_handle, int backlog = SOMAXCONN) noexcept;
+
+  /**
+   * @brief Submit an async send operation on a socket.
+   *
+   * Uses WSASend for overlapped I/O. The socket must already be associated with the IOCP port.
+   * @param socket_handle Socket handle to send to.
+   * @param buffer Buffer containing data to send. MUST remain valid until callback is invoked.
+   * @param callback Continuation called after send completes with bytes sent or error.
+   */
+  void submit_send_socket(socket_type socket_handle, std::span<std::byte> buffer, continue_size_callback_t&& callback);
+
+  /**
+   * @brief Submit an async receive operation on a socket.
+   *
+   * Uses WSARecv for overlapped I/O. The socket must already be associated with the IOCP port.
+   * @param socket_handle Socket handle to receive from.
+   * @param buffer Buffer to receive into. MUST remain valid until callback is invoked.
+   * @param callback Continuation called after receive completes with bytes received or error.
+   */
+  void submit_receive_socket(socket_type socket_handle, std::span<std::byte> buffer, continue_size_callback_t&& callback);
+
+  /**
+   * @brief Submit an async accept operation on a listening socket.
+   *
+   * Uses AcceptEx for overlapped I/O. The listen socket must already be associated with the IOCP port.
+   * Creates an accept socket internally and associates it with the IOCP port.
+   * @param listen_socket The listening socket handle.
+   * @param local_address_buffer Buffer for local address (sockaddr_in, typically 16 bytes).
+   * @param remote_address_buffer Buffer for remote address (sockaddr_in, typically 16 bytes).
+   * @param buffer_data Extra receive buffer for client data (can be empty).
+   * @param callback Continuation called after accept completes with the accepted socket or error.
+   */
+  void submit_accept_socket(socket_type listen_socket,
+                            std::span<std::byte> local_address_buffer,
+                            std::span<std::byte> remote_address_buffer,
+                            std::span<std::byte> buffer_data,
+                            continue_file_callback_t&& callback);
+
+  /**
+   * @brief Submit an async connect operation on a socket.
+   *
+   * Uses ConnectEx for overlapped I/O. The socket must already be associated with the IOCP port
+   * and bound to a local address (via bind_socket).
+   * @param socket_handle The client socket handle.
+   * @param remote_address Buffer containing destination sockaddr.
+   * @param callback Continuation called after connect completes with void or error.
+   */
+  void submit_connect_socket(socket_type socket_handle, std::span<const std::byte> remote_address, continue_void_callback_t&& callback);
+
+  /**
    * @brief Convert Windows GetLastError() to a UTF-8 error string.
    *
    * Uses FormatMessageW to get the system error message and converts it to UTF-8.
@@ -170,9 +259,13 @@ class iocp_reactor {
  private:
   enum class operation_type : uint8_t {
     none,
-    send_data,
-    receive_data,
-    open_file,
+    send_data,       // file write
+    receive_data,    // file read
+    open_file,       // file open
+    send_socket,     // WSASend for sockets
+    receive_socket,  // WSARecv for sockets
+    accept_socket,   // AcceptEx for listening sockets
+    connect_socket,  // ConnectEx for client connections
   };
 
   /**
@@ -199,11 +292,31 @@ class iocp_reactor {
     const char* file_path = nullptr;
     file_open_mode open_flags = file_open_mode::append;
 
-    /** File/socket handle. */
+    /** File handle (for file operations). */
     file_handle_t fd = invalid_file_handle;
+
+    /** Socket handle (for socket operations). */
+    socket_type socket_fd = invalid_socket_id;
+
+    /** Socket kind (for socket operations). */
+    socket_kind sock_kind = socket_kind::stream;
 
     /** Operation type. */
     operation_type operation = operation_type::none;
+
+    // --- Socket-specific fields ---
+
+    /** Pre-created accept socket handle (for accept operations). */
+    socket_type accept_socket_fd = invalid_socket_id;
+
+    /** Buffer for local sockaddr (accept operations). */
+    std::span<std::byte> local_address_buffer;
+
+    /** Buffer for remote sockaddr (accept operations). */
+    std::span<std::byte> remote_address_buffer;
+
+    /** Destination address for connect operations. */
+    std::span<const std::byte> remote_address;
   };
 
   struct ring_entry {

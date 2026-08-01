@@ -14,7 +14,39 @@
 #include <variant>
 #include <vector>
 
+// WinSock2 headers for socket I/O.
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <mswsock.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
 namespace server::io {
+
+// ============================================================================
+// WinSock extension function pointers for AcceptEx / ConnectEx
+// ============================================================================
+
+using LPFN_ACCEPTEX = BOOL(WSAAPI*)(SOCKET, SOCKET, PVOID, DWORD, DWORD, DWORD, LPDWORD, LPOVERLAPPED);
+using LPFN_CONNECTEX = BOOL(WSAAPI*)(SOCKET, const sockaddr*, int, PVOID, DWORD, LPDWORD, LPOVERLAPPED);
+
+static bool get_accept_ex_function(SOCKET sock, LPFN_ACCEPTEX& fn) noexcept {
+  GUID guid = WSAID_ACCEPTEX;
+  DWORD bytes = 0;
+  return WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid),
+                  &fn, sizeof(fn), &bytes, nullptr, nullptr) == 0;
+}
+
+static bool get_connect_ex_function(SOCKET sock, LPFN_CONNECTEX& fn) noexcept {
+  GUID guid = WSAID_CONNECTEX;
+  DWORD bytes = 0;
+  return WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid),
+                  &fn, sizeof(fn), &bytes, nullptr, nullptr) == 0;
+}
 
 // ============================================================================
 // Helper functions
@@ -224,6 +256,154 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
         break;
       }
 
+      case operation_type::send_socket: {
+        SOCKET sock = entry.request.socket_fd;
+
+        WSABUF wsa_buf;
+        wsa_buf.buf = reinterpret_cast<char*>(entry.request.buffer_data.data());
+        wsa_buf.len = static_cast<ULONG>(entry.request.buffer_data.size());
+
+        DWORD bytes_sent = 0;
+        DWORD flags = 0;
+        entry.overlapped = {};
+
+        BOOL send_result = WSASend(
+            sock,
+            &wsa_buf,
+            1,
+            &bytes_sent,
+            flags,  // lpFlags is DWORD by value
+            &entry.overlapped,
+            nullptr);  // no completion routine
+
+        if (send_result) {
+          dispatch_completion(index, bytes_sent, true);
+        } else {
+          const auto error = GetLastError();
+          if (error == ERROR_IO_PENDING) {
+            break;
+          } else {
+            dispatch_completion(index, 0, false);
+          }
+        }
+        _free_indices.push_back(index);
+        break;
+      }
+
+      case operation_type::receive_socket: {
+        SOCKET sock = entry.request.socket_fd;
+
+        WSABUF wsa_buf;
+        wsa_buf.buf = reinterpret_cast<char*>(entry.request.buffer_data.data());
+        wsa_buf.len = static_cast<ULONG>(entry.request.buffer_data.size());
+
+        DWORD bytes_recv = 0;
+        DWORD flags = 0;
+        entry.overlapped = {};
+
+        BOOL recv_result = WSARecv(
+            sock,
+            &wsa_buf,
+            1,
+            &bytes_recv,
+            &flags,  // lpFlags is LPDWORD for WSARecv
+            &entry.overlapped,
+            nullptr);  // no completion routine
+
+        if (recv_result) {
+          dispatch_completion(index, bytes_recv, true);
+        } else {
+          const auto error = GetLastError();
+          if (error == ERROR_IO_PENDING) {
+            break;
+          } else if (error == WSAECONNRESET || error == WSAECONNABORTED) {
+            // Connection reset/abort — treat as EOF (successful close with zero bytes).
+            dispatch_completion(index, 0, true);
+          } else {
+            dispatch_completion(index, 0, false);
+          }
+        }
+        _free_indices.push_back(index);
+        break;
+      }
+
+      case operation_type::accept_socket: {
+        SOCKET listen_sock = entry.request.socket_fd;
+        SOCKET accept_sock = entry.request.accept_socket_fd;
+
+        // Get AcceptEx function pointer from the listen socket.
+        LPFN_ACCEPTEX accept_fn = nullptr;
+        if (!get_accept_ex_function(listen_sock, accept_fn)) {
+          dispatch_completion(index, 0, false);
+          _free_indices.push_back(index);
+          break;
+        }
+
+        entry.overlapped = {};
+
+        // AcceptEx requires the listen socket and accept socket to be in AF_INET or AF_INET6 family.
+        // The local/remote address buffers are packed together: local addr + remote addr + embedded sockaddr_storage.
+        BOOL accept_result = accept_fn(
+            listen_sock,
+            accept_sock,
+            entry.request.local_address_buffer.data(),
+            static_cast<DWORD>(entry.request.buffer_data.size()),
+            static_cast<DWORD>(entry.request.local_address_buffer.size()),
+            static_cast<DWORD>(entry.request.remote_address_buffer.size()),
+            nullptr,  // bytes_received (output — will be set by IOCP)
+            &entry.overlapped);
+
+        if (accept_result) {
+          dispatch_completion(index, 0, true);
+        } else {
+          const auto error = GetLastError();
+          if (error == ERROR_IO_PENDING) {
+            break;
+          } else {
+            dispatch_completion(index, 0, false);
+          }
+        }
+        _free_indices.push_back(index);
+        break;
+      }
+
+      case operation_type::connect_socket: {
+        SOCKET sock = entry.request.socket_fd;
+
+        // Get ConnectEx function pointer from the socket.
+        // Requires the socket to be bound to a local address first.
+        LPFN_CONNECTEX connect_fn = nullptr;
+        if (!get_connect_ex_function(sock, connect_fn)) {
+          dispatch_completion(index, 0, false);
+          _free_indices.push_back(index);
+          break;
+        }
+
+        entry.overlapped = {};
+
+        BOOL connect_result = connect_fn(
+            sock,
+            reinterpret_cast<const sockaddr*>(entry.request.remote_address.data()),
+            static_cast<int>(entry.request.remote_address.size() / sizeof(std::byte)),
+            nullptr,  // send buffer (none for connect)
+            0,        // send length
+            nullptr,  // bytes_sent (output)
+            &entry.overlapped);
+
+        if (connect_result) {
+          dispatch_completion(index, 0, true);
+        } else {
+          const auto error = GetLastError();
+          if (error == ERROR_IO_PENDING) {
+            break;
+          } else {
+            dispatch_completion(index, 0, false);
+          }
+        }
+        _free_indices.push_back(index);
+        break;
+      }
+
       case operation_type::open_file: {
         // Convert UTF-8 path to wide string.
         int wide_len = MultiByteToWideChar(CP_UTF8, 0, entry.request.file_path, -1, nullptr, 0);
@@ -301,8 +481,21 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
 
     if (index < _ring_size) {
       auto& entry = _local_ring[index];
-      // read with EOF count successful
-      const auto op_succeeded = result == TRUE || (entry.request.operation == operation_type::receive_data && GetLastError() == ERROR_HANDLE_EOF);
+
+      // Determine success based on operation type.
+      bool op_succeeded = result == TRUE;
+
+      // File reads: EOF is treated as success.
+      if (!op_succeeded && entry.request.operation == operation_type::receive_data) {
+        op_succeeded = (GetLastError() == ERROR_HANDLE_EOF);
+      }
+
+      // Socket receives: connection reset/abort is treated as graceful close.
+      if (!op_succeeded && entry.request.operation == operation_type::receive_socket) {
+        const auto wsa_error = WSAGetLastError();
+        op_succeeded = (wsa_error == WSAECONNRESET || wsa_error == WSAECONNABORTED);
+      }
+
       dispatch_completion(index, bytes_transferred, op_succeeded);
       _free_indices.push_back(index);
     }
@@ -348,6 +541,11 @@ void iocp_reactor::dispatch_completion(size_t index, DWORD bytes_transferred, bo
       }
       if (!success) {
         var(expected<file_handle_t, std::string>{unexpect, std::move(error_msg)});
+      } else if (entry.request.operation == operation_type::accept_socket) {
+        // For accept operations, return the accept socket (not the listen socket).
+        // Cast socket_type to file_handle_t for the callback.
+        var(expected<file_handle_t, std::string>{
+            reinterpret_cast<file_handle_t>(static_cast<uintptr_t>(entry.request.accept_socket_fd))});
       } else {
         var(entry.request.fd);
       }
@@ -418,6 +616,110 @@ void iocp_reactor::submit_open(const char* path, file_open_mode open_mode, conti
   entry.open_flags = open_mode;
   entry.operation = operation_type::open_file;
   entry.callback = std::move(callback);
+
+  _requests.push(std::move(entry));
+}
+
+expected<socket_type, std::string> iocp_reactor::create_socket(socket_kind kind, int protocol) noexcept {
+  int addr_family = AF_INET;
+  int socket_type_val = (kind == socket_kind::stream) ? SOCK_STREAM : SOCK_DGRAM;
+
+  SOCKET sock = WSASocket(addr_family, socket_type_val, protocol, nullptr, 0, WSA_FLAG_OVERLAPPED);
+  if (sock == INVALID_SOCKET) {
+    return expected<socket_type, std::string>{unexpect, std::string("WSASocket failed: ") + format_windows_error()};
+  }
+
+  // Associate socket with IOCP completion port.
+  if (CreateIoCompletionPort(
+          reinterpret_cast<HANDLE>(sock),
+          _completion_port,
+          0,
+          0) == nullptr) {
+    closesocket(sock);
+    return expected<socket_type, std::string>{unexpect, std::string("CreateIoCompletionPort failed: ") + format_windows_error()};
+  }
+
+  return static_cast<socket_type>(sock);
+}
+
+expected<void, std::string> iocp_reactor::bind_socket(socket_type socket_handle, std::span<const std::byte> address) noexcept {
+  int result = bind(
+      socket_handle,
+      reinterpret_cast<const sockaddr*>(address.data()),
+      static_cast<int>(address.size()));
+
+  if (result == SOCKET_ERROR) {
+    return expected<void, std::string>{unexpect, std::string("bind failed: ") + format_windows_error()};
+  }
+
+  return expected<void, std::string>{};
+}
+
+expected<void, std::string> iocp_reactor::listen_socket(socket_type socket_handle, int backlog) noexcept {
+  int result = listen(
+      socket_handle,
+      backlog);
+
+  if (result == SOCKET_ERROR) {
+    return expected<void, std::string>{unexpect, std::string("listen failed: ") + format_windows_error()};
+  }
+
+  return expected<void, std::string>{};
+}
+
+void iocp_reactor::submit_send_socket(socket_type socket_handle, std::span<std::byte> buffer, continue_size_callback_t&& callback) {
+  request_entry entry;
+  entry.socket_fd = socket_handle;
+  entry.operation = operation_type::send_socket;
+  entry.callback = std::move(callback);
+  entry.buffer_data = buffer;
+
+  _requests.push(std::move(entry));
+}
+
+void iocp_reactor::submit_receive_socket(socket_type socket_handle, std::span<std::byte> buffer, continue_size_callback_t&& callback) {
+  request_entry entry;
+  entry.socket_fd = socket_handle;
+  entry.operation = operation_type::receive_socket;
+  entry.callback = std::move(callback);
+  entry.buffer_data = buffer;
+
+  _requests.push(std::move(entry));
+}
+
+void iocp_reactor::submit_accept_socket(socket_type listen_socket,
+                                        std::span<std::byte> local_address_buffer,
+                                        std::span<std::byte> remote_address_buffer,
+                                        std::span<std::byte> buffer_data,
+                                        continue_file_callback_t&& callback) {
+  // Create the accept socket internally.
+  auto accept_sock_result = create_socket(socket_kind::stream, IPPROTO_TCP);
+  if (!accept_sock_result) {
+    // Cannot create accept socket - invoke callback with error immediately.
+    callback(expected<file_handle_t, std::string>{unexpect, std::move(accept_sock_result).error()});
+    return;
+  }
+
+  socket_type accept_sock = accept_sock_result.value();
+
+  request_entry entry;
+  entry.socket_fd = listen_socket;
+  entry.accept_socket_fd = accept_sock;
+  entry.operation = operation_type::accept_socket;
+  entry.callback = std::move(callback);
+  entry.local_address_buffer = local_address_buffer;
+  entry.remote_address_buffer = remote_address_buffer;
+  entry.buffer_data = buffer_data;
+
+  _requests.push(std::move(entry));
+}
+
+void iocp_reactor::submit_connect_socket(socket_type socket_handle, std::span<const std::byte> remote_address, continue_void_callback_t&& callback) {
+  request_entry entry;
+  entry.socket_fd = socket_handle;
+  entry.operation = operation_type::connect_socket;
+  entry.callback = std::move(callback);
+  entry.remote_address = remote_address;
 
   _requests.push(std::move(entry));
 }
