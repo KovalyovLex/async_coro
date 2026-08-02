@@ -473,7 +473,6 @@ TEST_F(http_roundtrip_fixture, get_request_response) {
   EXPECT_FALSE(resp.empty()) << "Expected non-empty response";
 
   auto status = parse_status_code(resp);
-  ASSERT_TRUE(status) << "Could not parse status code from response";
   if (!status.has_value()) {
     GTEST_FAIL() << "Status check failed";
   }
@@ -513,7 +512,6 @@ TEST_F(http_roundtrip_fixture, post_with_body) {
   EXPECT_FALSE(resp.empty()) << "Expected non-empty response";
 
   auto status = parse_status_code(resp);
-  ASSERT_TRUE(status) << "Could not parse status code from response";
   if (!status.has_value()) {
     GTEST_FAIL() << "Status check failed";
   }
@@ -552,7 +550,6 @@ TEST_F(http_roundtrip_fixture, multiple_requests_same_connection) {
     EXPECT_FALSE(resp.empty()) << "Response for request " << i << " should not be empty";
 
     auto status = parse_status_code(resp);
-    ASSERT_TRUE(status) << "Could not parse status code for request " << i;
     if (!status.has_value()) {
       GTEST_FAIL() << "Status check failed for request " << i;
     }
@@ -652,7 +649,6 @@ TEST_F(http_roundtrip_fixture, error_responses) {
   EXPECT_FALSE(resp_404.empty()) << "Expected non-empty response for unknown path";
 
   auto status_404 = parse_status_code(resp_404);
-  ASSERT_TRUE(status_404) << "Could not parse status code for 404 test";
   if (!status_404.has_value()) {
     GTEST_FAIL() << "Status check failed for 404";
   }
@@ -677,7 +673,6 @@ TEST_F(http_roundtrip_fixture, error_responses) {
   // if it does respond, verify it's not 200 OK
   if (!resp_405.empty()) {
     auto status_405 = parse_status_code(resp_405);
-    ASSERT_TRUE(status_405) << "Could not parse status code for 405 test";
     if (!status_405.has_value()) {
       GTEST_FAIL() << "Status check failed for 405";
     }

@@ -57,7 +57,7 @@ void iocp_socket::close_sync() {
 async_coro::task<expected<iocp_socket, std::string>> iocp_socket::connect_coro(
     iocp_reactor& reactor, const void* remote_address, socklen_t address_length) noexcept {
   // Create a TCP socket via the reactor.
-  auto sock_result = reactor.create_socket(socket_type_id::tcp, IPPROTO_TCP);
+  auto sock_result = reactor.create_socket(socket_type_id::tcp);
   if (!sock_result) {
     co_return expected<iocp_socket, std::string>{unexpect, std::move(sock_result).error()};
   }
@@ -99,34 +99,6 @@ async_coro::task<expected<iocp_socket, std::string>> iocp_socket::connect_coro(
 }
 
 // ============================================================================
-// accept_coro
-// ============================================================================
-
-async_coro::task<expected<iocp_socket, std::string>> iocp_socket::accept_coro(
-    iocp_reactor& reactor, socket_type listen_socket) noexcept {
-  // Create buffers for local/remote addresses (sockaddr_in is 16 bytes).
-  std::array<std::byte, 16> local_addr_buf;
-  std::array<std::byte, 16> remote_addr_buf;
-
-  // Submit async accept operation (reactor creates the accept socket internally).
-  auto result = co_await async_coro::await_callback_with_result<expected<socket_type, std::string>>(
-      [&](auto cont) {
-        reactor.submit_accept_socket(
-            listen_socket,
-            local_addr_buf,
-            remote_addr_buf,
-            {},
-            std::move(cont));
-      });
-
-  if (!result) {
-    co_return expected<iocp_socket, std::string>{unexpect, std::move(result).error()};
-  }
-
-  co_return iocp_socket{reactor, result.value()};
-}
-
-// ============================================================================
 // send
 // ============================================================================
 
@@ -144,9 +116,7 @@ async_coro::task<expected<size_t, std::string>> iocp_socket::send(std::span<cons
         [this, &current_data](auto cont) {
           _reactor.submit_send_socket(
               _sock,
-              std::span<std::byte>(
-                  const_cast<std::byte*>(reinterpret_cast<const std::byte*>(current_data.data())),
-                  current_data.size()),
+              current_data,
               std::move(cont));
         });
 
@@ -171,29 +141,17 @@ async_coro::task<expected<size_t, std::string>> iocp_socket::receive(std::span<s
     co_return expected<size_t, std::string>{unexpect, "Socket is closed"};
   }
 
-  size_t total_bytes_received = 0;
-  auto current_buffer = buffer;
+  // Submit async receive operation.
+  auto result = co_await async_coro::await_callback_with_result<expected<size_t, std::string>>(
+      [this, buffer](auto cont) {
+        _reactor.submit_receive_socket(_sock, buffer, std::move(cont));
+      });
 
-  while (total_bytes_received < buffer.size()) {
-    // Submit async receive operation.
-    auto result = co_await async_coro::await_callback_with_result<expected<size_t, std::string>>(
-        [this, &current_buffer](auto cont) {
-          _reactor.submit_receive_socket(_sock, current_buffer, std::move(cont));
-        });
-
-    if (!result) {
-      co_return expected<size_t, std::string>{unexpect, std::move(result).error()};
-    }
-
-    const auto received = result.value();
-    if (received == 0) {
-      break;  // Connection closed
-    }
-    total_bytes_received += received;
-    current_buffer = current_buffer.subspan(received);
+  if (!result) {
+    co_return expected<size_t, std::string>{unexpect, std::move(result).error()};
   }
 
-  co_return total_bytes_received;
+  co_return result.value();
 }
 
 // ============================================================================

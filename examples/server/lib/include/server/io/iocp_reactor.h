@@ -167,11 +167,10 @@ class iocp_reactor {
    *
    * Creates a socket using WSASocket and associates it with this reactor's completion port.
    * @param kind The socket kind (stream/TCP or datagram/UDP).
-   * @param protocol The protocol to use (e.g., IPPROTO_TCP, IPPROTO_UDP). Pass 0 for default.
    * @return An expected<socket_type, std::string>. On success, contains the new socket handle.
    *         On failure, contains an error message describing the creation failure.
    */
-  [[nodiscard]] expected<socket_type, std::string> create_socket(socket_type_id kind, int protocol = 0) noexcept;
+  [[nodiscard]] expected<socket_type, std::string> create_socket(socket_type_id kind) noexcept;
 
   /**
    * @brief Bind a socket to a local address.
@@ -203,7 +202,7 @@ class iocp_reactor {
    * @param buffer Buffer containing data to send. MUST remain valid until callback is invoked.
    * @param callback Continuation called after send completes with bytes sent or error.
    */
-  void submit_send_socket(socket_type socket_handle, std::span<std::byte> buffer, continue_size_callback_t&& callback);
+  void submit_send_socket(socket_type socket_handle, std::span<const std::byte> buffer, continue_size_callback_t&& callback);
 
   /**
    * @brief Submit an async receive operation on a socket.
@@ -309,7 +308,7 @@ class iocp_reactor {
    */
   struct op_send_socket {
     socket_type socket_fd = invalid_socket_id;
-    std::span<std::byte> buffer_data;
+    WSABUF wsa_buf{};
     continue_size_callback_t callback;
   };
 
@@ -320,7 +319,7 @@ class iocp_reactor {
    */
   struct op_receive_socket {
     socket_type socket_fd = invalid_socket_id;
-    std::span<std::byte> buffer_data;
+    WSABUF wsa_buf{};
     continue_size_callback_t callback;
   };
 

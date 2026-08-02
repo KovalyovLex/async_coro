@@ -9,7 +9,7 @@ namespace server::io {
 bool close_socket(socket_type socket_id) noexcept {
   if (socket_id != invalid_socket_id) {
 #if WIN_SOCKET
-    return ::closesocket(socket_id);
+    return ::closesocket(socket_id) == 0;
 #else
     return ::close(socket_id) == 0;
 #endif

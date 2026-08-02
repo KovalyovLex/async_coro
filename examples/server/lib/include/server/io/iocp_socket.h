@@ -54,19 +54,6 @@ class iocp_socket {
   [[nodiscard]] static async_coro::task<expected<iocp_socket, std::string>> connect_coro(
       iocp_reactor& reactor, const void* remote_address, socklen_t address_length) noexcept;
 
-  /**
-   * @brief Accept a new connection on a listening socket (coroutine version).
-   *
-   * Creates an accept socket via the reactor and initiates an async AcceptEx operation.
-   *
-   * @param reactor The IOCP reactor to use. Must outlive this socket.
-   * @param listen_socket The listening socket handle.
-   * @return An awaitable that resolves to an expected<iocp_socket, std::string>.
-   *         On success, contains the accepted socket. On failure, contains an error message.
-   */
-  [[nodiscard]] static async_coro::task<expected<iocp_socket, std::string>> accept_coro(
-      iocp_reactor& reactor, socket_type listen_socket) noexcept;
-
   // Non-copyable to prevent multiple objects from closing the same socket handle.
   iocp_socket(const iocp_socket&) = delete;
   iocp_socket& operator=(const iocp_socket&) = delete;

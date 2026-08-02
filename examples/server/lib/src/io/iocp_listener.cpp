@@ -26,13 +26,12 @@ namespace server::io {
 // Constructor / Destructor
 // ============================================================================
 
-iocp_listener::iocp_listener(iocp_reactor& reactor)
-    : _reactor(reactor) {}
+iocp_listener::iocp_listener(iocp_reactor& reactor, socket_type sock) noexcept
+    : _reactor(reactor),
+      _sock(sock) {}
 
-iocp_listener::~iocp_listener() {
-  if (is_open()) {
-    (void)close();
-  }
+iocp_listener::~iocp_listener() noexcept {
+  (void)close();
 }
 
 // ============================================================================
@@ -60,7 +59,7 @@ iocp_listener& iocp_listener::operator=(iocp_listener&& other) noexcept {
 
 expected<iocp_listener, std::string> iocp_listener::open(iocp_reactor& reactor, std::string_view ip_address, uint16_t port) {
   // Create a TCP socket via the reactor.
-  auto sock_result = reactor.create_socket(socket_type_id::tcp, IPPROTO_TCP);
+  auto sock_result = reactor.create_socket(socket_type_id::tcp);
   if (!sock_result) {
     return expected<iocp_listener, std::string>{unexpect, std::move(sock_result).error()};
   }
@@ -107,8 +106,7 @@ expected<iocp_listener, std::string> iocp_listener::open(iocp_reactor& reactor, 
     return expected<iocp_listener, std::string>{unexpect, std::move(listen_result).error()};
   }
 
-  iocp_listener listener{reactor};
-  listener._sock = sock;
+  iocp_listener listener{reactor, sock};
   return listener;
 }
 
@@ -126,20 +124,22 @@ async_coro::task<expected<iocp_socket, std::string>> iocp_listener::accept() {
   // We need at least sizeof(sockaddr_in) + 16 bytes for each address.
   constexpr size_t k_addr_len = sizeof(sockaddr_in) + 16;
 
-  // Single contiguous buffer: local_addr + remote_addr + recv_data
-  std::array<std::byte, k_addr_len> local_recv_buf;
-  std::array<std::byte, k_addr_len> remote_recv_buf;
+  // Store buffers in a lambda-captured struct to ensure they live until the async operation completes.
+  // The callback is stored in the reactor and may be called asynchronously.
+  struct buffers_t {
+    std::array<std::byte, k_addr_len> local_addr;
+    std::array<std::byte, k_addr_len> remote_addr;
+  } buffers;
 
   // Submit async accept operation (reactor creates the accept socket internally).
   auto result = co_await async_coro::await_callback_with_result<expected<socket_type, std::string>>(
       [&](auto cont) {
-        // Local address starts at offset 0, remote address starts after local address
         _reactor.submit_accept_socket(
             _sock,
-            local_recv_buf,    // local address buffer
-            remote_recv_buf,   // remote address buffer
-            {},                // extra receive buffer
-            std::move(cont));  // callback
+            std::span<std::byte>(buffers.local_addr),
+            std::span<std::byte>(buffers.remote_addr),
+            {},
+            std::move(cont));
       });
 
   if (!result) {
@@ -153,7 +153,7 @@ async_coro::task<expected<iocp_socket, std::string>> iocp_listener::accept() {
 // close
 // ============================================================================
 
-expected<void, std::string> iocp_listener::close() {
+expected<void, std::string> iocp_listener::close() noexcept {
   if (!is_open()) {
     return expected<void, std::string>{};
   }

@@ -152,9 +152,9 @@ TEST(iocp_socket_tests, socket_send_receive_small) {
     auto server_socket = std::move(*accept_result);
 
     // Client sends "Hello, IOCP!"
-    const std::string message = "Hello, IOCP!";
+    constexpr std::string_view message = "Hello, IOCP!";
     auto send_result = co_await client_socket.send(
-        std::as_bytes(std::span<const char>(message)));
+        std::as_bytes(std::span(message)));
     if (!send_result) {
       EXPECT_TRUE(send_result) << send_result.error();
       co_return -1;
@@ -170,15 +170,8 @@ TEST(iocp_socket_tests, socket_send_receive_small) {
     }
     EXPECT_EQ(recv_result.value(), message.size());
 
-    std::string received_data(recv_result.value(), '\0');
-    for (size_t i = 0; i < recv_result.value(); ++i) {
-      received_data[i] = static_cast<char>(recv_buffer[i]);
-    }
+    std::string_view received_data(reinterpret_cast<const char*>(recv_buffer.data()), recv_result.value());
     EXPECT_EQ(received_data, message);
-
-    // Clean up
-    (void)client_socket.close();
-    (void)server_socket.close();
 
     co_return 0;
   };

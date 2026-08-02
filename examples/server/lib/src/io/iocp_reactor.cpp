@@ -281,28 +281,24 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
       } else if constexpr (std::is_same_v<op_type, op_send_socket>) {
         SOCKET sock = op.socket_fd;
 
-        WSABUF wsa_buf;
-        wsa_buf.buf = reinterpret_cast<char*>(op.buffer_data.data());
-        wsa_buf.len = static_cast<ULONG>(op.buffer_data.size());
-
         DWORD bytes_sent = 0;
         DWORD flags = 0;
         entry.overlapped = {};
 
         BOOL send_result = WSASend(
-            sock,
-            &wsa_buf,
-            1,
-            &bytes_sent,
-            flags,
-            &entry.overlapped,
-            nullptr);
+                               sock,
+                               &op.wsa_buf,
+                               1,
+                               &bytes_sent,
+                               flags,
+                               &entry.overlapped,
+                               nullptr) == 0;
 
         if (send_result) {
           dispatch_completion_for_op(bytes_sent, true, op);
         } else {
-          const auto error = GetLastError();
-          if (error == ERROR_IO_PENDING) {
+          const auto error = WSAGetLastError();
+          if (error == WSA_IO_PENDING) {
             return;
           } else {
             dispatch_completion_for_op(0, false, op);
@@ -313,28 +309,24 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
       } else if constexpr (std::is_same_v<op_type, op_receive_socket>) {
         SOCKET sock = op.socket_fd;
 
-        WSABUF wsa_buf;
-        wsa_buf.buf = reinterpret_cast<char*>(op.buffer_data.data());
-        wsa_buf.len = static_cast<ULONG>(op.buffer_data.size());
-
         DWORD bytes_recv = 0;
         DWORD flags = 0;
         entry.overlapped = {};
 
         BOOL recv_result = WSARecv(
-            sock,
-            &wsa_buf,
-            1,
-            &bytes_recv,
-            &flags,
-            &entry.overlapped,
-            nullptr);
+                               sock,
+                               &op.wsa_buf,
+                               1,
+                               &bytes_recv,
+                               &flags,
+                               &entry.overlapped,
+                               nullptr) == 0;
 
         if (recv_result) {
           dispatch_completion_for_op(bytes_recv, true, op);
         } else {
-          const auto error = GetLastError();
-          if (error == ERROR_IO_PENDING) {
+          const auto error = WSAGetLastError();
+          if (error == WSA_IO_PENDING) {
             return;
           } else if (error == WSAECONNRESET || error == WSAECONNABORTED) {
             dispatch_completion_for_op(0, true, op);
@@ -363,8 +355,8 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
         if (accept_result) {
           dispatch_completion_for_op(0, true, op);
         } else {
-          const auto error = GetLastError();
-          if (error == ERROR_IO_PENDING) {
+          const auto error = WSAGetLastError();
+          if (error == WSA_IO_PENDING) {
             return;
           } else {
             dispatch_completion_for_op(0, false, op);
@@ -389,8 +381,8 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
         if (connect_result) {
           dispatch_completion_for_op(0, true, op);
         } else {
-          const auto error = GetLastError();
-          if (error == ERROR_IO_PENDING) {
+          const auto error = WSAGetLastError();
+          if (error == WSA_IO_PENDING) {
             return;
           } else {
             dispatch_completion_for_op(0, false, op);
@@ -474,12 +466,6 @@ void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT
       // File reads: EOF is treated as success.
       if (!op_succeeded && std::holds_alternative<op_read>(entry.request)) {
         op_succeeded = (GetLastError() == ERROR_HANDLE_EOF);
-      }
-
-      // Socket receives: connection reset/abort is treated as graceful close.
-      if (!op_succeeded && std::holds_alternative<op_receive_socket>(entry.request)) {
-        const auto wsa_error = WSAGetLastError();
-        op_succeeded = (wsa_error == WSAECONNRESET || wsa_error == WSAECONNABORTED);
       }
 
       std::visit([&](auto& op) {
@@ -567,11 +553,12 @@ void iocp_reactor::submit_open(const char* path, file_open_mode open_mode, conti
   _requests.push(std::move(op));
 }
 
-expected<socket_type, std::string> iocp_reactor::create_socket(socket_type_id kind, int protocol) noexcept {
+expected<socket_type, std::string> iocp_reactor::create_socket(socket_type_id kind) noexcept {
   int addr_family = AF_INET;
-  int socket_type_val = (kind == socket_type_id::tcp) ? SOCK_STREAM : SOCK_DGRAM;
+  const int socket_type_val = (kind == socket_type_id::tcp) ? SOCK_STREAM : SOCK_DGRAM;
+  const int socket_proto_val = (kind == socket_type_id::tcp) ? IPPROTO_TCP : IPPROTO_UDP;
 
-  SOCKET sock = WSASocket(addr_family, socket_type_val, protocol, nullptr, 0, WSA_FLAG_OVERLAPPED);
+  SOCKET sock = WSASocket(addr_family, socket_type_val, socket_proto_val, nullptr, 0, WSA_FLAG_OVERLAPPED);
   if (sock == INVALID_SOCKET) {
     return expected<socket_type, std::string>{unexpect, std::string("WSASocket failed: ") + format_windows_error()};
   }
@@ -614,13 +601,21 @@ expected<void, std::string> iocp_reactor::listen_socket(socket_type socket_handl
   return expected<void, std::string>{};
 }
 
-void iocp_reactor::submit_send_socket(socket_type socket_handle, std::span<std::byte> buffer, continue_size_callback_t&& callback) {
-  op_send_socket op{socket_handle, buffer, std::move(callback)};
+void iocp_reactor::submit_send_socket(socket_type socket_handle, std::span<const std::byte> buffer, continue_size_callback_t&& callback) {
+  op_send_socket op{};
+  op.socket_fd = socket_handle;
+  op.wsa_buf.buf = const_cast<char*>(reinterpret_cast<const char*>(buffer.data()));
+  op.wsa_buf.len = static_cast<ULONG>(buffer.size());
+  op.callback = std::move(callback);
   _requests.push(std::move(op));
 }
 
 void iocp_reactor::submit_receive_socket(socket_type socket_handle, std::span<std::byte> buffer, continue_size_callback_t&& callback) {
-  op_receive_socket op{socket_handle, buffer, std::move(callback)};
+  op_receive_socket op{};
+  op.socket_fd = socket_handle;
+  op.wsa_buf.buf = reinterpret_cast<char*>(buffer.data());
+  op.wsa_buf.len = static_cast<ULONG>(buffer.size());
+  op.callback = std::move(callback);
   _requests.push(std::move(op));
 }
 
@@ -630,9 +625,11 @@ void iocp_reactor::submit_accept_socket(socket_type listen_socket,
                                         std::span<std::byte> buffer_data,
                                         continue_socket_callback_t&& callback) {
   // Create the accept socket internally.
-  auto accept_sock_result = create_socket(socket_type_id::tcp, IPPROTO_TCP);
+  auto accept_sock_result = create_socket(socket_type_id::tcp);
   if (!accept_sock_result) {
-    callback(expected<socket_type, std::string>{unexpect, std::move(accept_sock_result).error()});
+    if (callback) {
+      callback(expected<socket_type, std::string>{unexpect, std::move(accept_sock_result).error()});
+    }
     return;
   }
 

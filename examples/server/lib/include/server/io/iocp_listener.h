@@ -33,7 +33,7 @@ class iocp_listener {
   iocp_listener(iocp_listener&& other) noexcept;
   iocp_listener& operator=(iocp_listener&& other) noexcept;
 
-  ~iocp_listener();
+  ~iocp_listener() noexcept;
 
   /**
    * @brief Create and open a new listener on the specified address.
@@ -80,16 +80,12 @@ class iocp_listener {
    * @return An expected<void, std::string>. On success, contains void.
    *         On failure, contains an error message.
    */
-  [[nodiscard]] expected<void, std::string> close();
+  [[nodiscard]] expected<void, std::string> close() noexcept;
 
  private:
-  /**
-   * @brief Construct an iocp_listener.
-   *
-   * @param reactor The IOCP reactor to use. Must outlive this listener.
-   */
-  explicit iocp_listener(iocp_reactor& reactor);
+  iocp_listener(iocp_reactor& reactor, socket_type sock) noexcept;
 
+ private:
   iocp_reactor& _reactor;
   socket_type _sock = invalid_socket_id;
 };
