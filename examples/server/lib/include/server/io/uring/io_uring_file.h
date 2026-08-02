@@ -4,7 +4,7 @@
 
 #include <async_coro/task.h>
 #include <server/io/file_open_mode.h>
-#include <server/io/io_uring_reactor.h>
+#include <server/io/uring/io_uring_reactor.h>
 #include <server/utils/expected.h>
 #include <sys/types.h>
 
@@ -52,7 +52,7 @@ class io_uring_file {
   io_uring_file& operator=(const io_uring_file&) = delete;
 
   // Movable - ownership of the file descriptor transfers; reactor reference is preserved.
-  ~io_uring_file();
+  ~io_uring_file() noexcept;
   io_uring_file(io_uring_file&& other) noexcept;
   io_uring_file& operator=(io_uring_file&& other) noexcept;
 
@@ -97,14 +97,14 @@ class io_uring_file {
    *
    * @return true if the file is closed, false otherwise.
    */
-  [[nodiscard]] bool is_closed() const noexcept;
+  [[nodiscard]] bool is_closed() const noexcept { return _fd == invalid_file_handle; }
 
   /**
    * @brief Get the file descriptor.
    *
    * @return The file descriptor, or -1 if the file is closed.
    */
-  [[nodiscard]] int get_native_handle() const noexcept;
+  [[nodiscard]] int get_native_handle() const noexcept { return _fd; }
 
   /**
    * @brief Get the file size in bytes.

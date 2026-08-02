@@ -3,7 +3,7 @@
 #include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/task.h>
-#include <server/io/io_uring_reactor.h>
+#include <server/io/uring/io_uring_reactor.h>
 
 #include <chrono>
 
@@ -11,7 +11,7 @@ namespace test_utils {
 
 #if WIN_IOCP_ENABLED
 
-#include <server/io/iocp_reactor.h>
+#include <server/io/iocp/iocp_reactor.h>
 
 /**
  * @brief Helper to run a coroutine task with the IOCP reactor.

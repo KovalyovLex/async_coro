@@ -10,7 +10,7 @@
 #include <fcntl.h>
 #include <liburing.h>
 #include <linux/io_uring.h>
-#include <server/io/io_uring_reactor.h>
+#include <server/io/uring/io_uring_reactor.h>
 #include <server/utils/expected.h>
 
 #include <cerrno>

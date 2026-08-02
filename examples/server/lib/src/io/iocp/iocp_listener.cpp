@@ -1,8 +1,8 @@
 #if WIN_IOCP_ENABLED
 
 #include <async_coro/await/await_callback.h>
-#include <server/io/iocp_listener.h>
-#include <server/io/iocp_reactor.h>
+#include <server/io/iocp/iocp_listener.h>
+#include <server/io/iocp/iocp_reactor.h>
 #include <server/utils/expected.h>
 
 #include <cstddef>

@@ -4,9 +4,9 @@
 #include <async_coro/scheduler.h>
 #include <async_coro/task.h>
 #include <gtest/gtest.h>
-#include <server/io/iocp_listener.h>
-#include <server/io/iocp_reactor.h>
-#include <server/io/iocp_socket.h>
+#include <server/io/iocp/iocp_listener.h>
+#include <server/io/iocp/iocp_reactor.h>
+#include <server/io/iocp/iocp_socket.h>
 #include <server/io/winsock_init.h>
 
 #include <array>

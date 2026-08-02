@@ -1,4 +1,4 @@
-#include <server/io/io_uring_file.h>
+#include <server/io/uring/io_uring_file.h>
 
 #if IO_URING_ENABLED
 
@@ -6,7 +6,7 @@
 #include <async_coro/scheduler.h>
 #include <async_coro/task.h>
 #include <gtest/gtest.h>
-#include <server/io/io_uring_reactor.h>
+#include <server/io/uring/io_uring_reactor.h>
 
 #include <cstddef>
 #include <cstdio>

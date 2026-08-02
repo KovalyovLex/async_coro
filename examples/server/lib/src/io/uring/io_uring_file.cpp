@@ -3,7 +3,7 @@
 #include <async_coro/await/await_callback.h>
 #include <fcntl.h>
 #include <server/io/file_open_mode.h>
-#include <server/io/io_uring_file.h>
+#include <server/io/uring/io_uring_file.h>
 #include <server/utils/expected.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -15,11 +15,7 @@
 namespace server::io {
 
 bool io_uring_file::would_block(int err) noexcept {
-#if WIN_SOCKET
-  return err == WSAEWOULDBLOCK || err == WSAEAGAIN;
-#else
   return err == EAGAIN || err == EWOULDBLOCK;
-#endif
 }
 
 io_uring_file::io_uring_file(io_uring_reactor& reactor, int file_descriptor) noexcept
@@ -28,23 +24,23 @@ io_uring_file::io_uring_file(io_uring_reactor& reactor, int file_descriptor) noe
   // The fd is already opened via io_uring in io_uring_file::open
 }
 
-io_uring_file::~io_uring_file() {
+io_uring_file::~io_uring_file() noexcept {
   close_sync();
 }
 
 io_uring_file::io_uring_file(io_uring_file&& other) noexcept
     : _reactor(other._reactor),
-      _fd(std::exchange(other._fd, -1)),
+      _fd(std::exchange(other._fd, invalid_file_handle)),
       _seek_cur(std::exchange(other._seek_cur, 0)) {
 }
 
 void io_uring_file::close_sync() noexcept {
-  if (_fd == -1) {
+  if (is_closed()) {
     return;
   }
 
   // Fire-and-forget: submit close with empty callback and don't wait for completion.
-  _reactor.submit_close(std::exchange(_fd, -1), {});
+  _reactor.submit_close(std::exchange(_fd, invalid_file_handle), {});
 }
 
 io_uring_file& io_uring_file::operator=(io_uring_file&& other) noexcept {
@@ -71,7 +67,7 @@ async_coro::task<expected<io_uring_file, std::string>> io_uring_file::open_coro(
 }
 
 async_coro::task<expected<size_t, std::string>> io_uring_file::read(std::span<uint8_t> buffer) {
-  if (_fd == -1) {
+  if (is_closed()) {
     co_return expected<size_t, std::string>{unexpect, "File is closed"};
   }
 
@@ -98,7 +94,7 @@ async_coro::task<expected<size_t, std::string>> io_uring_file::read(std::span<ui
 }
 
 async_coro::task<expected<void, std::string>> io_uring_file::write(std::span<const std::byte> data) {
-  if (_fd == -1) {
+  if (is_closed()) {
     co_return expected<void, std::string>{unexpect, "File is closed"};
   }
 
@@ -125,7 +121,7 @@ async_coro::task<expected<void, std::string>> io_uring_file::write(std::span<con
 }
 
 async_coro::task<expected<void, std::string>> io_uring_file::flush() {
-  if (_fd == -1) {
+  if (is_closed()) {
     co_return expected<void, std::string>{unexpect, "File is closed"};
   }
 
@@ -137,7 +133,7 @@ async_coro::task<expected<void, std::string>> io_uring_file::flush() {
 }
 
 async_coro::task<expected<void, std::string>> io_uring_file::close() {
-  if (_fd == -1) {
+  if (is_closed()) {
     co_return expected<void, std::string>{};
   }
 
@@ -145,21 +141,13 @@ async_coro::task<expected<void, std::string>> io_uring_file::close() {
     _reactor.submit_close(_fd, std::move(cont));
   });
 
-  _fd = -1;
+  _fd = invalid_file_handle;
 
   co_return std::move(result);
 }
 
-bool io_uring_file::is_closed() const noexcept {
-  return _fd == -1;
-}
-
-int io_uring_file::get_native_handle() const noexcept {
-  return _fd;
-}
-
 expected<size_t, std::string> io_uring_file::get_size() const {
-  if (_fd == -1) {
+  if (is_closed()) {
     return expected<size_t, std::string>{unexpect, "File is closed"};
   }
 
@@ -172,7 +160,7 @@ expected<size_t, std::string> io_uring_file::get_size() const {
 }
 
 expected<off_t, std::string> io_uring_file::seek(off_t offset) {
-  if (_fd == -1) {
+  if (is_closed()) {
     return expected<off_t, std::string>{unexpect, "File is closed"};
   }
 
@@ -182,7 +170,7 @@ expected<off_t, std::string> io_uring_file::seek(off_t offset) {
 }
 
 async_coro::task<expected<std::vector<std::byte>, std::string>> io_uring_file::read_all() {
-  if (_fd == -1) {
+  if (is_closed()) {
     co_return expected<std::vector<std::byte>, std::string>{unexpect, "File is closed"};
   }
 
