@@ -11,7 +11,6 @@
 #include <string>
 #include <vector>
 
-
 namespace server::io {
 
 /**
@@ -26,34 +25,30 @@ namespace server::io {
  */
 class iocp_listener {
  public:
-  /**
-   * @brief Construct an iocp_listener.
-   *
-   * @param reactor The IOCP reactor to use. Must outlive this listener.
-   */
-  explicit iocp_listener(iocp_reactor& reactor);
-
-  // Non-copyable, non-movable (reactor reference is fixed).
+  // Non-copyable (reactor reference is fixed).
   iocp_listener(const iocp_listener&) = delete;
   iocp_listener& operator=(const iocp_listener&) = delete;
-  iocp_listener(iocp_listener&&) = delete;
-  iocp_listener& operator=(iocp_listener&&) = delete;
+
+  // Movable
+  iocp_listener(iocp_listener&& other) noexcept;
+  iocp_listener& operator=(iocp_listener&& other) noexcept;
 
   ~iocp_listener();
 
   /**
-   * @brief Bind and listen on the specified address.
+   * @brief Create and open a new listener on the specified address.
    *
-   * Creates a listening socket via the reactor, binds to the given IP:port,
+   * This is a static factory method that creates a listener, binds to the given IP:port,
    * sets SO_REUSEADDR, and calls listen().
    * The socket is associated with the IOCP completion port.
    *
+   * @param reactor The IOCP reactor to use. Must outlive the returned listener.
    * @param ip_address IPv4 address string (e.g., "127.0.0.1").
    * @param port Port number.
-   * @return An expected<void, std::string>. On success, contains void.
+   * @return An expected<iocp_listener, std::string>. On success, contains the listener.
    *         On failure, contains an error message.
    */
-  [[nodiscard]] expected<void, std::string> open(std::string_view ip_address, uint16_t port);
+  [[nodiscard]] static expected<iocp_listener, std::string> open(iocp_reactor& reactor, std::string_view ip_address, uint16_t port);
 
   /**
    * @brief Accept a new connection asynchronously (coroutine version).
@@ -77,7 +72,7 @@ class iocp_listener {
    *
    * @return The socket handle, or INVALID_SOCKET if the listener is closed.
    */
-  [[nodiscard]] socket_type get_fd() const noexcept { return _sock; }
+  [[nodiscard]] socket_type get_native_handle() const noexcept { return _sock; }
 
   /**
    * @brief Close the listener socket.
@@ -88,6 +83,13 @@ class iocp_listener {
   [[nodiscard]] expected<void, std::string> close();
 
  private:
+  /**
+   * @brief Construct an iocp_listener.
+   *
+   * @param reactor The IOCP reactor to use. Must outlive this listener.
+   */
+  explicit iocp_listener(iocp_reactor& reactor);
+
   iocp_reactor& _reactor;
   socket_type _sock = invalid_socket_id;
 };

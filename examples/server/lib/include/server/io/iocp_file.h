@@ -114,7 +114,7 @@ class iocp_file {
    *
    * @return The file handle as an int, or -1 if the file is closed.
    */
-  [[nodiscard]] file_handle_t get_fd() const noexcept { return _fd; }
+  [[nodiscard]] file_handle_t get_native_handle() const noexcept { return _fd; }
 
   /**
    * @brief Get the file size in bytes.

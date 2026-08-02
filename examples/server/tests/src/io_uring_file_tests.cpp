@@ -37,7 +37,7 @@ TEST(io_uring_file_tests, open_and_close) {
 
     auto file = std::move(*result);
     EXPECT_FALSE(file.is_closed());
-    EXPECT_GT(file.get_fd(), 0);
+    EXPECT_GT(file.get_native_handle(), 0);
 
     auto close_result = co_await file.close();
     if (!close_result) {

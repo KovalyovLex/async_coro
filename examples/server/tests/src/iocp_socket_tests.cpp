@@ -43,17 +43,17 @@ TEST(iocp_socket_tests, socket_basic_lifecycle) {
 
   auto test = [&]() -> async_coro::task<int> {
     // Open a listener on port 0 (auto-assign port)
-    server::io::iocp_listener listener{reactor};
-    auto open_result = listener.open("127.0.0.1", 0);
-    if (!open_result) {
-      EXPECT_TRUE(open_result) << open_result.error();
+    auto listener_result = server::io::iocp_listener::open(reactor, "127.0.0.1", 0);
+    if (!listener_result) {
+      EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
+    server::io::iocp_listener listener = std::move(*listener_result);
 
     // Get the actual port from getsockname
     sockaddr_in addr{};
     int addr_len = static_cast<int>(sizeof(addr));
-    if (getsockname(listener.get_fd(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
+    if (getsockname(listener.get_native_handle(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
       EXPECT_TRUE(false) << "getsockname failed";
       co_return -1;
     }
@@ -70,7 +70,7 @@ TEST(iocp_socket_tests, socket_basic_lifecycle) {
 
     auto client_socket = std::move(*connect_result);
     EXPECT_FALSE(client_socket.is_closed());
-    EXPECT_NE(client_socket.get_fd(), server::io::invalid_socket_id);
+    EXPECT_NE(client_socket.get_native_handle(), server::io::invalid_socket_id);
 
     // Accept the connection on the server side
     auto accept_result = co_await listener.accept();
@@ -81,7 +81,7 @@ TEST(iocp_socket_tests, socket_basic_lifecycle) {
 
     auto server_socket = std::move(*accept_result);
     EXPECT_FALSE(server_socket.is_closed());
-    EXPECT_NE(server_socket.get_fd(), server::io::invalid_socket_id);
+    EXPECT_NE(server_socket.get_native_handle(), server::io::invalid_socket_id);
 
     // Close both sockets
     auto client_close = client_socket.close();
@@ -115,17 +115,17 @@ TEST(iocp_socket_tests, socket_send_receive_small) {
 
   auto test = [&]() -> async_coro::task<int> {
     // Open a listener on port 0 (auto-assign port)
-    server::io::iocp_listener listener{reactor};
-    auto open_result = listener.open("127.0.0.1", 0);
-    if (!open_result) {
-      EXPECT_TRUE(open_result) << open_result.error();
+    auto listener_result = server::io::iocp_listener::open(reactor, "127.0.0.1", 0);
+    if (!listener_result) {
+      EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
+    server::io::iocp_listener listener = std::move(*listener_result);
 
     // Get the actual port from getsockname
     sockaddr_in addr{};
     int addr_len = static_cast<int>(sizeof(addr));
-    if (getsockname(listener.get_fd(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
+    if (getsockname(listener.get_native_handle(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
       EXPECT_TRUE(false) << "getsockname failed";
       co_return -1;
     }
@@ -199,17 +199,17 @@ TEST(iocp_socket_tests, socket_send_receive_large) {
 
   auto test = [&]() -> async_coro::task<int> {
     // Open a listener on port 0 (auto-assign port)
-    server::io::iocp_listener listener{reactor};
-    auto open_result = listener.open("127.0.0.1", 0);
-    if (!open_result) {
-      EXPECT_TRUE(open_result) << open_result.error();
+    auto listener_result = server::io::iocp_listener::open(reactor, "127.0.0.1", 0);
+    if (!listener_result) {
+      EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
+    server::io::iocp_listener listener = std::move(*listener_result);
 
     // Get the actual port from getsockname
     sockaddr_in addr{};
     int addr_len = static_cast<int>(sizeof(addr));
-    if (getsockname(listener.get_fd(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
+    if (getsockname(listener.get_native_handle(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
       EXPECT_TRUE(false) << "getsockname failed";
       co_return -1;
     }
@@ -284,17 +284,17 @@ TEST(iocp_socket_tests, socket_multiple_messages) {
 
   auto test = [&]() -> async_coro::task<int> {
     // Open a listener on port 0 (auto-assign port)
-    server::io::iocp_listener listener{reactor};
-    auto open_result = listener.open("127.0.0.1", 0);
-    if (!open_result) {
-      EXPECT_TRUE(open_result) << open_result.error();
+    auto listener_result = server::io::iocp_listener::open(reactor, "127.0.0.1", 0);
+    if (!listener_result) {
+      EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
+    server::io::iocp_listener listener = std::move(*listener_result);
 
     // Get the actual port from getsockname
     sockaddr_in addr{};
     int addr_len = static_cast<int>(sizeof(addr));
-    if (getsockname(listener.get_fd(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
+    if (getsockname(listener.get_native_handle(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
       EXPECT_TRUE(false) << "getsockname failed";
       co_return -1;
     }
@@ -372,17 +372,17 @@ TEST(iocp_socket_tests, socket_partial_send) {
 
   auto test = [&]() -> async_coro::task<int> {
     // Open a listener on port 0 (auto-assign port)
-    server::io::iocp_listener listener{reactor};
-    auto open_result = listener.open("127.0.0.1", 0);
-    if (!open_result) {
-      EXPECT_TRUE(open_result) << open_result.error();
+    auto listener_result = server::io::iocp_listener::open(reactor, "127.0.0.1", 0);
+    if (!listener_result) {
+      EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
+    server::io::iocp_listener listener = std::move(*listener_result);
 
     // Get the actual port from getsockname
     sockaddr_in addr{};
     int addr_len = static_cast<int>(sizeof(addr));
-    if (getsockname(listener.get_fd(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
+    if (getsockname(listener.get_native_handle(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
       EXPECT_TRUE(false) << "getsockname failed";
       co_return -1;
     }
@@ -490,17 +490,17 @@ TEST(iocp_socket_tests, socket_set_no_delay) {
 
   auto test = [&]() -> async_coro::task<int> {
     // Open a listener on port 0 (auto-assign port)
-    server::io::iocp_listener listener{reactor};
-    auto open_result = listener.open("127.0.0.1", 0);
-    if (!open_result) {
-      EXPECT_TRUE(open_result) << open_result.error();
+    auto listener_result = server::io::iocp_listener::open(reactor, "127.0.0.1", 0);
+    if (!listener_result) {
+      EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
+    server::io::iocp_listener listener = std::move(*listener_result);
 
     // Get the actual port from getsockname
     sockaddr_in addr{};
     int addr_len = static_cast<int>(sizeof(addr));
-    if (getsockname(listener.get_fd(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
+    if (getsockname(listener.get_native_handle(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
       EXPECT_TRUE(false) << "getsockname failed";
       co_return -1;
     }
@@ -561,17 +561,17 @@ TEST(iocp_socket_tests, socket_move_semantics) {
 
   auto test = [&]() -> async_coro::task<int> {
     // Open a listener on port 0 (auto-assign port)
-    server::io::iocp_listener listener{reactor};
-    auto open_result = listener.open("127.0.0.1", 0);
-    if (!open_result) {
-      EXPECT_TRUE(open_result) << open_result.error();
+    auto listener_result = server::io::iocp_listener::open(reactor, "127.0.0.1", 0);
+    if (!listener_result) {
+      EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
+    server::io::iocp_listener listener = std::move(*listener_result);
 
     // Get the actual port from getsockname
     sockaddr_in addr{};
     int addr_len = static_cast<int>(sizeof(addr));
-    if (getsockname(listener.get_fd(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
+    if (getsockname(listener.get_native_handle(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
       EXPECT_TRUE(false) << "getsockname failed";
       co_return -1;
     }
@@ -588,18 +588,18 @@ TEST(iocp_socket_tests, socket_move_semantics) {
 
     auto socket1 = std::move(*connect_result);
     EXPECT_FALSE(socket1.is_closed());
-    EXPECT_NE(socket1.get_fd(), server::io::invalid_socket_id);
+    EXPECT_NE(socket1.get_native_handle(), server::io::invalid_socket_id);
 
     // Move-construct another iocp_socket
     auto socket2 = std::move(socket1);
 
     // Original should be closed after move
     EXPECT_TRUE(socket1.is_closed());
-    EXPECT_EQ(socket1.get_fd(), server::io::invalid_socket_id);
+    EXPECT_EQ(socket1.get_native_handle(), server::io::invalid_socket_id);
 
     // New one should work
     EXPECT_FALSE(socket2.is_closed());
-    EXPECT_NE(socket2.get_fd(), server::io::invalid_socket_id);
+    EXPECT_NE(socket2.get_native_handle(), server::io::invalid_socket_id);
 
     // Test move assignment
     auto accept_result = co_await listener.accept();
@@ -616,11 +616,11 @@ TEST(iocp_socket_tests, socket_move_semantics) {
 
     // socket2 should be closed after move
     EXPECT_TRUE(socket2.is_closed());
-    EXPECT_EQ(socket2.get_fd(), server::io::invalid_socket_id);
+    EXPECT_EQ(socket2.get_native_handle(), server::io::invalid_socket_id);
 
     // socket3 should now hold the moved-to socket
     EXPECT_FALSE(socket3.is_closed());
-    EXPECT_NE(socket3.get_fd(), server::io::invalid_socket_id);
+    EXPECT_NE(socket3.get_native_handle(), server::io::invalid_socket_id);
 
     // Clean up
     (void)socket3.close();
@@ -641,28 +641,22 @@ TEST(iocp_socket_tests, listener_open_close) {
   auto& reactor = *reactor_result;
 
   auto test = [&]() -> async_coro::task<int> {
-    // Create listener
-    server::io::iocp_listener listener{reactor};
-
-    // Verify listener is initially closed
-    EXPECT_FALSE(listener.is_open());
-    EXPECT_EQ(listener.get_fd(), server::io::invalid_socket_id);
-
-    // Open on localhost:0 (auto-port)
-    auto open_result = listener.open("127.0.0.1", 0);
-    if (!open_result) {
-      EXPECT_TRUE(open_result) << open_result.error();
+    // Create and open listener
+    auto listener_result = server::io::iocp_listener::open(reactor, "127.0.0.1", 0);
+    if (!listener_result) {
+      EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
+    server::io::iocp_listener listener = std::move(*listener_result);
 
     // Verify listener is open
     EXPECT_TRUE(listener.is_open());
-    EXPECT_NE(listener.get_fd(), server::io::invalid_socket_id);
+    EXPECT_NE(listener.get_native_handle(), server::io::invalid_socket_id);
 
     // Get the assigned port
     sockaddr_in addr{};
     int addr_len = static_cast<int>(sizeof(addr));
-    if (getsockname(listener.get_fd(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
+    if (getsockname(listener.get_native_handle(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
       EXPECT_TRUE(false) << "getsockname failed";
       co_return -1;
     }
@@ -678,7 +672,7 @@ TEST(iocp_socket_tests, listener_open_close) {
 
     // Verify listener is closed
     EXPECT_FALSE(listener.is_open());
-    EXPECT_EQ(listener.get_fd(), server::io::invalid_socket_id);
+    EXPECT_EQ(listener.get_native_handle(), server::io::invalid_socket_id);
 
     co_return 0;
   };
@@ -697,17 +691,17 @@ TEST(iocp_socket_tests, socket_echo_server) {
 
   auto test = [&]() -> async_coro::task<int> {
     // Open a listener on port 0 (auto-assign port)
-    server::io::iocp_listener listener{reactor};
-    auto open_result = listener.open("127.0.0.1", 0);
-    if (!open_result) {
-      EXPECT_TRUE(open_result) << open_result.error();
+    auto listener_result = server::io::iocp_listener::open(reactor, "127.0.0.1", 0);
+    if (!listener_result) {
+      EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
+    server::io::iocp_listener listener = std::move(*listener_result);
 
     // Get the actual port from getsockname
     sockaddr_in addr{};
     int addr_len = static_cast<int>(sizeof(addr));
-    if (getsockname(listener.get_fd(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
+    if (getsockname(listener.get_native_handle(), reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0) {
       EXPECT_TRUE(false) << "getsockname failed";
       co_return -1;
     }

@@ -104,7 +104,7 @@ class io_uring_file {
    *
    * @return The file descriptor, or -1 if the file is closed.
    */
-  [[nodiscard]] int get_fd() const noexcept;
+  [[nodiscard]] int get_native_handle() const noexcept;
 
   /**
    * @brief Get the file size in bytes.

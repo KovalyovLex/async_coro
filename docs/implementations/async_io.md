@@ -128,7 +128,7 @@ class file {
   expected<void, std::string> flush() const;
   void close() noexcept;
   [[nodiscard]] bool is_closed() const noexcept;
-  [[nodiscard]] file_handle_t get_fd() const noexcept;
+  [[nodiscard]] file_handle_t get_native_handle() const noexcept;
   expected<size_t, std::string> get_size() const;
   expected<off_t, std::string> seek(off_t offset, seek_whence whence) const;
   async_coro::task<expected<std::vector<std::byte>, std::string>> read_all();

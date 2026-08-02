@@ -123,7 +123,7 @@ class iocp_socket {
    *
    * @return The socket handle, or INVALID_SOCKET if the socket is closed.
    */
-  [[nodiscard]] socket_type get_fd() const noexcept { return _sock; }
+  [[nodiscard]] socket_type get_native_handle() const noexcept { return _sock; }
 
   /**
    * @brief Set TCP_NODELAY option.

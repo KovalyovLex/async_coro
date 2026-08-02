@@ -35,7 +35,7 @@ TEST(iocp_file_tests, open_and_close) {
 
     auto file = std::move(*result);
     EXPECT_FALSE(file.is_closed());
-    EXPECT_NE(file.get_fd(), server::io::invalid_file_handle);
+    EXPECT_NE(file.get_native_handle(), server::io::invalid_file_handle);
 
     auto close_result = file.close();
     if (!close_result) {
@@ -285,18 +285,18 @@ TEST(iocp_file_tests, move_constructor) {
 
     auto file1 = std::move(*result);
     EXPECT_FALSE(file1.is_closed());
-    EXPECT_NE(file1.get_fd(), server::io::invalid_file_handle);
+    EXPECT_NE(file1.get_native_handle(), server::io::invalid_file_handle);
 
     // Move-construct another iocp_file
     auto file2 = std::move(file1);
 
     // Original should be closed after move
     EXPECT_TRUE(file1.is_closed());
-    EXPECT_EQ(file1.get_fd(), server::io::invalid_file_handle);
+    EXPECT_EQ(file1.get_native_handle(), server::io::invalid_file_handle);
 
     // New one should work
     EXPECT_FALSE(file2.is_closed());
-    EXPECT_NE(file2.get_fd(), server::io::invalid_file_handle);
+    EXPECT_NE(file2.get_native_handle(), server::io::invalid_file_handle);
 
     // Verify we can read from the moved-to file
     auto data_result = co_await file2.read_all();

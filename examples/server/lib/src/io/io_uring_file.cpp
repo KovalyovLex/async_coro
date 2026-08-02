@@ -154,7 +154,7 @@ bool io_uring_file::is_closed() const noexcept {
   return _fd == -1;
 }
 
-int io_uring_file::get_fd() const noexcept {
+int io_uring_file::get_native_handle() const noexcept {
   return _fd;
 }
 

@@ -95,7 +95,7 @@ class sync_file {
    *
    * @return The file descriptor, or -1 if the file is closed.
    */
-  [[nodiscard]] file_handle_t get_fd() const noexcept { return _fd; }
+  [[nodiscard]] file_handle_t get_native_handle() const noexcept { return _fd; }
 
   // Non-copyable to prevent multiple objects from closing the same file descriptor.
   sync_file(const sync_file&) = delete;
