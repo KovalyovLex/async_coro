@@ -138,7 +138,7 @@ async_coro::task<expected<void, std::string>> iocp_file::write(std::span<const s
 // flush
 // ============================================================================
 
-expected<void, std::string> iocp_file::flush() {
+expected<void, std::string> iocp_file::flush() noexcept {
   if (is_closed()) {
     return expected<void, std::string>{unexpect, "File is closed"};
   }
@@ -150,7 +150,7 @@ expected<void, std::string> iocp_file::flush() {
 // close
 // ============================================================================
 
-expected<void, std::string> iocp_file::close() {
+expected<void, std::string> iocp_file::close() noexcept {
   if (is_closed()) {
     return expected<void, std::string>{};
   }
@@ -162,7 +162,7 @@ expected<void, std::string> iocp_file::close() {
 // Query methods
 // ============================================================================
 
-expected<size_t, std::string> iocp_file::get_size() const {
+expected<size_t, std::string> iocp_file::get_size() const noexcept {
   if (is_closed()) {
     return expected<size_t, std::string>{unexpect, "File is closed"};
   }
@@ -176,7 +176,7 @@ expected<size_t, std::string> iocp_file::get_size() const {
   return static_cast<size_t>(file_size.QuadPart);
 }
 
-expected<uint64_t, std::string> iocp_file::seek(uint64_t offset) {
+expected<uint64_t, std::string> iocp_file::seek(uint64_t offset) noexcept {
   if (is_closed()) {
     return expected<uint64_t, std::string>{unexpect, "File is closed"};
   }

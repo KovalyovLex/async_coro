@@ -89,7 +89,7 @@ class iocp_file {
    * @return An expected<void, std::string>. On success, contains void.
    *         On failure, contains an error message.
    */
-  [[nodiscard]] expected<void, std::string> flush();
+  [[nodiscard]] expected<void, std::string> flush() noexcept;
 
   /**
    * @brief Close the file synchronously.
@@ -100,7 +100,7 @@ class iocp_file {
    * @return An expected<void, std::string>. On success, contains void.
    *         On failure, contains an error message.
    */
-  [[nodiscard]] expected<void, std::string> close();
+  [[nodiscard]] expected<void, std::string> close() noexcept;
 
   /**
    * @brief Check if the file is closed.
@@ -125,7 +125,7 @@ class iocp_file {
    * @return An expected<size_t, std::string>. On success, contains the file size
    *         in bytes. On failure, contains an error message.
    */
-  [[nodiscard]] expected<size_t, std::string> get_size() const;
+  [[nodiscard]] expected<size_t, std::string> get_size() const noexcept;
 
   /**
    * @brief Seek to an absolute position in the file.
@@ -137,7 +137,7 @@ class iocp_file {
    * @return An expected<uint64_t, std::string>. On success, contains the new file offset.
    *         On failure, contains an error message.
    */
-  [[nodiscard]] expected<uint64_t, std::string> seek(uint64_t offset);
+  [[nodiscard]] expected<uint64_t, std::string> seek(uint64_t offset) noexcept;
 
   /**
    * @brief Read the entire file contents into a vector.
@@ -151,23 +151,11 @@ class iocp_file {
   [[nodiscard]] async_coro::task<expected<std::vector<std::byte>, std::string>> read_all();
 
  private:
-  /**
-   * @brief Synchronously close the file by submitting a close operation with empty callback.
-   *
-   * Submits the close to IOCP and processes the completion queue to wait for completion.
-   * This is used by the destructor and move assignment operator.
-   */
   void close_sync() noexcept;
 
- private:
-  /**
-   * @brief Construct an iocp_file with an already-opened file handle.
-   *
-   * @param reactor The IOCP reactor this file belongs to. Must outlive this object.
-   * @param file_descriptor The file handle, already opened via submit_open.
-   */
-  explicit iocp_file(iocp_reactor& reactor, file_handle_t file_descriptor) noexcept;
+  iocp_file(iocp_reactor& reactor, file_handle_t file_descriptor) noexcept;
 
+ private:
   iocp_reactor& _reactor;  // NOLINT(cppcoreguidelines-avoid-const-or-ref-data-members): reactor lifetime guaranteed by owner
   file_handle_t _fd = invalid_file_handle;
   uint64_t _seek_cur = 0;

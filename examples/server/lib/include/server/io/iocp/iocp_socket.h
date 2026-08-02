@@ -97,7 +97,7 @@ class iocp_socket {
    * @return An expected<void, std::string>. On success, contains void.
    *         On failure, contains an error message.
    */
-  [[nodiscard]] expected<void, std::string> close();
+  [[nodiscard]] expected<void, std::string> close() noexcept;
 
   /**
    * @brief Check if the socket is closed.
@@ -120,7 +120,7 @@ class iocp_socket {
    * @return An expected<void, std::string>. On success, contains void.
    *         On failure, contains an error message.
    */
-  [[nodiscard]] expected<void, std::string> set_no_delay(bool enable);
+  [[nodiscard]] expected<void, std::string> set_no_delay(bool enable) noexcept;
 
  private:
   /**
@@ -128,7 +128,7 @@ class iocp_socket {
    *
    * Closes the socket handle via closesocket() if still open.
    */
-  void close_sync();
+  void close_sync() noexcept;
 
   /**
    * @brief Construct an iocp_socket with an already-opened socket handle.

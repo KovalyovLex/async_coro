@@ -158,7 +158,7 @@ async_coro::task<expected<size_t, std::string>> iocp_socket::receive(std::span<s
 // close
 // ============================================================================
 
-expected<void, std::string> iocp_socket::close() {
+expected<void, std::string> iocp_socket::close() noexcept {
   if (is_closed()) {
     return expected<void, std::string>{};
   }
@@ -176,7 +176,7 @@ expected<void, std::string> iocp_socket::close() {
 // set_no_delay
 // ============================================================================
 
-expected<void, std::string> iocp_socket::set_no_delay(bool enable) {
+expected<void, std::string> iocp_socket::set_no_delay(bool enable) noexcept {
   if (is_closed()) {
     return expected<void, std::string>{unexpect, "Socket is closed"};
   }
