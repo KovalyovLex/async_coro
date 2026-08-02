@@ -1,3 +1,7 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/thread_safety/unique_lock.h>
 #include <gtest/gtest.h>
 #include <server/http1/http_method.h>
@@ -737,3 +741,5 @@ TEST_F(http_roundtrip_fixture, large_response_body) {
 
   server::io::close_socket(sock);
 }
+
+#endif  // EPOLL_KQUEUE_ENABLED

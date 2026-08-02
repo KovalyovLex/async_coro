@@ -1,5 +1,6 @@
-
 #include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
 
 #include "utils/has_open_ssl.h"
 
@@ -147,3 +148,5 @@ int ssl_connection::write(std::span<const std::byte> bytes) {
 }
 
 }  // namespace server::socket_layer
+
+#endif  // EPOLL_KQUEUE_ENABLED

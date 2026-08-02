@@ -1,3 +1,7 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/thread_safety/unique_lock.h>
 #include <gtest/gtest.h>
 #include <server/http1/response.h>
@@ -200,3 +204,5 @@ TEST_F(close_header_fixture, connection_close_request_overrides_keep_alive) {
   std::string after = send_get(test_client);
   EXPECT_TRUE(after.empty());
 }
+
+#endif  // EPOLL_KQUEUE_ENABLED

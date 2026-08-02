@@ -1,3 +1,6 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
 
 #include <gtest/gtest.h>
 #include <server/http1/http_server.h>
@@ -181,3 +184,5 @@ TEST(web_socket_frames, empty_binary_frame) {
   auto frame = ws_test_client::generate_binary_frame(empty_data);
   EXPECT_EQ(frame.size(), 2 + 4);
 }
+
+#endif  // EPOLL_KQUEUE_ENABLED

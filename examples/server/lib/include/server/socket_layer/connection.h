@@ -1,5 +1,9 @@
 #pragma once
 
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/task.h>
 #include <server/core/i_read_connection.h>
 #include <server/core/i_write_connection.h>
@@ -75,3 +79,5 @@ class connection final : public core::i_read_connection, public core::i_write_co
   bool _no_delay = false;
 };
 }  // namespace server::socket_layer
+
+#endif  // EPOLL_KQUEUE_ENABLED

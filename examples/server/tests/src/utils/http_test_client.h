@@ -1,5 +1,9 @@
 #pragma once
 
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <server/http1/http_method.h>
 #include <server/socket_layer/connection_id.h>
 
@@ -49,3 +53,5 @@ class http_test_client {
   std::string _host;
   server::socket_layer::connection_id _connection = server::socket_layer::invalid_connection;
 };
+
+#endif  // EPOLL_KQUEUE_ENABLED

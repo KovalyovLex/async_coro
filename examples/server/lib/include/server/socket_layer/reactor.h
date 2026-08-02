@@ -1,5 +1,9 @@
 #pragma once
 
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <server/io/reactor.h>
 #include <server/socket_layer/connection_id.h>
 
@@ -77,3 +81,5 @@ class reactor {
 };
 
 }  // namespace server::socket_layer
+
+#endif  // EPOLL_KQUEUE_ENABLED

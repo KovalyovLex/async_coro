@@ -39,7 +39,6 @@ set_property(TARGET server_lib PROPERTY CXX_STANDARD 20)
 target_link_libraries(server_lib PUBLIC async_coro Tracy::TracyClient)
 
 if (WIN32)
-    target_link_libraries(server_lib PRIVATE wepoll)
     target_link_libraries(server_lib PUBLIC ws2_32)
 endif()
 

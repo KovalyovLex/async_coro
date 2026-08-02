@@ -1,3 +1,7 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/config.h>
 #include <async_coro/utils/set_thread_name.h>
 #include <server/socket_layer/connection.h>
@@ -174,3 +178,5 @@ tcp_server::~tcp_server() {
 }
 
 }  // namespace server
+
+#endif  // EPOLL_KQUEUE_ENABLED

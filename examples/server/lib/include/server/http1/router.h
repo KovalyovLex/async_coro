@@ -1,5 +1,9 @@
 #pragma once
 
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/task.h>
 #include <async_coro/utils/unique_function.h>
 #include <server/http1/http_method.h>
@@ -50,3 +54,5 @@ class router {
 };
 
 }  // namespace server::http1
+
+#endif  // EPOLL_KQUEUE_ENABLED

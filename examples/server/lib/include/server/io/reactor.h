@@ -1,5 +1,9 @@
 #pragma once
 
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/internal/await_callback.h>
 #include <async_coro/thread_safety/analysis.h>
 #include <async_coro/thread_safety/mutex.h>
@@ -17,11 +21,12 @@ namespace server::io {
  * @brief Event reactor for sockets only.
  *
  * This reactor provides an interface for polling socket file descriptors using
- * epoll (Linux) or kqueue (macOS). It does NOT support regular files — epoll/kqueue
- * are designed for network I/O and do not provide meaningful async notifications
- * for regular file operations.
+ * epoll (Linux) or kqueue (macOS). On Windows, use the IOCP-based reactor instead.
+ * This reactor does NOT support regular files — epoll/kqueue are designed for
+ * network I/O and do not provide meaningful async notifications for regular file operations.
  *
  * For synchronous file I/O, use server::io::sync_file instead.
+ * For async file I/O on Windows, use server::io::iocp_reactor.
  *
  * @note The reactor must outlive any socket that is registered with it.
  *       The caller is responsible for ensuring proper lifetime management.
@@ -109,10 +114,10 @@ class reactor {
   std::vector<handled_fd> _handled_fds CORO_THREAD_GUARDED_BY(_mutex);
   std::vector<size_t> _empty_fds CORO_THREAD_GUARDED_BY(_mutex);
 
-#if EPOLL_SOCKET || KQUEUE_SOCKET
-  epoll_handle_t _epoll_fd = invalid_epoll_handle;
-#endif
+  file_handle_t _epoll_fd = invalid_file_handle;
   bool _error = false;
 };
 
 }  // namespace server::io
+
+#endif

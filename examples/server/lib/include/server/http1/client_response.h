@@ -13,6 +13,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <span>
 #include <string_view>
 #include <utility>
 #include <vector>

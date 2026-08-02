@@ -17,17 +17,6 @@ bool close_socket(socket_type socket_id) noexcept {
   return true;
 }
 
-bool close_epoll(epoll_handle_t handle) noexcept {
-  if (handle != invalid_epoll_handle) {
-#if WIN_SOCKET
-    return ::CloseHandle(handle);
-#else
-    return ::close(handle) == 0;
-#endif
-  }
-  return true;
-}
-
 bool close_file(file_handle_t handle) noexcept {
   if (handle != invalid_file_handle) {
 #if WIN_SOCKET

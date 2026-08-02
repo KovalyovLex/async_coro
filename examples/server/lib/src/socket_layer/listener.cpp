@@ -1,6 +1,9 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/config.h>
 #include <server/io/io_config.h>
-#include <server/io/winsock_init.h>
 #include <server/socket_layer/connection_id.h>
 #include <server/socket_layer/listener.h>
 
@@ -12,14 +15,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-
-#if WIN_SOCKET
-#include <WS2tcpip.h>
-#include <wepoll.h>
-
-#include <iostream>
-#include <stdexcept>
-#else
 
 #if EPOLL_SOCKET
 #include <sys/epoll.h>
@@ -33,8 +28,6 @@
 #include <netinet/in.h>
 #include <sys/types.h>
 #include <unistd.h>
-
-#endif
 
 namespace server::socket_layer {
 
@@ -65,20 +58,6 @@ static bool set_non_blocking_mode(io::socket_type sock, std::string* error_messa
 }
 
 static io::socket_type open_socket_impl(const std::string& ip_address, uint16_t port, bool non_block, std::string* error_message) {  // NOLINT(*-complexity*)
-
-#if WIN_SOCKET
-  {
-    auto& initialized = server::io::init_winsock();
-    if (!initialized) {
-      if (error_message != nullptr) {
-        *error_message = initialized.error();
-      }
-      return io::invalid_socket_id;
-    }
-    ASYNC_CORO_ASSERT(initialized);
-  }
-#endif
-
   io::socket_type listen_socket = io::invalid_socket_id;
 
   if (ip_address.empty()) {
@@ -227,9 +206,6 @@ static io::socket_type open_socket_impl(const std::string& ip_address, uint16_t 
 }
 
 listener::listener() {
-#if WIN_SOCKET
-  server::io::init_winsock();
-#endif
 }
 
 bool listener::open(const std::string& ip_address, uint16_t port, std::string* error_message) {
@@ -321,3 +297,5 @@ listener::~listener() {
 }
 
 }  // namespace server::socket_layer
+
+#endif  // EPOLL_KQUEUE_ENABLED

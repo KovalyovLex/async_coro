@@ -1,3 +1,7 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/thread_safety/unique_lock.h>
 #include <gtest/gtest.h>
 #include <server/http1/session.h>
@@ -585,3 +589,5 @@ TEST_F(web_socket_deflate_tests, deflate_all_parameters_combined_echo) {
                         "Deflate: all params test",
                         conf);
 }
+
+#endif  // EPOLL_KQUEUE_ENABLED

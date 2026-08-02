@@ -1,3 +1,6 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
 
 #include <gtest/gtest.h>
 #include <server/core/i_read_connection.h>
@@ -190,3 +193,5 @@ TEST(proxy_example, forward_removes_x_forwarded_headers) {
   // New Forwarded header should be present
   EXPECT_NE(serialized.find("Forwarded:"), std::string::npos);
 }
+
+#endif  // EPOLL_KQUEUE_ENABLED

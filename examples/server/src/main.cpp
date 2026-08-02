@@ -22,6 +22,8 @@
 #include <tracy/Tracy.hpp>
 
 int main(int argc, char** argv) {
+#if EPOLL_KQUEUE_ENABLED
+
   TracySetProgramName("Simple server");
 
   int port = 8080;                          // NOLINT
@@ -107,4 +109,9 @@ int main(int argc, char** argv) {
   });
 
   return 0;
+#else
+  std::cerr << "Unsupported platform\n";
+
+  return -2;
+#endif  // EPOLL_KQUEUE_ENABLED
 }

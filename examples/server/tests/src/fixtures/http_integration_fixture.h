@@ -1,5 +1,9 @@
 #pragma once
 
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/thread_safety/mutex.h>
 #include <gtest/gtest.h>
 #include <server/http1/http_server.h>
@@ -30,3 +34,5 @@ class http_integration_fixture : public ::testing::Test {
   uint16_t port = 0;
   http_test_client test_client;
 };
+
+#endif

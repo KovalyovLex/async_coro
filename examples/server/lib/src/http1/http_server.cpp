@@ -1,3 +1,7 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/execution_system.h>
 #include <server/http1/http_server.h>
 #include <server/http1/session.h>
@@ -32,3 +36,4 @@ void http_server::serve(const http_server_config& conf, std::optional<ssl_config
 }
 
 }  // namespace server::http1
+#endif

@@ -1,3 +1,7 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/await/await_callback.h>
 #include <async_coro/await/cancel_after_time.h>
 #include <async_coro/await/execute_after_time.h>
@@ -175,3 +179,5 @@ async_coro::task<void> start_session(server::socket_layer::connection conn, cons
 }
 
 }  // namespace server::http1
+
+#endif  // EPOLL_KQUEUE_ENABLED

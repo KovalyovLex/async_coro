@@ -1,5 +1,9 @@
 #pragma once
 
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <server/socket_layer/connection_id.h>
 
 #include <cstdint>
@@ -53,3 +57,5 @@ class listener {
 };
 
 }  // namespace server::socket_layer
+
+#endif  // EPOLL_KQUEUE_ENABLED

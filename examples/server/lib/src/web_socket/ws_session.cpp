@@ -1,3 +1,7 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/config.h>
 #include <server/http1/response.h>
 #include <server/utils/base64.h>
@@ -547,3 +551,5 @@ void ws_session::set_permessage_deflate(std::optional<permessage_deflate_config>
 #endif
 
 }  // namespace server::web_socket
+
+#endif  // EPOLL_KQUEUE_ENABLED

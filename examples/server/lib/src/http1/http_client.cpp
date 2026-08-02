@@ -1,3 +1,7 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <server/core/i_read_connection.h>
 #include <server/core/i_write_connection.h>
 #include <server/http1/forwarding_params.h>
@@ -74,3 +78,5 @@ auto http_client::send_request(client_request& req, server::core::i_write_connec
 }
 
 }  // namespace server::http1
+
+#endif  // EPOLL_KQUEUE_ENABLED

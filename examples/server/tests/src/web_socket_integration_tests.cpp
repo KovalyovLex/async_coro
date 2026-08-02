@@ -1,3 +1,7 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 // This file was split out from web_socket_tests.cpp
 #include <gtest/gtest.h>
 
@@ -114,3 +118,5 @@ TEST_F(web_socket_integration_tests, unsupported_protocol) {
   auto resp = test_client.read_response();
   EXPECT_EQ(resp.find("101"), std::string::npos);
 }
+
+#endif  // EPOLL_KQUEUE_ENABLED

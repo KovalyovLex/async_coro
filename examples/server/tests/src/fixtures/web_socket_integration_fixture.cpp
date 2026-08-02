@@ -1,8 +1,12 @@
-#include "web_socket_integration_fixture.h"
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
 
 #include <async_coro/thread_safety/unique_lock.h>
 #include <server/http1/session.h>
 #include <server/web_socket/response_frame.h>
+
+#include "web_socket_integration_fixture.h"
 
 void web_socket_integration_tests::SetUp() {
   // register route that mirrors example server behavior
@@ -50,3 +54,5 @@ void web_socket_integration_tests::TearDown() {
   accepted_protocols.clear();
   chat_session_handler = nullptr;
 }
+
+#endif  // EPOLL_KQUEUE_ENABLED

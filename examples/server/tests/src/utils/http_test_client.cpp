@@ -3,6 +3,8 @@
 #include <server/io/io_config.h>
 #include <server/socket_layer/connection_id.h>
 
+#if EPOLL_KQUEUE_ENABLED
+
 #if WIN_SOCKET
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -197,3 +199,5 @@ std::string http_test_client::generate_req_head(server::http1::http_method metho
 
   return req;
 }
+
+#endif  // EPOLL_KQUEUE_ENABLED

@@ -1,17 +1,17 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
 
 #include <async_coro/await/await_callback.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <server/socket_layer/connection.h>
 #include <server/socket_layer/connection_id.h>
 #include <server/socket_layer/reactor.h>
 #include <server/socket_layer/ssl_connection.h>
 #include <server/socket_layer/ssl_context.h>
 #include <server/utils/expected.h>
-
-#if !WIN_SOCKET
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <sys/socket.h>
-#endif
 
 #include <cerrno>
 
@@ -263,3 +263,5 @@ void connection::check_subscribed() {
 }
 
 }  // namespace server::socket_layer
+
+#endif  // EPOLL_KQUEUE_ENABLED

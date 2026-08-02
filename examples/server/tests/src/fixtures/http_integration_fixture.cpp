@@ -1,5 +1,7 @@
 #include "http_integration_fixture.h"
 
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/thread_safety/unique_lock.h>
 #include <server/http1/http_error.h>
 #include <server/http1/http_server_config.h>
@@ -114,3 +116,5 @@ void http_integration_fixture::start_server() {
   // wait for server to listen (retry connect)
   ASSERT_TRUE(sem.try_acquire_for(std::chrono::seconds(3))) << "Server did not start listening in time";
 }
+
+#endif

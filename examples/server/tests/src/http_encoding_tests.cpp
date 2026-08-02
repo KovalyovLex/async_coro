@@ -1,3 +1,7 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/task.h>
 #include <async_coro/thread_safety/unique_lock.h>
 #include <gtest/gtest.h>
@@ -229,3 +233,5 @@ TEST_F(http_encoding_tests, test_zstd_encoded_long) {
   test_message_compression(get_long_message(), server::compression_encoding::zstd);
 }
 #endif  // SERVER_HAS_ZSTD
+
+#endif  // EPOLL_KQUEUE_ENABLED

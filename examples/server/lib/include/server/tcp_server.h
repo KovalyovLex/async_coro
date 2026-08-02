@@ -1,5 +1,9 @@
 #pragma once
 
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/utils/function_view.h>
 #include <server/socket_layer/connection.h>
 #include <server/socket_layer/ssl_context.h>
@@ -46,3 +50,5 @@ class tcp_server {
 };
 
 }  // namespace server
+
+#endif  // EPOLL_KQUEUE_ENABLED

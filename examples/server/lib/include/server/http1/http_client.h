@@ -1,5 +1,9 @@
 #pragma once
 
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/task.h>
 #include <server/http1/client_request.h>
 #include <server/http1/client_response.h>
@@ -66,3 +70,5 @@ class http_client {
 };
 
 }  // namespace server::http1
+
+#endif  // EPOLL_KQUEUE_ENABLED

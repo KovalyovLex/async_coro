@@ -1,5 +1,7 @@
 #pragma once
 
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/task.h>
 #include <server/http1/request.h>
 #include <server/socket_layer/connection.h>
@@ -63,3 +65,5 @@ class ws_session {
 };
 
 }  // namespace server::web_socket
+
+#endif  // EPOLL_KQUEUE_ENABLED

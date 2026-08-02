@@ -1,3 +1,7 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/config.h>
 #include <async_coro/thread_safety/unique_lock.h>
 #include <server/io/io_config.h>
@@ -11,24 +15,18 @@
 #include <span>
 
 #if EPOLL_SOCKET
-#if WIN_SOCKET
-#include <wepoll.h>
-#else
 #include <sys/epoll.h>
-#endif  // WIN_SOCKET
 #elif KQUEUE_SOCKET
 #include <sys/event.h>
 #else
 #error "Unsupported platform"
 #endif
 
-#if !WIN_SOCKET
 #include <unistd.h>
-#endif
 
 namespace server::io {
 
-static void epoll_ctl_impl(epoll_handle_t event_fd, socket_type file_descriptor, int action, uint32_t flags, void* user_data) {  // NOLINT(bugprone-easily-swappable-parameters)
+static void epoll_ctl_impl(file_handle_t event_fd, socket_type file_descriptor, int action, uint32_t flags, void* user_data) {  // NOLINT(bugprone-easily-swappable-parameters)
 #if EPOLL_SOCKET
   epoll_event event{};
   event.data.ptr = user_data;
@@ -58,7 +56,7 @@ reactor::reactor() noexcept {
 // NOLINTEND(*-member-initializer)
 
 reactor::~reactor() noexcept {
-  close_epoll(_epoll_fd);
+  io::close_file(_epoll_fd);
 }
 
 void reactor::process_loop(std::chrono::nanoseconds max_wait) {
@@ -226,9 +224,7 @@ size_t reactor::add_sock(socket_type sock) {
 
   auto* data_ptr = reinterpret_cast<void*>(index);  // NOLINT(*-reinterpret-cast, *int-to-ptr)
 
-#if WIN_SOCKET
-  epoll_ctl_impl(_epoll_fd, sock, EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLRDHUP, data_ptr);
-#elif EPOLL_SOCKET
+#if EPOLL_SOCKET
   epoll_ctl_impl(_epoll_fd, sock, EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET, data_ptr);
 #elif KQUEUE_SOCKET
   epoll_ctl_impl(_epoll_fd, sock, EV_ADD, EVFILT_READ | EVFILT_WRITE, data_ptr);
@@ -285,3 +281,5 @@ void reactor::continue_after_sent_data(socket_type sock, size_t index, continue_
 }
 
 }  // namespace server::io
+
+#endif  // EPOLL_KQUEUE_ENABLED

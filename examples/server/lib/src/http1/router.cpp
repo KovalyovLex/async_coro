@@ -1,3 +1,7 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <server/http1/request.h>
 #include <server/http1/router.h>
 
@@ -29,3 +33,5 @@ const router::handler_t* router::find_handler(const request& req) const {
 }
 
 }  // namespace server::http1
+
+#endif  // EPOLL_KQUEUE_ENABLED

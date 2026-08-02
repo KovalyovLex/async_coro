@@ -1,3 +1,7 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <async_coro/config.h>
 #include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>
@@ -688,3 +692,5 @@ TEST(tcp_server_accept, server_termination) {
     close_client_socket(fd);
   }
 }
+
+#endif  // EPOLL_KQUEUE_ENABLED

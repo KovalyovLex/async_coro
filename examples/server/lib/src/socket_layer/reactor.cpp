@@ -1,3 +1,7 @@
+#include <server/io/io_config.h>
+
+#if EPOLL_KQUEUE_ENABLED
+
 #include <server/socket_layer/reactor.h>
 
 namespace server::socket_layer {
@@ -27,3 +31,5 @@ void reactor::continue_after_sent_data(connection_id conn, size_t index, continu
 }
 
 }  // namespace server::socket_layer
+
+#endif  // EPOLL_KQUEUE_ENABLED
