@@ -327,24 +327,17 @@ TEST(iocp_socket_tests, socket_multiple_messages) {
 
     // Receive and verify each message
     for (const auto& expected_msg : messages) {
-      std::array<std::byte, 64> recv_buffer{};
-      auto recv_result = co_await server_socket.receive(recv_buffer);
+      std::array<char, 64> recv_buffer{};
+      auto recv_result = co_await server_socket.receive(std::as_writable_bytes(std::span{recv_buffer.data(), expected_msg.size()}));
       if (!recv_result) {
         EXPECT_TRUE(recv_result) << recv_result.error();
         co_return -1;
       }
       EXPECT_EQ(recv_result.value(), expected_msg.size());
 
-      std::string received_data(recv_result.value(), '\0');
-      for (size_t i = 0; i < recv_result.value(); ++i) {
-        received_data[i] = static_cast<char>(recv_buffer[i]);
-      }
+      std::string_view received_data(recv_buffer.data(), recv_result.value());
       EXPECT_EQ(received_data, expected_msg);
     }
-
-    // Clean up
-    (void)client_socket.close();
-    (void)server_socket.close();
 
     co_return 0;
   };
@@ -413,8 +406,8 @@ TEST(iocp_socket_tests, socket_partial_send) {
     EXPECT_EQ(send_result.value(), data_size) << "Total bytes sent should match requested size";
 
     // Receive via server socket — receive() loops until buffer is full
-    std::vector<std::byte> recv_buffer(data_size);
-    auto recv_result = co_await server_socket.receive(recv_buffer);
+    std::string recv_buffer(data_size, '\0');
+    auto recv_result = co_await server_socket.receive(std::as_writable_bytes(std::span{recv_buffer}));
     if (!recv_result) {
       EXPECT_TRUE(recv_result) << recv_result.error();
       co_return -1;
@@ -422,15 +415,8 @@ TEST(iocp_socket_tests, socket_partial_send) {
     EXPECT_EQ(recv_result.value(), data_size);
 
     // Verify data integrity on receive side
-    std::string received_data(recv_result.value(), '\0');
-    for (size_t i = 0; i < recv_result.value(); ++i) {
-      received_data[i] = static_cast<char>(recv_buffer[i]);
-    }
+    std::string_view received_data(recv_buffer.data(), recv_result.value());
     EXPECT_EQ(received_data, send_data);
-
-    // Clean up
-    (void)client_socket.close();
-    (void)server_socket.close();
 
     co_return 0;
   };
@@ -532,10 +518,6 @@ TEST(iocp_socket_tests, socket_set_no_delay) {
       EXPECT_TRUE(nodelay_disable) << nodelay_disable.error();
       co_return -1;
     }
-
-    // Clean up
-    (void)client_socket.close();
-    (void)server_socket.close();
 
     co_return 0;
   };
@@ -747,11 +729,7 @@ TEST(iocp_socket_tests, socket_echo_server) {
       EXPECT_EQ(recv_result.value(), msg.size());
 
       // Echo back
-      std::vector<std::byte> echo_data(recv_result.value());
-      for (size_t i = 0; i < recv_result.value(); ++i) {
-        echo_data[i] = recv_buffer[i];
-      }
-      auto echo_send = co_await server_socket.send(echo_data);
+      auto echo_send = co_await server_socket.send(std::span{recv_buffer.data(), recv_result.value()});
       if (!echo_send) {
         EXPECT_TRUE(echo_send) << echo_send.error();
         co_return -1;
@@ -759,8 +737,8 @@ TEST(iocp_socket_tests, socket_echo_server) {
       EXPECT_EQ(echo_send.value(), msg.size());
 
       // Client receives echoed data and verifies
-      std::array<std::byte, 256> client_recv_buffer{};
-      auto client_recv = co_await client_socket.receive(client_recv_buffer);
+      std::array<char, 256> client_recv_buffer{};
+      auto client_recv = co_await client_socket.receive(std::as_writable_bytes(std::span{client_recv_buffer}));
       if (!client_recv) {
         EXPECT_TRUE(client_recv) << client_recv.error();
         co_return -1;
@@ -768,16 +746,9 @@ TEST(iocp_socket_tests, socket_echo_server) {
       EXPECT_EQ(client_recv.value(), msg.size());
 
       // Verify received data matches sent data
-      std::string received_data(client_recv.value(), '\0');
-      for (size_t i = 0; i < client_recv.value(); ++i) {
-        received_data[i] = static_cast<char>(client_recv_buffer[i]);
-      }
+      std::string_view received_data(client_recv_buffer.data(), client_recv.value());
       EXPECT_EQ(received_data, msg);
     }
-
-    // Clean up
-    (void)client_socket.close();
-    (void)server_socket.close();
 
     co_return 0;
   };

@@ -78,7 +78,8 @@ class iocp_socket {
   /**
    * @brief Receive data from the socket into a buffer.
    *
-   * Receives in a loop until the entire buffer is filled (or error/connection closed).
+   * Receives available data into the provided buffer.
+   * Returns the number of bytes actually received, which may be less than the buffer size.
    *
    * @param buffer The buffer to receive into.
    * @return An awaitable that resolves to an expected<size_t, std::string>.
