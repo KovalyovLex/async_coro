@@ -59,9 +59,9 @@ class iocp_socket {
   iocp_socket& operator=(const iocp_socket&) = delete;
 
   // Movable - ownership of the socket handle transfers; reactor reference is preserved.
-  ~iocp_socket();
+  ~iocp_socket() noexcept;
   iocp_socket(iocp_socket&& other) noexcept;
-  iocp_socket& operator=(iocp_socket&& other);
+  iocp_socket& operator=(iocp_socket&& other) noexcept;
 
   /**
    * @brief Send data over the socket.
@@ -141,6 +141,7 @@ class iocp_socket {
   // Allow iocp_listener to construct iocp_socket from accepted sockets.
   friend class iocp_listener;
 
+ private:
   iocp_reactor& _reactor;  // NOLINT(cppcoreguidelines-avoid-const-or-ref-data-members): reactor lifetime guaranteed by owner
   socket_type _sock = invalid_socket_id;
 };

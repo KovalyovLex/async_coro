@@ -21,7 +21,7 @@ iocp_socket::iocp_socket(iocp_reactor& reactor, socket_type socket_handle) noexc
   // The socket is already created via WSASocket in connect_coro/accept_coro.
 }
 
-iocp_socket::~iocp_socket() {
+iocp_socket::~iocp_socket() noexcept {
   close_sync();
 }
 
@@ -30,7 +30,7 @@ iocp_socket::iocp_socket(iocp_socket&& other) noexcept
       _sock(std::exchange(other._sock, invalid_socket_id)) {
 }
 
-iocp_socket& iocp_socket::operator=(iocp_socket&& other) {
+iocp_socket& iocp_socket::operator=(iocp_socket&& other) noexcept {
   if (this != &other) {
     // Explicitly destroy current object (closes socket handle via destructor).
     this->~iocp_socket();
@@ -41,7 +41,7 @@ iocp_socket& iocp_socket::operator=(iocp_socket&& other) {
   return *this;
 }
 
-void iocp_socket::close_sync() {
+void iocp_socket::close_sync() noexcept {
   if (is_closed()) {
     return;
   }
