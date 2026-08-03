@@ -1,6 +1,7 @@
 #if WIN_IOCP_ENABLED
 
 #include <async_coro/await/await_callback.h>
+#include <server/core/error.h>
 #include <server/io/iocp/iocp_listener.h>
 #include <server/io/iocp/iocp_reactor.h>
 #include <server/utils/expected.h>
@@ -57,11 +58,11 @@ iocp_listener& iocp_listener::operator=(iocp_listener&& other) noexcept {
 // open
 // ============================================================================
 
-expected<iocp_listener, std::string> iocp_listener::open(iocp_reactor& reactor, std::string_view ip_address, uint16_t port) {
+expected<iocp_listener, core::error> iocp_listener::open(iocp_reactor& reactor, std::string_view ip_address, uint16_t port) {
   // Create a TCP socket via the reactor.
   auto sock_result = reactor.create_socket(socket_type_id::tcp);
   if (!sock_result) {
-    return expected<iocp_listener, std::string>{unexpect, std::move(sock_result).error()};
+    return expected<iocp_listener, core::error>{unexpect, std::move(sock_result).error()};
   }
 
   socket_type sock = sock_result.value();
@@ -76,7 +77,7 @@ expected<iocp_listener, std::string> iocp_listener::open(iocp_reactor& reactor, 
       sizeof(reuse_addr));
   if (result == SOCKET_ERROR) {
     (void)reactor.close_socket(sock);
-    return expected<iocp_listener, std::string>{unexpect, std::string("setsockopt(SO_REUSEADDR) failed: ") + iocp_reactor::format_windows_error()};
+    return expected<iocp_listener, core::error>{unexpect, core::error{core::error_type::setsockopt_failed, static_cast<int>(WSAGetLastError())}};
   }
 
   // Convert IP address string to sockaddr_in.
@@ -85,7 +86,7 @@ expected<iocp_listener, std::string> iocp_listener::open(iocp_reactor& reactor, 
   addr.sin_port = htons(port);
   if (inet_pton(AF_INET, ip_address.data(), &addr.sin_addr) != 1) {
     (void)reactor.close_socket(sock);
-    return expected<iocp_listener, std::string>{unexpect, "inet_pton failed: invalid IP address"};
+    return expected<iocp_listener, core::error>{unexpect, core::error_type::inet_pton_failed};
   }
 
   // Bind to the address.
@@ -96,14 +97,14 @@ expected<iocp_listener, std::string> iocp_listener::open(iocp_reactor& reactor, 
           sizeof(addr)));
   if (!bind_result) {
     (void)reactor.close_socket(sock);
-    return expected<iocp_listener, std::string>{unexpect, std::move(bind_result).error()};
+    return expected<iocp_listener, core::error>{unexpect, std::move(bind_result).error()};
   }
 
   // Listen with default backlog.
   auto listen_result = reactor.listen_socket(sock, SOMAXCONN);
   if (!listen_result) {
     (void)reactor.close_socket(sock);
-    return expected<iocp_listener, std::string>{unexpect, std::move(listen_result).error()};
+    return expected<iocp_listener, core::error>{unexpect, std::move(listen_result).error()};
   }
 
   iocp_listener listener{reactor, sock};
@@ -114,9 +115,9 @@ expected<iocp_listener, std::string> iocp_listener::open(iocp_reactor& reactor, 
 // accept
 // ============================================================================
 
-async_coro::task<expected<iocp_socket, std::string>> iocp_listener::accept() {
+async_coro::task<expected<iocp_socket, core::error>> iocp_listener::accept() {
   if (!is_open()) {
-    co_return expected<iocp_socket, std::string>{unexpect, "Listener is closed"};
+    co_return expected<iocp_socket, core::error>{unexpect, core::error_type::listener_closed};
   }
 
   // Create buffers for local and remote addresses.
@@ -132,7 +133,7 @@ async_coro::task<expected<iocp_socket, std::string>> iocp_listener::accept() {
   } buffers;
 
   // Submit async accept operation (reactor creates the accept socket internally).
-  auto result = co_await async_coro::await_callback_with_result<expected<socket_type, std::string>>(
+  auto result = co_await async_coro::await_callback_with_result<expected<socket_type, core::error>>(
       [&](auto cont) {
         _reactor.submit_accept_socket(
             _sock,
@@ -143,7 +144,7 @@ async_coro::task<expected<iocp_socket, std::string>> iocp_listener::accept() {
       });
 
   if (!result) {
-    co_return expected<iocp_socket, std::string>{unexpect, std::move(result).error()};
+    co_return expected<iocp_socket, core::error>{unexpect, std::move(result).error()};
   }
 
   co_return iocp_socket{_reactor, result.value()};
@@ -153,18 +154,18 @@ async_coro::task<expected<iocp_socket, std::string>> iocp_listener::accept() {
 // close
 // ============================================================================
 
-expected<void, std::string> iocp_listener::close() noexcept {
+expected<void, core::error> iocp_listener::close() noexcept {
   if (!is_open()) {
-    return expected<void, std::string>{};
+    return expected<void, core::error>{};
   }
 
   // Close via reactor to cancel all pending IO operations (e.g., in-flight accepts).
   auto result = _reactor.close_socket(std::exchange(_sock, invalid_socket_id));
   if (!result) {
-    return expected<void, std::string>{unexpect, std::move(result).error()};
+    return expected<void, core::error>{unexpect, std::move(result).error()};
   }
 
-  return expected<void, std::string>{};
+  return expected<void, core::error>{};
 }
 
 }  // namespace server::io

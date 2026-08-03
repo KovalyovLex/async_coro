@@ -1,11 +1,11 @@
 #pragma once
 
 #include <async_coro/task.h>
+#include <server/core/error.h>
 #include <server/utils/expected.h>
 
 #include <cstddef>
 #include <span>
-#include <string>
 
 namespace server::core {
 
@@ -24,7 +24,7 @@ class i_write_connection {
 
   virtual void close_connection() = 0;
 
-  [[nodiscard]] virtual async_coro::task<expected<void, std::string>> write_buffer(std::span<const std::byte> bytes) = 0;
+  [[nodiscard]] virtual async_coro::task<expected<void, error>> write_buffer(std::span<const std::byte> bytes) = 0;
 };
 
 }  // namespace server::core

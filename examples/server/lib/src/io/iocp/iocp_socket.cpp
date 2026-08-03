@@ -1,6 +1,7 @@
 #if WIN_IOCP_ENABLED
 
 #include <async_coro/await/await_callback.h>
+#include <server/core/error.h>
 #include <server/io/iocp/iocp_reactor.h>
 #include <server/io/iocp/iocp_socket.h>
 #include <server/utils/expected.h>
@@ -54,12 +55,12 @@ void iocp_socket::close_sync() noexcept {
 // connect_coro
 // ============================================================================
 
-async_coro::task<expected<iocp_socket, std::string>> iocp_socket::connect_coro(
+async_coro::task<expected<iocp_socket, core::error>> iocp_socket::connect_coro(
     iocp_reactor& reactor, const void* remote_address, socklen_t address_length) noexcept {
   // Create a TCP socket via the reactor.
   auto sock_result = reactor.create_socket(socket_type_id::tcp);
   if (!sock_result) {
-    co_return expected<iocp_socket, std::string>{unexpect, std::move(sock_result).error()};
+    co_return expected<iocp_socket, core::error>{unexpect, std::move(sock_result).error()};
   }
 
   socket_type sock = sock_result.value();
@@ -76,11 +77,11 @@ async_coro::task<expected<iocp_socket, std::string>> iocp_socket::connect_coro(
           sizeof(bind_addr)));
   if (!bind_result) {
     (void)reactor.close_socket(sock);
-    co_return expected<iocp_socket, std::string>{unexpect, std::move(bind_result).error()};
+    co_return expected<iocp_socket, core::error>{unexpect, std::move(bind_result).error()};
   }
 
   // Submit async connect operation.
-  auto result = co_await async_coro::await_callback_with_result<expected<void, std::string>>(
+  auto result = co_await async_coro::await_callback_with_result<expected<void, core::error>>(
       [&](auto cont) {
         reactor.submit_connect_socket(
             sock,
@@ -92,7 +93,7 @@ async_coro::task<expected<iocp_socket, std::string>> iocp_socket::connect_coro(
 
   if (!result) {
     (void)reactor.close_socket(sock);
-    co_return expected<iocp_socket, std::string>{unexpect, std::move(result).error()};
+    co_return expected<iocp_socket, core::error>{unexpect, std::move(result).error()};
   }
 
   co_return iocp_socket{reactor, sock};
@@ -102,9 +103,9 @@ async_coro::task<expected<iocp_socket, std::string>> iocp_socket::connect_coro(
 // send
 // ============================================================================
 
-async_coro::task<expected<size_t, std::string>> iocp_socket::send(std::span<const std::byte> data) {
+async_coro::task<expected<size_t, core::error>> iocp_socket::send(std::span<const std::byte> data) {
   if (is_closed()) {
-    co_return expected<size_t, std::string>{unexpect, "Socket is closed"};
+    co_return expected<size_t, core::error>{unexpect, core::error_type::socket_closed};
   }
 
   size_t total_bytes_sent = 0;
@@ -112,7 +113,7 @@ async_coro::task<expected<size_t, std::string>> iocp_socket::send(std::span<cons
 
   while (total_bytes_sent < data.size()) {
     // Submit async send operation.
-    auto result = co_await async_coro::await_callback_with_result<expected<size_t, std::string>>(
+    auto result = co_await async_coro::await_callback_with_result<expected<size_t, core::error>>(
         [this, &current_data](auto cont) {
           _reactor.submit_send_socket(
               _sock,
@@ -121,7 +122,7 @@ async_coro::task<expected<size_t, std::string>> iocp_socket::send(std::span<cons
         });
 
     if (!result) {
-      co_return expected<size_t, std::string>{unexpect, std::move(result).error()};
+      co_return expected<size_t, core::error>{unexpect, std::move(result).error()};
     }
 
     const auto sent = result.value();
@@ -136,19 +137,19 @@ async_coro::task<expected<size_t, std::string>> iocp_socket::send(std::span<cons
 // receive
 // ============================================================================
 
-async_coro::task<expected<size_t, std::string>> iocp_socket::receive(std::span<std::byte> buffer) {
+async_coro::task<expected<size_t, core::error>> iocp_socket::receive(std::span<std::byte> buffer) {
   if (is_closed()) {
-    co_return expected<size_t, std::string>{unexpect, "Socket is closed"};
+    co_return expected<size_t, core::error>{unexpect, core::error_type::socket_closed};
   }
 
   // Submit async receive operation.
-  auto result = co_await async_coro::await_callback_with_result<expected<size_t, std::string>>(
+  auto result = co_await async_coro::await_callback_with_result<expected<size_t, core::error>>(
       [this, buffer](auto cont) {
         _reactor.submit_receive_socket(_sock, buffer, std::move(cont));
       });
 
   if (!result) {
-    co_return expected<size_t, std::string>{unexpect, std::move(result).error()};
+    co_return expected<size_t, core::error>{unexpect, std::move(result).error()};
   }
 
   co_return result.value();
@@ -158,27 +159,27 @@ async_coro::task<expected<size_t, std::string>> iocp_socket::receive(std::span<s
 // close
 // ============================================================================
 
-expected<void, std::string> iocp_socket::close() noexcept {
+expected<void, core::error> iocp_socket::close() noexcept {
   if (is_closed()) {
-    return expected<void, std::string>{};
+    return expected<void, core::error>{};
   }
 
   // Close via reactor to cancel all pending IO operations first.
   auto result = _reactor.close_socket(std::exchange(_sock, invalid_socket_id));
   if (!result) {
-    return expected<void, std::string>{unexpect, std::move(result).error()};
+    return expected<void, core::error>{unexpect, std::move(result).error()};
   }
 
-  return expected<void, std::string>{};
+  return expected<void, core::error>{};
 }
 
 // ============================================================================
 // set_no_delay
 // ============================================================================
 
-expected<void, std::string> iocp_socket::set_no_delay(bool enable) noexcept {
+expected<void, core::error> iocp_socket::set_no_delay(bool enable) noexcept {
   if (is_closed()) {
-    return expected<void, std::string>{unexpect, "Socket is closed"};
+    return expected<void, core::error>{unexpect, core::error_type::socket_closed};
   }
 
   int val = enable ? 1 : 0;
@@ -190,10 +191,10 @@ expected<void, std::string> iocp_socket::set_no_delay(bool enable) noexcept {
       static_cast<int>(sizeof(val)));
 
   if (result != 0) {
-    return expected<void, std::string>{unexpect, "setsockopt TCP_NODELAY failed"};
+    return expected<void, core::error>{unexpect, core::error_type::tcp_nodelay_failed, static_cast<int>(WSAGetLastError())};
   }
 
-  return expected<void, std::string>{};
+  return expected<void, core::error>{};
 }
 
 }  // namespace server::io

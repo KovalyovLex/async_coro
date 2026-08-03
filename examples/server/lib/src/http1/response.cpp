@@ -1,4 +1,5 @@
 #include <async_coro/config.h>
+#include <server/core/error.h>
 #include <server/core/i_write_connection.h>
 #include <server/http1/http_error.h>
 #include <server/http1/http_status_code.h>
@@ -184,8 +185,8 @@ void response::clear() {
 }
 
 // NOLINTBEGIN(*pointer*,*array-index*,*macro*)
-async_coro::task<expected<void, std::string>> response::send(core::i_write_connection &conn) {  // NOLINT(*complexity*): HTTP response serialization with compression and chunked encoding
-  using res_t = expected<void, std::string>;
+async_coro::task<expected<void, core::error>> response::send(core::i_write_connection &conn) {  // NOLINT(*complexity*): HTTP response serialization with compression and chunked encoding
+  using res_t = expected<void, core::error>;
   using namespace std::string_view_literals;
 
   std::array<std::byte, 4 * 1024> buffer;  // NOLINT(*)
@@ -232,7 +233,7 @@ async_coro::task<expected<void, std::string>> response::send(core::i_write_conne
     std::string_view str_num{buf.data(), res.ptr};
     PUSH_TO_BUF(str_num);
   } else {
-    co_return res_t{unexpect, "Can't write status code"};
+    co_return res_t{unexpect, core::error{core::error_type::write_status_code_failed}};
   }
   PUSH_TO_BUF(" "sv);
 

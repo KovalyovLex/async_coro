@@ -3,12 +3,13 @@
 #if WIN_IOCP_ENABLED
 
 #include <async_coro/task.h>
+#include <server/core/error.h>
 #include <server/io/io_config.h>
 #include <server/io/iocp/iocp_reactor.h>
 #include <server/io/iocp/iocp_socket.h>
 #include <server/utils/expected.h>
 
-#include <string>
+#include <string_view>
 #include <vector>
 
 namespace server::io {
@@ -45,20 +46,20 @@ class iocp_listener {
    * @param reactor The IOCP reactor to use. Must outlive the returned listener.
    * @param ip_address IPv4 address string (e.g., "127.0.0.1").
    * @param port Port number.
-   * @return An expected<iocp_listener, std::string>. On success, contains the listener.
-   *         On failure, contains an error message.
+   * @return An expected<iocp_listener, core::error>. On success, contains the listener.
+   *         On failure, contains an error.
    */
-  [[nodiscard]] static expected<iocp_listener, std::string> open(iocp_reactor& reactor, std::string_view ip_address, uint16_t port);
+  [[nodiscard]] static expected<iocp_listener, core::error> open(iocp_reactor& reactor, std::string_view ip_address, uint16_t port);
 
   /**
    * @brief Accept a new connection asynchronously (coroutine version).
    *
    * Creates an accept socket via the reactor and initiates an async AcceptEx operation.
    *
-   * @return An awaitable that resolves to an expected<iocp_socket, std::string>.
-   *         On success, contains the accepted socket. On failure, contains an error message.
+   * @return An awaitable that resolves to an expected<iocp_socket, core::error>.
+   *         On success, contains the accepted socket. On failure, contains an error.
    */
-  [[nodiscard]] async_coro::task<expected<iocp_socket, std::string>> accept();
+  [[nodiscard]] async_coro::task<expected<iocp_socket, core::error>> accept();
 
   /**
    * @brief Check if the listener is open.
@@ -77,10 +78,10 @@ class iocp_listener {
   /**
    * @brief Close the listener socket.
    *
-   * @return An expected<void, std::string>. On success, contains void.
-   *         On failure, contains an error message.
+   * @return An expected<void, core::error>. On success, contains void.
+   *         On failure, contains an error.
    */
-  [[nodiscard]] expected<void, std::string> close() noexcept;
+  [[nodiscard]] expected<void, core::error> close() noexcept;
 
  private:
   iocp_listener(iocp_reactor& reactor, socket_type sock) noexcept;

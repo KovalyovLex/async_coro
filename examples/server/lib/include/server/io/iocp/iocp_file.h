@@ -3,6 +3,7 @@
 #if WIN_IOCP_ENABLED
 
 #include <async_coro/task.h>
+#include <server/core/error.h>
 #include <server/io/file_open_mode.h>
 #include <server/io/iocp/iocp_reactor.h>
 #include <server/utils/expected.h>
@@ -10,7 +11,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
-#include <string>
 #include <vector>
 
 namespace server::io {
@@ -40,12 +40,12 @@ class iocp_file {
    * @param mode The open mode flags (e.g., file_open_mode::read,
    *             file_open_mode::write | file_open_mode::create).
    * @param permissions File permissions (only used when creating new files, default 0644).
-   * @return An awaitable that resolves to an expected<iocp_file, std::string>.
-   *         On success, contains the opened file. On failure, contains an error message.
+   * @return An awaitable that resolves to an expected<iocp_file, core::error>.
+   *         On success, contains the opened file. On failure, contains an error.
    * @note The open operation is submitted to IOCP and completes asynchronously.
    *       The coroutine will be suspended until the open completes.
    */
-  [[nodiscard]] static async_coro::task<expected<iocp_file, std::string>> open_coro(iocp_reactor& reactor, std::string path, file_open_mode mode) noexcept;
+  [[nodiscard]] static async_coro::task<expected<iocp_file, core::error>> open_coro(iocp_reactor& reactor, std::string path, file_open_mode mode) noexcept;
 
   // Non-copyable to prevent multiple objects from closing the same file handle.
   iocp_file(const iocp_file&) = delete;
@@ -63,11 +63,11 @@ class iocp_file {
    * Updates the internal seek offset after each read.
    *
    * @param buffer The buffer to read into.
-   * @return An awaitable that resolves to an expected<size_t, std::string>.
+   * @return An awaitable that resolves to an expected<size_t, core::error>.
    *         On success, contains the total number of bytes read.
-   *         On failure, contains an error message.
+   *         On failure, contains an error.
    */
-  [[nodiscard]] async_coro::task<expected<size_t, std::string>> read(std::span<std::byte> buffer);
+  [[nodiscard]] async_coro::task<expected<size_t, core::error>> read(std::span<std::byte> buffer);
 
   /**
    * @brief Write data to the file.
@@ -76,20 +76,20 @@ class iocp_file {
    * Updates the internal seek offset after each write.
    *
    * @param data The data to write.
-   * @return An awaitable that resolves to an expected<void, std::string>.
-   *         On success, contains void. On failure, contains an error message.
+   * @return An awaitable that resolves to an expected<void, core::error>.
+   *         On success, contains void. On failure, contains an error.
    */
-  [[nodiscard]] async_coro::task<expected<void, std::string>> write(std::span<const std::byte> data);
+  [[nodiscard]] async_coro::task<expected<void, core::error>> write(std::span<const std::byte> data);
 
   /**
    * @brief Flush the file to ensure all data is written to disk.
    *
    * Calls FlushFileBuffers synchronously.
    *
-   * @return An expected<void, std::string>. On success, contains void.
-   *         On failure, contains an error message.
+   * @return An expected<void, core::error>. On success, contains void.
+   *         On failure, contains an error.
    */
-  [[nodiscard]] expected<void, std::string> flush() noexcept;
+  [[nodiscard]] expected<void, core::error> flush() noexcept;
 
   /**
    * @brief Close the file synchronously.
@@ -97,10 +97,10 @@ class iocp_file {
    * Calls CloseHandle directly to close the file handle.
    * After this returns successfully, the file is no longer valid for I/O.
    *
-   * @return An expected<void, std::string>. On success, contains void.
+   * @return An expected<void, core::error>. On success, contains void.
    *         On failure, contains an error message.
    */
-  [[nodiscard]] expected<void, std::string> close() noexcept;
+  [[nodiscard]] expected<void, core::error> close() noexcept;
 
   /**
    * @brief Check if the file is closed.
@@ -122,10 +122,10 @@ class iocp_file {
    * Uses GetFileSizeEx to retrieve the file size. This operation is synchronous
    * and does not block on regular files.
    *
-   * @return An expected<size_t, std::string>. On success, contains the file size
+   * @return An expected<size_t, core::error>. On success, contains the file size
    *         in bytes. On failure, contains an error message.
    */
-  [[nodiscard]] expected<size_t, std::string> get_size() const noexcept;
+  [[nodiscard]] expected<size_t, core::error> get_size() const noexcept;
 
   /**
    * @brief Seek to an absolute position in the file.
@@ -134,10 +134,10 @@ class iocp_file {
    * the offset is tracked locally and used by subsequent read/write operations.
    *
    * @param offset The absolute offset to seek to.
-   * @return An expected<uint64_t, std::string>. On success, contains the new file offset.
+   * @return An expected<uint64_t, core::error>. On success, contains the new file offset.
    *         On failure, contains an error message.
    */
-  [[nodiscard]] expected<uint64_t, std::string> seek(uint64_t offset) noexcept;
+  [[nodiscard]] expected<uint64_t, core::error> seek(uint64_t offset) noexcept;
 
   /**
    * @brief Read the entire file contents into a vector.
@@ -145,10 +145,10 @@ class iocp_file {
    * Pre-allocates a buffer of the exact file size (via GetFileSizeEx) and reads
    * all bytes using the IOCP async pattern.
    *
-   * @return An awaitable that resolves to an expected<std::vector<std::byte>, std::string>.
+   * @return An awaitable that resolves to an expected<std::vector<std::byte>, core::error>.
    *         On success, contains all bytes read from the file. On failure, contains an error message.
    */
-  [[nodiscard]] async_coro::task<expected<std::vector<std::byte>, std::string>> read_all();
+  [[nodiscard]] async_coro::task<expected<std::vector<std::byte>, core::error>> read_all();
 
  private:
   void close_sync() noexcept;

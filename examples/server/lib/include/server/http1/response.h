@@ -1,6 +1,7 @@
 #pragma once
 
 #include <async_coro/task.h>
+#include <server/core/error.h>
 #include <server/core/headers_type.h>
 #include <server/http1/headers_holder.h>
 #include <server/http1/http_status_code.h>
@@ -10,7 +11,6 @@
 #include <server/utils/static_string.h>
 #include <server/utils/string_storage.h>
 
-#include <string>
 #include <string_view>
 
 namespace server::core {
@@ -68,7 +68,7 @@ class response final : public headers_holder {
 
   [[nodiscard]] bool was_sent() const noexcept { return _was_sent; }
 
-  [[nodiscard]] async_coro::task<expected<void, std::string>> send(core::i_write_connection& conn);
+  [[nodiscard]] async_coro::task<expected<void, core::error>> send(core::i_write_connection& conn);
 
   // Set encoding for compression support. It will work if compression_pool also was set
   void set_encoding(compression_encoding encoding) noexcept { _encoding = encoding; }

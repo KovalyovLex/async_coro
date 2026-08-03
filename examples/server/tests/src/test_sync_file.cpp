@@ -336,7 +336,7 @@ TEST(sync_file_io, read_closed_file) {
   std::array<std::byte, 1024> buffer{};
   auto read_result = file.read(buffer);
   ASSERT_FALSE(read_result);
-  EXPECT_EQ(read_result.error(), "File is closed");
+  EXPECT_EQ(read_result.error().type, server::core::error_type::file_closed);
 
   fs::remove(path);
 }

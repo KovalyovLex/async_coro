@@ -1,6 +1,7 @@
 #pragma once
 
 #include <async_coro/task.h>
+#include <server/core/error.h>
 #include <server/core/headers_type.h>
 #include <server/http1/headers_holder.h>
 #include <server/http1/http_method.h>
@@ -10,7 +11,6 @@
 #include <server/utils/static_string.h>
 #include <server/utils/string_storage.h>
 
-#include <string>
 #include <string_view>
 #include <utility>
 
@@ -76,7 +76,7 @@ class client_request final : public headers_holder {
 
   [[nodiscard]] bool was_sent() const noexcept { return _was_sent; }
 
-  [[nodiscard]] async_coro::task<expected<void, std::string>> send(server::core::i_write_connection& conn);  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters)
+  [[nodiscard]] async_coro::task<expected<void, core::error>> send(server::core::i_write_connection& conn);  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters)
 
  private:
   std::string_view _target;

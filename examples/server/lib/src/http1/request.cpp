@@ -388,7 +388,7 @@ async_coro::task<expected<void, http_error>> request::read(core::i_read_connecti
   while (!conn.is_closed() && parse.state != parser::parse_state::finished) {
     auto read = co_await conn.read_buffer(as_writable_bytes(std::span{buffer}));
     if (!read.has_value()) {
-      co_return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = std::move(read).error()}};
+      co_return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = read.error().to_string()}};
     }
 
     auto bytes_str = std::string_view{buffer.data(), read.value()};

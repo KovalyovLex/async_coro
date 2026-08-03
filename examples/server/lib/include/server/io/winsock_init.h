@@ -2,11 +2,11 @@
 
 #if WIN_IOCP_ENABLED
 
+#include <server/core/error.h>
 #include <server/io/io_config.h>
 #include <server/utils/expected.h>
 
 #include <cstdint>
-#include <string>
 
 namespace server::io {
 
@@ -31,10 +31,10 @@ struct winsock_extensions {
  * Queries AcceptEx and ConnectEx function pointers using a temporary socket.
  * Subsequent calls return the cached result immediately.
  *
- * @return An expected<winsock_extensions, std::string>. On success, contains the
- *         extension function pointers. On failure, contains an error message.
+ * @return An expected<winsock_extensions, core::error>. On success, contains the
+ *         extension function pointers. On failure, contains an error.
  */
-[[nodiscard]] const expected<winsock_extensions, std::string>& init_winsock() noexcept;
+[[nodiscard]] const expected<winsock_extensions, core::error>& init_winsock() noexcept;
 
 }  // namespace server::io
 

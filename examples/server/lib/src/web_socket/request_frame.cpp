@@ -1,4 +1,5 @@
 
+#include <server/core/error.h>
 #include <server/core/i_read_connection.h>
 #include <server/utils/expected.h>
 #include <server/web_socket/request_frame.h>
@@ -9,8 +10,8 @@
 
 namespace server::web_socket {
 
-async_coro::task<expected<void, std::string>> request_frame::read_payload(core::i_read_connection& conn, std::span<const std::byte> rest_data_in_buffer) {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): conn lifetime guaranteed by caller
-  using result_t = expected<void, std::string>;
+async_coro::task<expected<void, core::error>> request_frame::read_payload(core::i_read_connection& conn, std::span<const std::byte> rest_data_in_buffer) {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): conn lifetime guaranteed by caller
+  using result_t = expected<void, core::error>;
 
   if (payload_length == 0) {
     co_return result_t{};

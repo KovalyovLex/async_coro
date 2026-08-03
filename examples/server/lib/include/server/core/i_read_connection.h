@@ -1,11 +1,11 @@
 #pragma once
 
 #include <async_coro/task.h>
+#include <server/core/error.h>
 #include <server/utils/expected.h>
 
 #include <cstddef>
 #include <span>
-#include <string>
 
 namespace server::core {
 
@@ -22,7 +22,7 @@ class i_read_connection {
 
   [[nodiscard]] virtual bool is_closed() const noexcept = 0;
 
-  [[nodiscard]] virtual async_coro::task<expected<size_t, std::string>> read_buffer(std::span<std::byte> bytes) = 0;
+  [[nodiscard]] virtual async_coro::task<expected<size_t, error>> read_buffer(std::span<std::byte> bytes) = 0;
 };
 
 }  // namespace server::core

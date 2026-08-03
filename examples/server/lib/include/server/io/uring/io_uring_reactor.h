@@ -5,6 +5,7 @@
 #include <async_coro/atomic_queue.h>
 #include <async_coro/internal/await_callback.h>
 #include <async_coro/utils/unique_function.h>
+#include <server/core/error.h>
 #include <server/utils/expected.h>
 
 #include <cerrno>
@@ -12,7 +13,6 @@
 #include <cstdint>
 #include <memory>
 #include <span>
-#include <string>
 #include <variant>
 
 // io_uring requires Linux 5.1+
@@ -43,17 +43,17 @@ class io_uring_reactor {
   /**
    * @brief Callback type for io_uring completion events. Returns number of bytes written\read or error.
    */
-  using continue_size_callback_t = async_coro::unique_function<void(expected<size_t, std::string>)>;
+  using continue_size_callback_t = async_coro::unique_function<void(expected<size_t, core::error>)>;
 
   /**
    * @brief Callback type for io_uring completion events. Returns success or error.
    */
-  using continue_void_callback_t = async_coro::unique_function<void(expected<void, std::string>)>;
+  using continue_void_callback_t = async_coro::unique_function<void(expected<void, core::error>)>;
 
   /**
    * @brief Callback type for io_uring completion events. Returns filedescriptor or error.
    */
-  using continue_file_callback_t = async_coro::unique_function<void(expected<int, std::string>)>;
+  using continue_file_callback_t = async_coro::unique_function<void(expected<int, core::error>)>;
 
   enum class operation_type : uint8_t {
     send_data,
@@ -68,10 +68,10 @@ class io_uring_reactor {
    *
    * Creates an io_uring ring with the specified size.
    * @param ring_size Number of entries in the submission and completion rings.
-   * @return An expected<io_uring_reactor, std::string>. On success, contains the reactor.
-   *         On failure, contains an error message describing the initialization failure.
+   * @return An expected<io_uring_reactor, core::error>. On success, contains the reactor.
+   *         On failure, contains an error describing the initialization failure.
    */
-  [[nodiscard]] static expected<io_uring_reactor, std::string> create(size_t ring_size = 256) noexcept;
+  [[nodiscard]] static expected<io_uring_reactor, core::error> create(size_t ring_size = 256) noexcept;
 
   io_uring_reactor(io_uring_reactor&& other) noexcept;
   io_uring_reactor& operator=(io_uring_reactor&& other) noexcept;

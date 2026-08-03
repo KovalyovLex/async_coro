@@ -4,6 +4,7 @@
 
 #include <async_coro/thread_safety/unique_lock.h>
 #include <gtest/gtest.h>
+#include <server/core/error.h>
 #include <server/http1/session.h>
 #include <server/utils/zlib_compress.h>
 #include <server/utils/zlib_compression_constants.h>
@@ -43,8 +44,7 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
                                                  answer += req_frame.get_payload_as_string();
                                                  co_await this_session.send_data(resp, std::as_bytes(std::span{answer}));
                                                } else {
-                                                 ws_error error(ws_status_code::invalid_frame_payload_data, "Expected text");
-                                                 co_await response_frame::send_error_and_close_connection(this_session.get_connection(), error);
+                                                 co_await response_frame::send_error_and_close_connection(this_session.get_connection(), core::error{core::error_type::ws_invalid_payload_length});
                                                }
                                              });
                                            });

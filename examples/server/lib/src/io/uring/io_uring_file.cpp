@@ -2,6 +2,7 @@
 
 #include <async_coro/await/await_callback.h>
 #include <fcntl.h>
+#include <server/core/error.h>
 #include <server/io/file_open_mode.h>
 #include <server/io/uring/io_uring_file.h>
 #include <server/utils/expected.h>
@@ -54,21 +55,21 @@ io_uring_file& io_uring_file::operator=(io_uring_file&& other) noexcept {
   return *this;
 }
 
-async_coro::task<expected<io_uring_file, std::string>> io_uring_file::open_coro(io_uring_reactor& reactor, std::string path, file_open_mode mode, int permissions) noexcept {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): reactor lifetime guaranteed by io_uring_file owner
-  auto result = co_await async_coro::await_callback_with_result<expected<int, std::string>>([&](auto cont) {
+async_coro::task<expected<io_uring_file, core::error>> io_uring_file::open_coro(io_uring_reactor& reactor, std::string path, file_open_mode mode, int permissions) noexcept {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): reactor lifetime guaranteed by io_uring_file owner
+  auto result = co_await async_coro::await_callback_with_result<expected<int, core::error>>([&](auto cont) {
     reactor.submit_open(path.c_str(), mode, permissions, std::move(cont));
   });
 
   if (!result) {
-    co_return expected<io_uring_file, std::string>{unexpect, std::move(result.error())};
+    co_return expected<io_uring_file, core::error>{unexpect, std::move(result.error())};
   }
 
   co_return io_uring_file{reactor, result.value()};
 }
 
-async_coro::task<expected<size_t, std::string>> io_uring_file::read(std::span<uint8_t> buffer) {
+async_coro::task<expected<size_t, core::error>> io_uring_file::read(std::span<uint8_t> buffer) {
   if (is_closed()) {
-    co_return expected<size_t, std::string>{unexpect, "File is closed"};
+    co_return expected<size_t, core::error>{unexpect, core::error_type::file_closed};
   }
 
   size_t total_bytes_read = 0;
@@ -76,12 +77,12 @@ async_coro::task<expected<size_t, std::string>> io_uring_file::read(std::span<ui
 
   while (total_bytes_read < buffer.size()) {
     // Submit async read operation
-    auto result = co_await async_coro::await_callback_with_result<expected<size_t, std::string>>([this, &current_buffer](auto cont) {
+    auto result = co_await async_coro::await_callback_with_result<expected<size_t, core::error>>([this, &current_buffer](auto cont) {
       _reactor.submit_read(_fd, _seek_cur, current_buffer, std::move(cont));
     });
 
     if (!result) {
-      co_return expected<size_t, std::string>{unexpect, std::move(result.error())};
+      co_return expected<size_t, core::error>{unexpect, std::move(result.error())};
     }
 
     const auto read = result.value();
@@ -93,9 +94,9 @@ async_coro::task<expected<size_t, std::string>> io_uring_file::read(std::span<ui
   co_return total_bytes_read;
 }
 
-async_coro::task<expected<void, std::string>> io_uring_file::write(std::span<const std::byte> data) {
+async_coro::task<expected<void, core::error>> io_uring_file::write(std::span<const std::byte> data) {
   if (is_closed()) {
-    co_return expected<void, std::string>{unexpect, "File is closed"};
+    co_return expected<void, core::error>{unexpect, core::error_type::file_closed};
   }
 
   size_t total_bytes_written = 0;
@@ -103,12 +104,12 @@ async_coro::task<expected<void, std::string>> io_uring_file::write(std::span<con
 
   while (total_bytes_written < data.size()) {
     // Submit async write operation
-    auto result = co_await async_coro::await_callback_with_result<expected<size_t, std::string>>([this, &current_data](auto cont) {
+    auto result = co_await async_coro::await_callback_with_result<expected<size_t, core::error>>([this, &current_data](auto cont) {
       _reactor.submit_write(_fd, _seek_cur, current_data, std::move(cont));
     });
 
     if (!result) {
-      co_return expected<void, std::string>{unexpect, std::move(result.error())};
+      co_return expected<void, core::error>{unexpect, std::move(result.error())};
     }
 
     const auto written = result.value();
@@ -117,27 +118,27 @@ async_coro::task<expected<void, std::string>> io_uring_file::write(std::span<con
     current_data = current_data.subspan(written);
   }
 
-  co_return expected<void, std::string>{};
+  co_return expected<void, core::error>{};
 }
 
-async_coro::task<expected<void, std::string>> io_uring_file::flush() {
+async_coro::task<expected<void, core::error>> io_uring_file::flush() {
   if (is_closed()) {
-    co_return expected<void, std::string>{unexpect, "File is closed"};
+    co_return expected<void, core::error>{unexpect, core::error_type::file_closed};
   }
 
-  auto result = co_await async_coro::await_callback_with_result<expected<void, std::string>>([this](auto cont) {
+  auto result = co_await async_coro::await_callback_with_result<expected<void, core::error>>([this](auto cont) {
     _reactor.submit_fsync(_fd, std::move(cont));
   });
 
   co_return std::move(result);
 }
 
-async_coro::task<expected<void, std::string>> io_uring_file::close() {
+async_coro::task<expected<void, core::error>> io_uring_file::close() {
   if (is_closed()) {
-    co_return expected<void, std::string>{};
+    co_return expected<void, core::error>{};
   }
 
-  auto result = co_await async_coro::await_callback_with_result<expected<void, std::string>>([this](auto cont) {
+  auto result = co_await async_coro::await_callback_with_result<expected<void, core::error>>([this](auto cont) {
     _reactor.submit_close(_fd, std::move(cont));
   });
 
@@ -146,22 +147,22 @@ async_coro::task<expected<void, std::string>> io_uring_file::close() {
   co_return std::move(result);
 }
 
-expected<size_t, std::string> io_uring_file::get_size() const {
+expected<size_t, core::error> io_uring_file::get_size() const {
   if (is_closed()) {
-    return expected<size_t, std::string>{unexpect, "File is closed"};
+    return expected<size_t, core::error>{unexpect, core::error_type::file_closed};
   }
 
   struct stat stat_buf{};
   if (::fstat(_fd, &stat_buf) != 0) {
-    return expected<size_t, std::string>{unexpect, std::string(strerror(errno))};
+    return expected<size_t, core::error>{unexpect, core::error_type::system_posix, errno};
   }
 
   return static_cast<size_t>(stat_buf.st_size);
 }
 
-expected<off_t, std::string> io_uring_file::seek(off_t offset) {
+expected<off_t, core::error> io_uring_file::seek(off_t offset) {
   if (is_closed()) {
-    return expected<off_t, std::string>{unexpect, "File is closed"};
+    return expected<off_t, core::error>{unexpect, core::error_type::file_closed};
   }
 
   _seek_cur = static_cast<size_t>(offset);
@@ -169,14 +170,14 @@ expected<off_t, std::string> io_uring_file::seek(off_t offset) {
   return static_cast<off_t>(_seek_cur);
 }
 
-async_coro::task<expected<std::vector<std::byte>, std::string>> io_uring_file::read_all() {
+async_coro::task<expected<std::vector<std::byte>, core::error>> io_uring_file::read_all() {
   if (is_closed()) {
-    co_return expected<std::vector<std::byte>, std::string>{unexpect, "File is closed"};
+    co_return expected<std::vector<std::byte>, core::error>{unexpect, core::error_type::file_closed};
   }
 
   auto size_result = get_size();
   if (!size_result) {
-    co_return expected<std::vector<std::byte>, std::string>{unexpect, std::move(size_result).error()};
+    co_return expected<std::vector<std::byte>, core::error>{unexpect, std::move(size_result).error()};
   }
 
   const size_t file_size = size_result.value();
@@ -189,7 +190,7 @@ async_coro::task<expected<std::vector<std::byte>, std::string>> io_uring_file::r
 
   auto result = co_await read(std::span<uint8_t>{reinterpret_cast<uint8_t*>(buffer.data()), file_size});  // NOLINT(*-reinterpret-cast)
   if (!result) {
-    co_return expected<std::vector<std::byte>, std::string>{unexpect, std::move(result).error()};
+    co_return expected<std::vector<std::byte>, core::error>{unexpect, std::move(result).error()};
   }
 
   co_return std::move(buffer);

@@ -3,6 +3,7 @@
 #if EPOLL_KQUEUE_ENABLED
 
 #include <async_coro/thread_safety/unique_lock.h>
+#include <server/core/error.h>
 #include <server/http1/session.h>
 #include <server/web_socket/response_frame.h>
 
@@ -38,8 +39,7 @@ void web_socket_integration_tests::SetUp() {
 
         co_await this_session.send_data(resp, std::as_bytes(std::span{answer}));
       } else {
-        ws_error error(ws_status_code::invalid_frame_payload_data, "Expected text");
-        co_await response_frame::send_error_and_close_connection(this_session.get_connection(), error);
+        co_await response_frame::send_error_and_close_connection(this_session.get_connection(), core::error{core::error_type::ws_invalid_payload_length});
       }
     });
   });

@@ -1,3 +1,4 @@
+#include <server/core/error.h>
 #include <server/io/file_open_mode.h>
 #include <server/io/io_config.h>
 #include <server/io/sync_file.h>
@@ -33,7 +34,7 @@ sync_file::~sync_file() noexcept {
   close();
 }
 
-expected<sync_file, std::string> sync_file::open(const std::string& path, file_open_mode mode) noexcept {
+expected<sync_file, core::error> sync_file::open(const std::string& path, file_open_mode mode) noexcept {
 #if WIN_SOCKET
   DWORD access = 0;
   DWORD creation = 0;
@@ -42,7 +43,7 @@ expected<sync_file, std::string> sync_file::open(const std::string& path, file_o
   // Convert path to wide string for CreateFileW
   const int wide_len = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), static_cast<int>(path.size()), nullptr, 0);
   if (wide_len <= 0) {
-    return expected<sync_file, std::string>{unexpect, "Failed to convert path to wide string"};
+    return expected<sync_file, core::error>{unexpect, core::error_type::path_conversion_failed};
   }
 
   std::vector<wchar_t> wide_path(static_cast<size_t>(wide_len) + 1, 0);
@@ -59,7 +60,7 @@ expected<sync_file, std::string> sync_file::open(const std::string& path, file_o
 
   if (handle == INVALID_HANDLE_VALUE) {
     const DWORD error = GetLastError();
-    return expected<sync_file, std::string>{unexpect, "CreateFile failed with error code " + std::to_string(error)};
+    return expected<sync_file, core::error>{unexpect, core::error_type::open_failed, static_cast<int>(error)};
   }
 
   return sync_file{handle};
@@ -68,16 +69,16 @@ expected<sync_file, std::string> sync_file::open(const std::string& path, file_o
   constexpr int default_open_mode = 0644;                                                                 // NOLINT(cppcoreguidelines-avoid-magic-numbers)
   file_handle_t file_descriptor = ::open(path.c_str(), posix_mode, static_cast<int>(default_open_mode));  // NOLINT(*vararg*)
   if (file_descriptor == invalid_file_handle) {
-    return expected<sync_file, std::string>{unexpect, std::string(strerror(errno))};
+    return expected<sync_file, core::error>{unexpect, core::error_type::open_failed, errno};
   }
 
   return sync_file{file_descriptor};
 #endif
 }
 
-expected<size_t, std::string> sync_file::read(std::span<std::byte> buffer) const {
+expected<size_t, core::error> sync_file::read(std::span<std::byte> buffer) const {
   if (_fd == invalid_file_handle) {
-    return expected<size_t, std::string>{unexpect, "File is closed"};
+    return expected<size_t, core::error>{unexpect, core::error_type::file_closed};
   }
 
 #if WIN_SOCKET
@@ -90,7 +91,7 @@ expected<size_t, std::string> sync_file::read(std::span<std::byte> buffer) const
 
   if (!result) {
     const DWORD error = GetLastError();
-    return expected<size_t, std::string>{unexpect, "ReadFile failed with error code " + std::to_string(error)};
+    return expected<size_t, core::error>{unexpect, core::error_type::read_failed, static_cast<int>(error)};
   }
 
   // bytes_read == 0 means EOF
@@ -108,13 +109,13 @@ expected<size_t, std::string> sync_file::read(std::span<std::byte> buffer) const
   }
 
   // Error occurred
-  return expected<size_t, std::string>{unexpect, std::string(strerror(errno))};
+  return expected<size_t, core::error>{unexpect, core::error_type::read_failed, errno};
 #endif
 }
 
-expected<void, std::string> sync_file::write(std::span<const std::byte> data) const {
+expected<void, core::error> sync_file::write(std::span<const std::byte> data) const {
   if (_fd == invalid_file_handle) {
-    return expected<void, std::string>{unexpect, "File is closed"};
+    return expected<void, core::error>{unexpect, core::error_type::file_closed};
   }
 
 #if WIN_SOCKET
@@ -122,53 +123,53 @@ expected<void, std::string> sync_file::write(std::span<const std::byte> data) co
   BOOL result = ::WriteFile(_fd, data.data(), static_cast<DWORD>(data.size()), &bytes_written, nullptr);
 
   if (result && static_cast<size_t>(bytes_written) == data.size()) {
-    return expected<void, std::string>{};
+    return expected<void, core::error>{};
   }
 
   if (!result) {
     const DWORD error = GetLastError();
-    return expected<void, std::string>{unexpect, "WriteFile failed with error code " + std::to_string(error)};
+    return expected<void, core::error>{unexpect, core::error_type::write_failed, static_cast<int>(error)};
   }
 
   // Partial write
-  return expected<void, std::string>{unexpect, "Partial write: " + std::to_string(bytes_written) + " of " + std::to_string(data.size()) + " bytes"};
+  return expected<void, core::error>{unexpect, core::error_type::partial_write, static_cast<int>(bytes_written)};
 #else
   ssize_t bytes_written = ::write(_fd, data.data(), data.size());
 
   if (bytes_written > 0 && static_cast<size_t>(bytes_written) == data.size()) {
-    return expected<void, std::string>{};
+    return expected<void, core::error>{};
   }
 
   if (bytes_written == 0) {
-    return expected<void, std::string>{unexpect, "write() returned 0 bytes"};
+    return expected<void, core::error>{unexpect, core::error_type::write_zero_bytes};
   }
 
   // Partial write or error
   if (static_cast<size_t>(bytes_written) < data.size()) {
-    return expected<void, std::string>{unexpect, "Partial write: " + std::to_string(bytes_written) + " of " + std::to_string(data.size()) + " bytes"};
+    return expected<void, core::error>{unexpect, core::error_type::partial_write, static_cast<int>(bytes_written)};
   }
 
-  return expected<void, std::string>{unexpect, std::string(strerror(errno))};
+  return expected<void, core::error>{unexpect, core::error_type::write_failed, errno};
 #endif
 }
 
-expected<void, std::string> sync_file::flush() const {
+expected<void, core::error> sync_file::flush() const {
   if (_fd == invalid_file_handle) {
-    return expected<void, std::string>{unexpect, "File is closed"};
+    return expected<void, core::error>{unexpect, core::error_type::file_closed};
   }
 
 #if WIN_SOCKET
   if (::FlushFileBuffers(_fd)) {
-    return expected<void, std::string>{};
+    return expected<void, core::error>{};
   }
   const DWORD error = GetLastError();
-  return expected<void, std::string>{unexpect, "FlushFileBuffers failed with error code " + std::to_string(error)};
+  return expected<void, core::error>{unexpect, core::error_type::flush_failed, static_cast<int>(error)};
 #else
   if (::fsync(_fd) == 0) {
-    return expected<void, std::string>{};
+    return expected<void, core::error>{};
   }
 
-  return expected<void, std::string>{unexpect, std::string(strerror(errno))};
+  return expected<void, core::error>{unexpect, core::error_type::flush_failed, errno};
 #endif
 }
 
@@ -179,9 +180,9 @@ void sync_file::close() noexcept {
   }
 }
 
-expected<size_t, std::string> sync_file::get_size() const {
+expected<size_t, core::error> sync_file::get_size() const {
   if (_fd == invalid_file_handle) {
-    return expected<size_t, std::string>{unexpect, "File is closed"};
+    return expected<size_t, core::error>{unexpect, core::error_type::file_closed};
   }
 
 #if WIN_SOCKET
@@ -189,20 +190,20 @@ expected<size_t, std::string> sync_file::get_size() const {
   if (::GetFileSizeEx(_fd, &size)) {
     return static_cast<size_t>(size.QuadPart);
   }
-  return expected<size_t, std::string>{unexpect, "GetFileSizeEx failed"};
+  return expected<size_t, core::error>{unexpect, core::error_type::get_size_failed};
 #else
   struct stat stat_buf{};
   if (::fstat(_fd, &stat_buf) != 0) {
-    return expected<size_t, std::string>{unexpect, std::string(strerror(errno))};
+    return expected<size_t, core::error>{unexpect, core::error_type::get_size_failed, errno};
   }
 
   return static_cast<size_t>(stat_buf.st_size);
 #endif
 }
 
-expected<off_t, std::string> sync_file::seek(off_t offset, seek_whence whence) const {
+expected<off_t, core::error> sync_file::seek(off_t offset, seek_whence whence) const {
   if (_fd == invalid_file_handle) {
-    return expected<off_t, std::string>{unexpect, "File is closed"};
+    return expected<off_t, core::error>{unexpect, core::error_type::file_closed};
   }
 
 #if WIN_SOCKET
@@ -231,7 +232,7 @@ expected<off_t, std::string> sync_file::seek(off_t offset, seek_whence whence) c
   }
 
   const DWORD error = GetLastError();
-  return expected<off_t, std::string>{unexpect, "SetFilePointerEx failed with error code " + std::to_string(error)};
+  return expected<off_t, core::error>{unexpect, core::error_type::set_file_pointer_failed, static_cast<int>(error)};
 #else
   int posix_whence = SEEK_SET;
   switch (whence) {
@@ -251,21 +252,21 @@ expected<off_t, std::string> sync_file::seek(off_t offset, seek_whence whence) c
 
   off_t new_offset = ::lseek(_fd, offset, posix_whence);
   if (new_offset == static_cast<off_t>(-1)) {
-    return expected<off_t, std::string>{unexpect, std::string(strerror(errno))};
+    return expected<off_t, core::error>{unexpect, core::error_type::set_file_pointer_failed, errno};
   }
 
   return new_offset;
 #endif
 }
 
-expected<std::vector<std::byte>, std::string> sync_file::read_all() {  // NOLINT(readability-make-member-function-const): modifies file state by reading data
+expected<std::vector<std::byte>, core::error> sync_file::read_all() {  // NOLINT(readability-make-member-function-const): modifies file state by reading data
   if (_fd == invalid_file_handle) {
-    return expected<std::vector<std::byte>, std::string>{unexpect, "File is closed"};
+    return expected<std::vector<std::byte>, core::error>{unexpect, core::error_type::file_closed};
   }
 
   auto size_result = get_size();
   if (!size_result) {
-    return expected<std::vector<std::byte>, std::string>{unexpect, std::move(size_result).error()};
+    return expected<std::vector<std::byte>, core::error>{unexpect, std::move(size_result).error()};
   }
 
   const size_t file_size = size_result.value();
@@ -286,7 +287,7 @@ expected<std::vector<std::byte>, std::string> sync_file::read_all() {  // NOLINT
 
     if (!result) {
       const DWORD error = GetLastError();
-      return expected<std::vector<std::byte>, std::string>{unexpect, "ReadFile failed with error code " + std::to_string(error)};
+      return expected<std::vector<std::byte>, core::error>{unexpect, core::error_type::read_failed, static_cast<int>(error)};
     }
 
     if (bytes_read == 0) {
@@ -312,7 +313,7 @@ expected<std::vector<std::byte>, std::string> sync_file::read_all() {  // NOLINT
       break;
     }
 
-    return expected<std::vector<std::byte>, std::string>{unexpect, std::string(strerror(errno))};
+    return expected<std::vector<std::byte>, core::error>{unexpect, core::error_type::read_failed, errno};
 #endif
   }
 

@@ -37,7 +37,7 @@ class http_client {
   // Perform the round-trip.  On success the response object is returned
   // (already parsed).  The connection may be reused for another request if
   // the server supports keep-alive.
-  auto send_request(client_request& req, server::core::i_write_connection& write, server::core::i_read_connection& read) -> async_coro::task<expected<client_response, std::string>>;  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): request lifetime guaranteed by http_client_session
+  auto send_request(client_request& req, server::core::i_write_connection& write, server::core::i_read_connection& read) -> async_coro::task<expected<client_response, core::error>>;  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): request lifetime guaranteed by http_client_session
 
   /**
    * @brief Forward an existing server-side request using RFC 7239 Forwarded header.

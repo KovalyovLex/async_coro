@@ -1,4 +1,5 @@
 #include <async_coro/config.h>
+#include <server/core/error.h>
 #include <server/core/i_write_connection.h>
 #include <server/http1/client_request.h>
 #include <server/utils/expected.h>
@@ -103,8 +104,8 @@ void client_request::clear() {
 
 // very similar to response::send with adjusted first line
 // NOLINTBEGIN(*pointer*,*array-index*,*macro*)
-async_coro::task<expected<void, std::string>> client_request::send(server::core::i_write_connection &conn) {  // NOLINT(*complexity*,cppcoreguidelines-avoid-reference-coroutine-parameters): conn lifetime guaranteed by caller
-  using res_t = expected<void, std::string>;
+async_coro::task<expected<void, core::error>> client_request::send(server::core::i_write_connection &conn) {  // NOLINT(*complexity*,cppcoreguidelines-avoid-reference-coroutine-parameters): conn lifetime guaranteed by caller
+  using res_t = expected<void, core::error>;
   using namespace std::string_view_literals;
 
   std::array<std::byte, 4 * 1024> buffer;  // NOLINT(*)

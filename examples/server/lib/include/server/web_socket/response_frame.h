@@ -1,10 +1,10 @@
 #pragma once
 
 #include <async_coro/task.h>
+#include <server/core/error.h>
 #include <server/utils/expected.h>
 #include <server/web_socket/frame_base.h>
 #include <server/web_socket/ws_op_code.h>
-#include <server/web_socket/ws_status_code.h>
 
 #include <cstdint>
 #include <span>
@@ -14,8 +14,6 @@ class i_write_connection;
 }
 
 namespace server::web_socket {
-
-class ws_error;
 
 class response_frame {
  public:
@@ -27,7 +25,7 @@ class response_frame {
   [[nodiscard]] ws_op_code get_op_code() const noexcept { return static_cast<ws_op_code>(_opcode_dec); }
   [[nodiscard]] uint8_t get_op_code_dec() const noexcept { return _opcode_dec; }
 
-  static async_coro::task<void> send_error_and_close_connection(core::i_write_connection& conn, const ws_error& error);
+  static async_coro::task<void> send_error_and_close_connection(core::i_write_connection& conn, const core::error& error);
 
   static async_coro::task<void> close_connection(core::i_write_connection& conn);
 

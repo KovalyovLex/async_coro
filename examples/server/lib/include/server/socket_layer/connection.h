@@ -14,7 +14,6 @@
 #include <cstddef>
 #include <memory>
 #include <span>
-#include <string>
 #include <utility>
 
 namespace server::socket_layer {
@@ -49,9 +48,9 @@ class connection final : public core::i_read_connection, public core::i_write_co
 
   [[nodiscard]] bool is_closed() const noexcept override { return _reactor == nullptr; }
 
-  [[nodiscard]] async_coro::task<expected<void, std::string>> write_buffer(std::span<const std::byte> bytes) override;
+  [[nodiscard]] async_coro::task<expected<void, core::error>> write_buffer(std::span<const std::byte> bytes) override;
 
-  [[nodiscard]] async_coro::task<expected<size_t, std::string>> read_buffer(std::span<std::byte> bytes) override;
+  [[nodiscard]] async_coro::task<expected<size_t, core::error>> read_buffer(std::span<std::byte> bytes) override;
 
   [[nodiscard]] auto get_connection_id() const noexcept { return _sock; }
 

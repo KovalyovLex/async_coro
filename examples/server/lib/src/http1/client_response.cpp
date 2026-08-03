@@ -341,7 +341,7 @@ async_coro::task<expected<void, http_error>> client_response::read(server::core:
   while (!conn.is_closed() && parse.state != parser::parse_state::finished) {
     auto read = co_await conn.read_buffer(std::span{buffer});
     if (!read.has_value()) {
-      co_return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = std::move(read).error()}};
+      co_return res_t{unexpect, http_error{.status_code = status_code::bad_request, .reason = read.error().to_string()}};
     }
     const auto bytes_read = read.value();
     std::copy(buffer.data(), buffer.data() + bytes_read, std::back_inserter(_bytes));  // NOLINT(*narrowing*, *pointer*)

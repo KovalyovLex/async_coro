@@ -5,6 +5,7 @@
 #include <async_coro/await/await_callback.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <server/core/error.h>
 #include <server/socket_layer/connection.h>
 #include <server/socket_layer/connection_id.h>
 #include <server/socket_layer/reactor.h>
@@ -17,7 +18,7 @@
 
 namespace server::socket_layer {
 
-static bool check_connection_error_need_try(std::string* error) {
+static bool check_connection_error_need_try(core::error* error) {
   bool try_again = false;
 
 #if WIN_SOCKET
@@ -26,7 +27,7 @@ static bool check_connection_error_need_try(std::string* error) {
   if (error_code == EAGAIN || error_code == EWOULDBLOCK || error_code == WSAEWOULDBLOCK || error_code == ERROR_REQ_NOT_ACCEP) {
     try_again = true;
   } else if (error != nullptr) {
-    *error = std::to_string(error_code);
+    *error = core::error{core::error_type::system_wsa, static_cast<int>(error_code)};
   }
 #else
   const auto error_code = errno;
@@ -34,7 +35,7 @@ static bool check_connection_error_need_try(std::string* error) {
   if (error_code == EAGAIN || error_code == EWOULDBLOCK) {
     try_again = true;
   } else if (error != nullptr) {
-    *error = strerror(error_code);
+    *error = core::error{core::error_type::system_posix, error_code};
   }
 #endif
 
@@ -75,11 +76,11 @@ void connection::set_no_delay(bool value) noexcept {
   _no_delay = value;
 }
 
-async_coro::task<expected<void, std::string>> connection::write_buffer(std::span<const std::byte> bytes) {  // NOLINT(*-complexity*)
-  using res_t = expected<void, std::string>;
+async_coro::task<expected<void, core::error>> connection::write_buffer(std::span<const std::byte> bytes) {  // NOLINT(*-complexity*)
+  using res_t = expected<void, core::error>;
 
   if (_reactor == nullptr) [[unlikely]] {
-    co_return res_t{unexpect, "Connection was already closed"};
+    co_return res_t{unexpect, core::error{core::error_type::connection_closed}};
   }
 
   if (_ssl) {
@@ -100,7 +101,7 @@ async_coro::task<expected<void, std::string>> connection::write_buffer(std::span
         });
         if (res == reactor::connection_state::closed) {
           close_connection();
-          co_return res_t{unexpect, "Connection was closed"};
+          co_return res_t{unexpect, core::error{core::error_type::connection_closed}};
         }
         continue;
       }
@@ -133,7 +134,7 @@ async_coro::task<expected<void, std::string>> connection::write_buffer(std::span
           co_return res_t{};
         }
       } else {
-        co_return res_t{unexpect, ssl_context::get_ssl_error()};
+        co_return res_t{unexpect, core::error{core::error_type::system_windows}};
       }
     }
 
@@ -141,7 +142,7 @@ async_coro::task<expected<void, std::string>> connection::write_buffer(std::span
   }
 
   const auto fd_id = _sock.get_platform_id();
-  std::string error;
+  core::error error;
 
   while (true) {
     const auto sent_local = ::send(fd_id, reinterpret_cast<const char*>(bytes.data()), bytes.size(), 0);  // NOLINT(*reinterpret-cast)
@@ -170,16 +171,16 @@ async_coro::task<expected<void, std::string>> connection::write_buffer(std::span
     });
     if (res == reactor::connection_state::closed) {
       close_connection();
-      co_return res_t{unexpect, "Connection was closed"};
+      co_return res_t{unexpect, core::error{core::error_type::connection_closed}};
     }
   }
 
   co_return res_t{};
 }
 
-async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::span<std::byte> bytes) {  // NOLINT(*-complexity*)
+async_coro::task<expected<size_t, core::error>> connection::read_buffer(std::span<std::byte> bytes) {  // NOLINT(*-complexity*)
   if (_reactor == nullptr) [[unlikely]] {
-    co_return expected<size_t, std::string>{unexpect, "Connection was already closed"};
+    co_return expected<size_t, core::error>{unexpect, core::error{core::error_type::connection_closed}};
   }
 
   if (_ssl) {
@@ -216,7 +217,7 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
           co_return 0;
         }
       } else {
-        co_return expected<size_t, std::string>{unexpect, ssl_context::get_ssl_error()};
+        co_return expected<size_t, core::error>{unexpect, core::error{core::error_type::system_windows}};
       }
     }
 
@@ -224,7 +225,7 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
   }
 
   const auto fd_id = _sock.get_platform_id();
-  std::string error;
+  core::error error;
 
   while (true) {
     const auto received = ::recv(fd_id, reinterpret_cast<char*>(bytes.data()), bytes.size(), 0);  // NOLINT(*reinterpret-cast)
@@ -249,7 +250,7 @@ async_coro::task<expected<size_t, std::string>> connection::read_buffer(std::spa
         co_return 0;
       }
     } else {
-      co_return expected<size_t, std::string>{unexpect, std::move(error)};
+      co_return expected<size_t, core::error>{unexpect, std::move(error)};
     }
   }
 

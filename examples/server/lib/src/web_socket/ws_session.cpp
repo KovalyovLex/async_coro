@@ -3,6 +3,7 @@
 #if EPOLL_KQUEUE_ENABLED
 
 #include <async_coro/config.h>
+#include <server/core/error.h>
 #include <server/http1/response.h>
 #include <server/utils/base64.h>
 #include <server/utils/has_zlib.h>
@@ -10,7 +11,6 @@
 #include <server/utils/static_string.h>
 #include <server/web_socket/request_frame.h>
 #include <server/web_socket/response_frame.h>
-#include <server/web_socket/ws_error.h>
 #include <server/web_socket/ws_extension_parser.h>
 #include <server/web_socket/ws_op_code.h>
 #include <server/web_socket/ws_session.h>
@@ -31,7 +31,7 @@ namespace server::web_socket {
 #if SERVER_HAS_ZLIB
 
 // Decompress incoming frame payload when permessage-deflate is enabled
-static expected<void, std::string> decompress_frame_payload(std::vector<std::byte>& output_buffer,
+static expected<void, core::error> decompress_frame_payload(std::vector<std::byte>& output_buffer,
                                                             zlib_decompress& decompressor,
                                                             std::span<const std::byte> compressed_data,
                                                             bool no_context_takeover) {
@@ -42,7 +42,7 @@ static expected<void, std::string> decompress_frame_payload(std::vector<std::byt
 
   while (!compressed_data.empty()) {
     if (!decompressor.update_stream(compressed_data, data_out)) {
-      return expected<void, std::string>{unexpect, std::string{"Decompression failed"}};
+      return expected<void, core::error>{unexpect, core::error{core::error_type::decompression_failed}};
     }
 
     std::span data_to_copy{tmp_buffer.data(), data_out.data()};
@@ -74,7 +74,7 @@ static expected<void, std::string> decompress_frame_payload(std::vector<std::byt
 }
 
 // Compress outgoing frame payload when permessage-deflate is enabled
-static expected<void, std::string> compress_frame_payload(std::vector<std::byte>& output_buffer,
+static expected<void, core::error> compress_frame_payload(std::vector<std::byte>& output_buffer,
                                                           zlib_compress& compressor,
                                                           std::span<const std::byte> raw_data,
                                                           bool last_frame,
@@ -84,7 +84,7 @@ static expected<void, std::string> compress_frame_payload(std::vector<std::byte>
   while (!raw_data.empty()) {
     std::span<std::byte> data_out = tmp_buffer;
     if (!compressor.update_stream(raw_data, data_out)) {
-      return expected<void, std::string>{unexpect, std::string{"Decompression failed"}};
+      return expected<void, core::error>{unexpect, core::error{core::error_type::decompression_failed}};
     }
 
     std::span data_to_copy{tmp_buffer.data(), data_out.data()};
@@ -319,35 +319,26 @@ async_coro::task<void> ws_session::run(const server::http1::request& handshake_r
       if (_conn.is_closed()) {
         co_return;
       }
-      web_socket::ws_error err{
-          ws_status_code::policy_violation,
-          res.error()};
-      co_await response_frame::send_error_and_close_connection(_conn, err);
+      co_await response_frame::send_error_and_close_connection(_conn, res.error());
       co_return;
     }
 
     auto frame_res = request_frame::make_frame(frame_beg, res.value());
     if (!frame_res) {
-      co_await response_frame::send_error_and_close_connection(_conn, frame_res.error());
+      co_await response_frame::send_error_and_close_connection(_conn, core::error{core::error_type::ws_invalid_payload_length});
       co_return;
     }
 
     auto& frame_s = frame_res->frame;
 
     if (!frame_s.mask) {
-      web_socket::ws_error err{
-          ws_status_code::protocol_error,
-          "All client requests should be masked"};
-      co_await response_frame::send_error_and_close_connection(_conn, err);
+      co_await response_frame::send_error_and_close_connection(_conn, core::error{core::error_type::ws_missing_mask});
       co_return;
     }
 
     if (frame_s.opcode_dec >= k_control_codes_begin) {
       if (!frame_s.is_final) {
-        web_socket::ws_error err{
-            ws_status_code::protocol_error,
-            "Control frames are unfragmentable"};
-        co_await response_frame::send_error_and_close_connection(_conn, err);
+        co_await response_frame::send_error_and_close_connection(_conn, core::error{core::error_type::ws_control_frame_too_large});
         co_return;
       }
     }
@@ -372,8 +363,7 @@ async_coro::task<void> ws_session::run(const server::http1::request& handshake_r
       decompress_buffer.clear();
       auto decompress_result = decompress_frame_payload(decompress_buffer, _decompressor, std::span{frame_s.payload.get(), frame_s.payload_length}, _used_config->client_no_context_takeover);
       if (!decompress_result) {
-        web_socket::ws_error err{ws_status_code::protocol_error, decompress_result.error()};
-        co_await response_frame::send_error_and_close_connection(_conn, err);
+        co_await response_frame::send_error_and_close_connection(_conn, decompress_result.error());
         co_return;
       }
 
@@ -395,10 +385,7 @@ async_coro::task<void> ws_session::run(const server::http1::request& handshake_r
 
     if (frame_s.get_op_code() == ws_op_code::continuation) {
       if (!receiving_fragments) {
-        web_socket::ws_error err{
-            ws_status_code::protocol_error,
-            "First frame cant be continuation"};
-        co_await response_frame::send_error_and_close_connection(_conn, err);
+        co_await response_frame::send_error_and_close_connection(_conn, core::error{core::error_type::ws_min_bits_not_used});
         co_return;
       }
 
@@ -436,10 +423,7 @@ async_coro::task<void> ws_session::run(const server::http1::request& handshake_r
 
     if (!frame_s.is_final) {
       if (receiving_fragments) {
-        web_socket::ws_error err{
-            ws_status_code::protocol_error,
-            "Non final frame should be continuation"};
-        co_await response_frame::send_error_and_close_connection(_conn, err);
+        co_await response_frame::send_error_and_close_connection(_conn, core::error{core::error_type::ws_min_bits_not_used});
         co_return;
       }
 
@@ -492,8 +476,7 @@ async_coro::task<void> ws_session::send_data_impl(const response_frame& res_fram
     auto compress_result = compress_frame_payload(compressed_data_buffer, _compressor, data, last_chunk, _used_config->server_no_context_takeover);
     if (!compress_result) {
       if (!_conn.is_closed()) {
-        ws_error error{ws_status_code::policy_violation, compress_result.error()};
-        co_await response_frame::send_error_and_close_connection(_conn, error);
+        co_await response_frame::send_error_and_close_connection(_conn, compress_result.error());
       }
       co_return;
     }
@@ -524,8 +507,7 @@ async_coro::task<void> ws_session::send_data_impl(const response_frame& res_fram
   auto res = co_await _conn.write_buffer({frame.buffer.data(), buffer_after_frame.data()});
   if (!res) {
     if (!_conn.is_closed()) {
-      ws_error error{ws_status_code::policy_violation, res.error()};
-      co_await response_frame::send_error_and_close_connection(_conn, error);
+      co_await response_frame::send_error_and_close_connection(_conn, res.error());
     }
     co_return;
   }
@@ -534,8 +516,7 @@ async_coro::task<void> ws_session::send_data_impl(const response_frame& res_fram
     res = co_await _conn.write_buffer(payload_to_send);
     if (!res) {
       if (!_conn.is_closed()) {
-        ws_error error{ws_status_code::policy_violation, res.error()};
-        co_await response_frame::send_error_and_close_connection(_conn, error);
+        co_await response_frame::send_error_and_close_connection(_conn, res.error());
       }
       co_return;
     }

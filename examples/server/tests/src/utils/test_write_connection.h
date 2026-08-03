@@ -12,9 +12,9 @@
 struct test_write_connection : server::core::i_write_connection {
   std::string sent;
 
-  async_coro::task<server::expected<void, std::string>> write_buffer(std::span<const std::byte> bytes) override {
+  async_coro::task<server::expected<void, server::core::error>> write_buffer(std::span<const std::byte> bytes) override {
     sent.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
-    co_return server::expected<void, std::string>{};
+    co_return server::expected<void, server::core::error>{};
   }
 
   [[nodiscard]] bool is_closed() const noexcept override { return false; }

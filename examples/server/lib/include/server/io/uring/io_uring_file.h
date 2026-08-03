@@ -3,6 +3,7 @@
 #if IO_URING_ENABLED
 
 #include <async_coro/task.h>
+#include <server/core/error.h>
 #include <server/io/file_open_mode.h>
 #include <server/io/uring/io_uring_reactor.h>
 #include <server/utils/expected.h>
@@ -11,7 +12,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
-#include <string>
 #include <vector>
 
 namespace server::io {
@@ -40,12 +40,12 @@ class io_uring_file {
    * @param path The file path to open.
    * @param mode The open mode flags (e.g., file_open_mode::read, file_open_mode::write | file_open_mode::create).
    * @param permissions File permissions (only used when creating new files, default 0644).
-   * @return An awaitable that resolves to an expected<io_uring_file, std::string>.
-   *         On success, contains the opened file. On failure, contains an error message.
+   * @return An awaitable that resolves to an expected<io_uring_file, core::error>.
+   *         On success, contains the opened file. On failure, contains an error.
    * @note The open operation is submitted to io_uring and completes asynchronously.
    *       The coroutine will be suspended until the open completes.
    */
-  [[nodiscard]] static async_coro::task<expected<io_uring_file, std::string>> open_coro(io_uring_reactor& reactor, std::string path, file_open_mode mode, int permissions = default_file_permissions) noexcept;
+  [[nodiscard]] static async_coro::task<expected<io_uring_file, core::error>> open_coro(io_uring_reactor& reactor, std::string path, file_open_mode mode, int permissions = default_file_permissions) noexcept;
 
   // Non-copyable to prevent multiple objects from closing the same file descriptor.
   io_uring_file(const io_uring_file&) = delete;
@@ -61,36 +61,36 @@ class io_uring_file {
    *
    * @param buffer The buffer to read into.
    * @param offset The file offset to read from.
-   * @return An awaitable that resolves to an expected<size_t, std::string>.
-   *         On success, contains the number of bytes read. On failure, contains an error message.
+   * @return An awaitable that resolves to an expected<size_t, core::error>.
+   *         On success, contains the number of bytes read. On failure, contains an error.
    */
-  [[nodiscard]] async_coro::task<expected<size_t, std::string>> read(std::span<std::byte> buffer);
+  [[nodiscard]] async_coro::task<expected<size_t, core::error>> read(std::span<std::byte> buffer);
 
   /**
    * @brief Write data to the file.
    *
    * @param data The data to write.
    * @param offset The file offset to write to.
-   * @return An awaitable that resolves to an expected<void, std::string>.
-   *         On success, contains void. On failure, contains an error message.
+   * @return An awaitable that resolves to an expected<void, core::error>.
+   *         On success, contains void. On failure, contains an error.
    */
-  [[nodiscard]] async_coro::task<expected<void, std::string>> write(std::span<const std::byte> data);
+  [[nodiscard]] async_coro::task<expected<void, core::error>> write(std::span<const std::byte> data);
 
   /**
    * @brief Flush the file to ensure all data is written to disk.
    *
-   * @return An awaitable that resolves to an expected<void, std::string>.
-   *         On success, contains void. On failure, contains an error message.
+   * @return An awaitable that resolves to an expected<void, core::error>.
+   *         On success, contains void. On failure, contains an error.
    */
-  [[nodiscard]] async_coro::task<expected<void, std::string>> flush();
+  [[nodiscard]] async_coro::task<expected<void, core::error>> flush();
 
   /**
    * @brief Close the file.
    *
-   * @return An awaitable that resolves to an expected<void, std::string>.
-   *         On success, contains void. On failure, contains an error message.
+   * @return An awaitable that resolves to an expected<void, core::error>.
+   *         On success, contains void. On failure, contains an error.
    */
-  [[nodiscard]] async_coro::task<expected<void, std::string>> close();
+  [[nodiscard]] async_coro::task<expected<void, core::error>> close();
 
   /**
    * @brief Check if the file is closed.
@@ -112,10 +112,10 @@ class io_uring_file {
    * Uses fstat() to retrieve the file size. This operation is synchronous
    * and does not block on regular files.
    *
-   * @return An expected<size_t, std::string>. On success, contains the file size
-   *         in bytes. On failure, contains an error message.
+   * @return An expected<size_t, core::error>. On success, contains the file size
+   *         in bytes. On failure, contains an error.
    */
-  [[nodiscard]] expected<size_t, std::string> get_size() const;
+  [[nodiscard]] expected<size_t, core::error> get_size() const;
 
   /**
    * @brief Seek to an absolute position in the file.

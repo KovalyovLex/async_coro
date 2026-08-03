@@ -3,6 +3,7 @@
 #if WIN_IOCP_ENABLED
 
 #include <async_coro/config.h>
+#include <server/io/io_config.h>
 #include <server/utils/expected.h>
 
 #include <cstddef>
@@ -15,14 +16,7 @@
 #include <vector>
 
 // WinSock2 headers for socket I/O.
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
 #include <mswsock.h>
-#include <winsock2.h>
 #include <ws2tcpip.h>
 
 namespace server::io {
@@ -42,77 +36,30 @@ void iocp_reactor::dispatch_completion_for_op(DWORD bytes_transferred, bool succ
   if constexpr (std::is_same_v<OpType, op_read> || std::is_same_v<OpType, op_write> ||
                 std::is_same_v<OpType, op_send_socket> || std::is_same_v<OpType, op_receive_socket>) {
     if (!success) {
-      op.callback(expected<size_t, std::string>{unexpect, format_windows_error()});
+      op.callback(expected<size_t, core::error>{unexpect, core::error_type::read_failed, static_cast<int>(GetLastError())});
     } else {
       op.callback(static_cast<size_t>(bytes_transferred));
     }
   } else if constexpr (std::is_same_v<OpType, op_open>) {
     if (!success) {
-      op.callback(expected<file_handle_t, std::string>{unexpect, format_windows_error()});
+      op.callback(expected<file_handle_t, core::error>{unexpect, core::error_type::open_failed, static_cast<int>(GetLastError())});
     } else {
       op.callback(op.fd);
     }
   } else if constexpr (std::is_same_v<OpType, op_accept_socket>) {
     if (!success) {
-      op.callback(expected<socket_type, std::string>{unexpect, format_windows_error()});
+      op.callback(expected<socket_type, core::error>{unexpect, core::error_type::accept_failed, static_cast<int>(WSAGetLastError())});
     } else {
       op.callback(op.accept_socket_fd);
     }
   } else if constexpr (std::is_same_v<OpType, op_connect_socket>) {
     if (!success) {
-      op.callback(expected<void, std::string>{unexpect, format_windows_error()});
+      op.callback(expected<void, core::error>{unexpect, core::error_type::connect_failed, static_cast<int>(WSAGetLastError())});
     } else {
-      op.callback(expected<void, std::string>{});
+      op.callback(expected<void, core::error>{});
     }
   }
   op.callback = nullptr;
-}
-
-// ============================================================================
-// Helper functions
-// ============================================================================
-
-std::string iocp_reactor::format_windows_error() noexcept {
-  wchar_t msg[256];
-  DWORD error_code = GetLastError();
-  DWORD chars = FormatMessageW(
-      FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-      nullptr,
-      error_code,
-      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-      msg,
-      static_cast<DWORD>(std::size(msg)),
-      nullptr);
-
-  if (chars > 0) {
-    return wide_to_utf8(msg, static_cast<int>(chars));
-  }
-  return "Unknown Windows error (code: " + std::to_string(error_code) + ")";
-}
-
-std::string iocp_reactor::wide_to_utf8(const wchar_t* wide, int length) noexcept {
-  if (!wide || length <= 0) {
-    return {};
-  }
-
-  // Strip trailing newline/whitespace
-  while (length > 0 && (wide[length - 1] == L'\n' || wide[length - 1] == L'\r')) {
-    --length;
-  }
-
-  if (length <= 0) {
-    return {};
-  }
-
-  int utf8_len = WideCharToMultiByte(CP_UTF8, 0, wide, length, nullptr, 0, nullptr, nullptr);
-  if (utf8_len <= 0) {
-    return {};
-  }
-
-  std::string utf8;
-  utf8.resize(static_cast<size_t>(utf8_len));
-  WideCharToMultiByte(CP_UTF8, 0, wide, length, utf8.data(), utf8_len, nullptr, nullptr);
-  return utf8;
 }
 
 // ============================================================================
@@ -121,13 +68,13 @@ std::string iocp_reactor::wide_to_utf8(const wchar_t* wide, int length) noexcept
 
 iocp_reactor::iocp_reactor() noexcept = default;
 
-expected<iocp_reactor, std::string> iocp_reactor::create(size_t ring_size) noexcept {
+expected<iocp_reactor, core::error> iocp_reactor::create(size_t ring_size) noexcept {
   iocp_reactor reactor;
 
   // Initialize WinSock and query AcceptEx / ConnectEx (lazy, one-time).
   auto ws_result = io::init_winsock();
   if (!ws_result) {
-    return expected<iocp_reactor, std::string>{unexpect, std::move(ws_result).error()};
+    return expected<iocp_reactor, core::error>{unexpect, core::error_type::winsock_startup_failed, static_cast<int>(std::move(ws_result).error().code)};
   }
 
   reactor._ring_size = ring_size;
@@ -150,9 +97,7 @@ expected<iocp_reactor, std::string> iocp_reactor::create(size_t ring_size) noexc
       0);  // 0 threads means system default thread pool
 
   if (reactor._completion_port == nullptr) {
-    return expected<iocp_reactor, std::string>{
-        unexpect,
-        std::string("CreateIoCompletionPort failed: ") + reactor.format_windows_error()};
+    return expected<iocp_reactor, core::error>{unexpect, core::error{core::error_type::iocp_create_failed, static_cast<int>(GetLastError())}};
   }
 
   return std::move(reactor);
@@ -506,19 +451,19 @@ void iocp_reactor::submit_write(file_handle_t file_descriptor, uint64_t offset, 
   _requests.push(std::move(op));
 }
 
-expected<void, std::string> iocp_reactor::flush(file_handle_t file_descriptor) noexcept {
+expected<void, core::error> iocp_reactor::flush(file_handle_t file_descriptor) noexcept {
   BOOL flush_result = FlushFileBuffers(file_descriptor);
   if (!flush_result) {
-    return expected<void, std::string>{unexpect, format_windows_error()};
+    return expected<void, core::error>{unexpect, core::error_type::flush_failed, static_cast<int>(GetLastError())};
   }
-  return expected<void, std::string>{};
+  return expected<void, core::error>{};
 }
 
-expected<void, std::string> iocp_reactor::close_file(file_handle_t file_descriptor) noexcept {
+expected<void, core::error> iocp_reactor::close_file(file_handle_t file_descriptor) noexcept {
   if (!::server::io::close_file(file_descriptor)) {
-    return expected<void, std::string>{unexpect, format_windows_error()};
+    return expected<void, core::error>{unexpect, core::error_type::close_failed, static_cast<int>(GetLastError())};
   }
-  return expected<void, std::string>{};
+  return expected<void, core::error>{};
 }
 
 bool iocp_reactor::cancel_socket_io(socket_type socket_handle) noexcept {
@@ -532,9 +477,9 @@ bool iocp_reactor::cancel_socket_io(socket_type socket_handle) noexcept {
   return result != SOCKET_ERROR;
 }
 
-expected<void, std::string> iocp_reactor::close_socket(socket_type socket_handle) noexcept {
+expected<void, core::error> iocp_reactor::close_socket(socket_type socket_handle) noexcept {
   if (socket_handle == invalid_socket_id) {
-    return expected<void, std::string>{};
+    return expected<void, core::error>{};
   }
 
   // Cancel all pending IO operations first.
@@ -542,10 +487,10 @@ expected<void, std::string> iocp_reactor::close_socket(socket_type socket_handle
 
   // Then close the socket handle.
   if (!io::close_socket(socket_handle)) {
-    return expected<void, std::string>{unexpect, format_windows_error()};
+    return expected<void, core::error>{unexpect, core::error_type::close_failed, static_cast<int>(WSAGetLastError())};
   }
 
-  return expected<void, std::string>{};
+  return expected<void, core::error>{};
 }
 
 void iocp_reactor::submit_open(const char* path, file_open_mode open_mode, continue_file_callback_t&& callback) {
@@ -553,14 +498,14 @@ void iocp_reactor::submit_open(const char* path, file_open_mode open_mode, conti
   _requests.push(std::move(op));
 }
 
-expected<socket_type, std::string> iocp_reactor::create_socket(socket_type_id kind) noexcept {
+expected<socket_type, core::error> iocp_reactor::create_socket(socket_type_id kind) noexcept {
   int addr_family = AF_INET;
   const int socket_type_val = (kind == socket_type_id::tcp) ? SOCK_STREAM : SOCK_DGRAM;
   const int socket_proto_val = (kind == socket_type_id::tcp) ? IPPROTO_TCP : IPPROTO_UDP;
 
   SOCKET sock = WSASocket(addr_family, socket_type_val, socket_proto_val, nullptr, 0, WSA_FLAG_OVERLAPPED);
   if (sock == INVALID_SOCKET) {
-    return expected<socket_type, std::string>{unexpect, std::string("WSASocket failed: ") + format_windows_error()};
+    return expected<socket_type, core::error>{unexpect, core::error_type::create_socket_failed, static_cast<int>(GetLastError())};
   }
 
   // Associate socket with IOCP completion port.
@@ -570,35 +515,35 @@ expected<socket_type, std::string> iocp_reactor::create_socket(socket_type_id ki
           0,
           0) == nullptr) {
     io::close_socket(sock);
-    return expected<socket_type, std::string>{unexpect, std::string("CreateIoCompletionPort failed: ") + format_windows_error()};
+    return expected<socket_type, core::error>{unexpect, core::error_type::iocp_create_failed, static_cast<int>(GetLastError())};
   }
 
   return static_cast<socket_type>(sock);
 }
 
-expected<void, std::string> iocp_reactor::bind_socket(socket_type socket_handle, std::span<const std::byte> address) noexcept {
+expected<void, core::error> iocp_reactor::bind_socket(socket_type socket_handle, std::span<const std::byte> address) noexcept {
   int result = bind(
       socket_handle,
       reinterpret_cast<const sockaddr*>(address.data()),
       static_cast<int>(address.size()));
 
   if (result == SOCKET_ERROR) {
-    return expected<void, std::string>{unexpect, std::string("bind failed: ") + format_windows_error()};
+    return expected<void, core::error>{unexpect, core::error_type::bind_failed, static_cast<int>(WSAGetLastError())};
   }
 
-  return expected<void, std::string>{};
+  return expected<void, core::error>{};
 }
 
-expected<void, std::string> iocp_reactor::listen_socket(socket_type socket_handle, int backlog) noexcept {
+expected<void, core::error> iocp_reactor::listen_socket(socket_type socket_handle, int backlog) noexcept {
   int result = listen(
       socket_handle,
       backlog);
 
   if (result == SOCKET_ERROR) {
-    return expected<void, std::string>{unexpect, std::string("listen failed: ") + format_windows_error()};
+    return expected<void, core::error>{unexpect, core::error_type::listen_failed, static_cast<int>(WSAGetLastError())};
   }
 
-  return expected<void, std::string>{};
+  return expected<void, core::error>{};
 }
 
 void iocp_reactor::submit_send_socket(socket_type socket_handle, std::span<const std::byte> buffer, continue_size_callback_t&& callback) {
@@ -628,7 +573,7 @@ void iocp_reactor::submit_accept_socket(socket_type listen_socket,
   auto accept_sock_result = create_socket(socket_type_id::tcp);
   if (!accept_sock_result) {
     if (callback) {
-      callback(expected<socket_type, std::string>{unexpect, std::move(accept_sock_result).error()});
+      callback(expected<socket_type, core::error>{unexpect, std::move(accept_sock_result).error()});
     }
     return;
   }

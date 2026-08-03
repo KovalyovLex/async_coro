@@ -3,6 +3,7 @@
 // NOLINTBEGIN(*macro-usage)
 
 #include <cstdint>
+
 #ifdef _WIN32
 
 #define WIN_SOCKET 1

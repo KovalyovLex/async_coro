@@ -1,13 +1,14 @@
 
+#include <server/core/error.h>
 #include <server/core/i_write_connection.h>
 #include <server/utils/expected.h>
 #include <server/web_socket/response_frame.h>
-#include <server/web_socket/ws_error.h>
 
 #include <array>
 #include <bit>
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <utility>
 
 namespace server::web_socket {
@@ -50,8 +51,9 @@ void response_frame::fill_frame_size(std::span<std::byte>& buffer_after_frame, f
   }
 }
 
-async_coro::task<void> response_frame::send_error_and_close_connection(core::i_write_connection& conn, const ws_error& error) {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): conn and error lifetimes guaranteed by caller
-  using max_data_buf = std::array<std::byte, sizeof(frame_base) + sizeof(uint16_t) + ws_error::k_max_message_length>;
+async_coro::task<void> response_frame::send_error_and_close_connection(core::i_write_connection& conn, const core::error& error) {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): conn and error lifetimes guaranteed by caller
+  constexpr size_t k_max_ws_message_length = 125U - sizeof(uint16_t);
+  using max_data_buf = std::array<std::byte, sizeof(frame_base) + sizeof(uint16_t) + k_max_ws_message_length>;
 
   union frame_union {  // NOLINT(*init*)
     max_data_buf buffer;
@@ -59,12 +61,15 @@ async_coro::task<void> response_frame::send_error_and_close_connection(core::i_w
   };
 
   frame_union frame{.frame = {true, static_cast<uint8_t>(ws_op_code::connection_close)}};
-  frame.frame.set_payload_len(error.get_error_message().size() + sizeof(uint16_t));
+
+  std::string error_str = error.to_string();
+  size_t msg_len = std::min(k_max_ws_message_length, error_str.size());
+  frame.frame.set_payload_len(msg_len + sizeof(uint16_t));
 
   auto* write_ptr = frame.buffer.data() + sizeof(frame_base);
 
   {
-    const uint16_t status = error.get_status_code_dec();
+    uint16_t status = static_cast<uint16_t>(error.type);
 
     std::memcpy(write_ptr, &status, sizeof(status));
 
@@ -75,9 +80,8 @@ async_coro::task<void> response_frame::send_error_and_close_connection(core::i_w
     write_ptr += sizeof(status);
   }
 
-  const auto message = error.get_error_message();
-  std::memcpy(write_ptr, message.data(), message.size());
-  write_ptr += message.size();
+  std::memcpy(write_ptr, error_str.data(), msg_len);
+  write_ptr += msg_len;
 
   // no need to process errors as we closing connection
   co_await conn.write_buffer({frame.buffer.data(), write_ptr});

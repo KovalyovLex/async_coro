@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <liburing.h>
 #include <linux/io_uring.h>
+#include <server/core/error.h>
 #include <server/io/uring/io_uring_reactor.h>
 #include <server/utils/expected.h>
 
@@ -22,7 +23,7 @@ namespace server::io {
 
 io_uring_reactor::io_uring_reactor() noexcept = default;
 
-expected<io_uring_reactor, std::string> io_uring_reactor::create(size_t ring_size) noexcept {
+expected<io_uring_reactor, core::error> io_uring_reactor::create(size_t ring_size) noexcept {
   io_uring_reactor reactor;
   reactor._ring_size = ring_size;
   reactor._local_ring = std::make_unique<request_entry[]>(ring_size);  // NOLINT(*-c-arrays): io_uring requires contiguous heap allocation managed by unique_ptr
@@ -36,7 +37,7 @@ expected<io_uring_reactor, std::string> io_uring_reactor::create(size_t ring_siz
   struct io_uring_params params{};
 
   if (io_uring_queue_init_params(ring_size, &reactor._ring, &params) != 0) {
-    return expected<io_uring_reactor, std::string>{unexpect, std::string("io_uring_queue_init_params failed: ") + strerror(errno)};
+    return expected<io_uring_reactor, core::error>{unexpect, error_type::io_uring_init_failed, errno};
   }
   return std::move(reactor);
 }
@@ -170,7 +171,7 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOL
 
     // Update entry fields
     const auto is_error = (result < 0);
-    auto error_msg = is_error ? std::string{strerror(errno)} : std::string{};
+    core::error err = is_error ? core::error{error_type::system_posix, errno} : core::error{};
 
     std::visit([&](auto& var) {
       if (!var) {
@@ -181,21 +182,21 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOL
 
       if constexpr (std::is_same_v<T, continue_size_callback_t>) {
         if (is_error) {
-          var(expected<size_t, std::string>{unexpect, std::move(error_msg)});
+          var(expected<size_t, core::error>{unexpect, err});
         } else {
           var(static_cast<size_t>(result));
         }
       } else if constexpr (std::is_same_v<T, continue_file_callback_t>) {
         if (is_error) {
-          var(expected<int, std::string>{unexpect, std::move(error_msg)});
+          var(expected<int, core::error>{unexpect, err});
         } else {
           var(static_cast<int>(result));
         }
       } else if constexpr (std::is_same_v<T, continue_void_callback_t>) {
         if (is_error) {
-          var(expected<void, std::string>{unexpect, std::move(error_msg)});
+          var(expected<void, core::error>{unexpect, err});
         } else {
-          var(expected<void, std::string>{});
+          var(expected<void, core::error>{});
         }
       } else {
         static_assert(async_coro::always_false<T>::value, "Unsupported callback type");

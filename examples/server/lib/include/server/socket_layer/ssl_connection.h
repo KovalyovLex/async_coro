@@ -5,12 +5,12 @@
 #if EPOLL_KQUEUE_ENABLED
 
 #include <async_coro/task.h>
+#include <server/core/error.h>
 #include <server/socket_layer/connection_id.h>
 #include <server/utils/expected.h>
 
 #include <cstdint>
 #include <span>
-#include <string>
 #include <utility>
 
 namespace server::socket_layer {
@@ -49,7 +49,7 @@ class ssl_connection {
     return _ssl != nullptr;
   }
 
-  [[nodiscard]] async_coro::task<expected<bool, std::string>> handshake(connection& connection);
+  [[nodiscard]] async_coro::task<expected<bool, core::error>> handshake(connection& connection);
 
   int read(std::span<std::byte> bytes);
   int write(std::span<const std::byte> bytes);

@@ -2,16 +2,15 @@
 
 #include <async_coro/config.h>
 #include <async_coro/task.h>
+#include <server/core/error.h>
 #include <server/utils/expected.h>
 #include <server/web_socket/frame_base.h>
-#include <server/web_socket/ws_error.h>
 #include <server/web_socket/ws_op_code.h>
 
 #include <cstddef>
 #include <memory>
 #include <optional>
 #include <span>
-#include <string>
 #include <string_view>
 
 namespace server::core {
@@ -37,7 +36,7 @@ class request_frame {
   explicit constexpr request_frame(ws_op_code code) noexcept
       : opcode_dec(static_cast<uint8_t>(code)) {}
 
-  async_coro::task<expected<void, std::string>> read_payload(core::i_read_connection& conn, std::span<const std::byte> rest_data_in_buffer);
+  async_coro::task<expected<void, core::error>> read_payload(core::i_read_connection& conn, std::span<const std::byte> rest_data_in_buffer);
 
   constexpr void set_op_code(ws_op_code code) noexcept { opcode_dec = static_cast<uint8_t>(code); }
   [[nodiscard]] constexpr ws_op_code get_op_code() const noexcept { return static_cast<ws_op_code>(opcode_dec); }
@@ -65,12 +64,12 @@ auto request_frame::make_frame(const frame_begin& frame_beg, size_t buffer_len) 
     std::span<const std::byte> rest_data_in_buffer;
   };
 
-  using result_t = expected<frame_result, web_socket::ws_error>;
+  using result_t = expected<frame_result, core::error>;
 
   frame_result res{.frame = request_frame{frame_beg}, .rest_data_in_buffer = {}};
 
   if (buffer_len < 2) {
-    return result_t{unexpect, ws_error{ws_status_code::policy_violation, "Too small buffer were read"}};
+    return result_t{unexpect, core::error{core::error_type::ws_too_small_buffer}};
   }
 
   uint32_t next_data_byte = 2;
@@ -78,19 +77,19 @@ auto request_frame::make_frame(const frame_begin& frame_beg, size_t buffer_len) 
   if (res.frame.payload_length == frame_base::k_payload_len_2_bytes) {
     // uint16 big endian
     if (buffer_len < 4) {
-      return result_t{unexpect, ws_error{ws_status_code::policy_violation, "Too small amount of bytes to read uint16 payload_length"}};
+      return result_t{unexpect, core::error{core::error_type::ws_invalid_payload_length}};
     }
 
     res.frame.payload_length = uint32_t(frame_beg.buffer[2]);
     res.frame.payload_length |= uint32_t(frame_beg.buffer[3]) << 8U;
     if (res.frame.payload_length <= frame_base::k_max_size_1_byte) {
-      return result_t{unexpect, ws_error{ws_status_code::protocol_error, "The minimum number of bits must be used instead of uint16"}};
+      return result_t{unexpect, core::error{core::error_type::ws_min_bits_not_used}};
     }
     next_data_byte = 4;
   } else if (res.frame.payload_length == frame_base::k_payload_len_8_bytes) {
     // uint64 big endian
     if (buffer_len < 10) {
-      return result_t{unexpect, ws_error{ws_status_code::policy_violation, "Too small amount of bytes to read uint64 payload_length"}};
+      return result_t{unexpect, core::error{core::error_type::ws_invalid_payload_length}};
     }
 
     res.frame.payload_length = uint64_t(frame_beg.buffer[2]);
@@ -103,10 +102,10 @@ auto request_frame::make_frame(const frame_begin& frame_beg, size_t buffer_len) 
     res.frame.payload_length |= uint64_t(frame_beg.buffer[9]) << 56U;
 
     if (res.frame.payload_length <= frame_base::k_max_size_2_bytes) {
-      return result_t{unexpect, ws_error{ws_status_code::protocol_error, "The minimum number of bits must be used instead of uint64"}};
+      return result_t{unexpect, core::error{core::error_type::ws_min_bits_not_used}};
     }
     if (res.frame.payload_length == std::numeric_limits<uint64_t>::max()) {
-      return result_t{unexpect, ws_error{ws_status_code::protocol_error, "The most significant bit must be zero"}};
+      return result_t{unexpect, core::error{core::error_type::ws_max_payload_exceeded}};
     }
 
     next_data_byte = 10;
@@ -115,7 +114,7 @@ auto request_frame::make_frame(const frame_begin& frame_beg, size_t buffer_len) 
   if (frame_beg.frame.is_masked()) {
     // uint32 big endian
     if (buffer_len < next_data_byte + 4) {
-      return result_t{unexpect, ws_error{ws_status_code::protocol_error, "Too small amount of bytes for read mask"}};
+      return result_t{unexpect, core::error{core::error_type::ws_missing_mask}};
     }
 
     mask_t mask_val;
@@ -128,7 +127,7 @@ auto request_frame::make_frame(const frame_begin& frame_beg, size_t buffer_len) 
   }
 
   if (res.frame.opcode_dec >= k_control_codes_begin && res.frame.payload_length > frame_base::k_max_size_1_byte) {
-    return result_t{unexpect, ws_error{ws_status_code::protocol_error, "Control frames must have up to 125 bytes"}};
+    return result_t{unexpect, core::error{core::error_type::ws_control_frame_too_large}};
   }
 
   res.rest_data_in_buffer = std::span{frame_beg.buffer.data() + next_data_byte, frame_beg.buffer.size() - next_data_byte};  // NOLINT(*pointer*)

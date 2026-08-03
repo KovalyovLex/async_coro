@@ -5,6 +5,7 @@
 #include <async_coro/atomic_queue.h>
 #include <async_coro/internal/await_callback.h>
 #include <async_coro/utils/unique_function.h>
+#include <server/core/error.h>
 #include <server/io/file_open_mode.h>
 #include <server/io/io_config.h>
 #include <server/io/socket_type_id.h>
@@ -38,32 +39,32 @@ class iocp_reactor {
   /**
    * @brief Callback type for IOCP completion events. Returns number of bytes written/read or error.
    */
-  using continue_size_callback_t = async_coro::unique_function<void(expected<size_t, std::string>)>;
+  using continue_size_callback_t = async_coro::unique_function<void(expected<size_t, core::error>)>;
 
   /**
    * @brief Callback type for IOCP completion events. Returns success or error.
    */
-  using continue_void_callback_t = async_coro::unique_function<void(expected<void, std::string>)>;
+  using continue_void_callback_t = async_coro::unique_function<void(expected<void, core::error>)>;
 
   /**
    * @brief Callback type for IOCP completion events. Returns file handle or error.
    */
-  using continue_file_callback_t = async_coro::unique_function<void(expected<file_handle_t, std::string>)>;
+  using continue_file_callback_t = async_coro::unique_function<void(expected<file_handle_t, core::error>)>;
 
   /**
    * @brief Callback type for IOCP socket completion events. Returns socket handle or error.
    */
-  using continue_socket_callback_t = async_coro::unique_function<void(expected<socket_type, std::string>)>;
+  using continue_socket_callback_t = async_coro::unique_function<void(expected<socket_type, core::error>)>;
 
   /**
    * @brief Factory method to create a new IOCP reactor.
    *
    * Creates an IOCP completion port with the specified number of worker threads.
    * @param ring_size Ring buffer size.
-   * @return An expected<iocp_reactor, std::string>. On success, contains the reactor.
-   *         On failure, contains an error message describing the initialization failure.
+   * @return An expected<iocp_reactor, core::error>. On success, contains the reactor.
+   *         On failure, contains an error describing the initialization failure.
    */
-  [[nodiscard]] static expected<iocp_reactor, std::string> create(size_t ring_size = 256) noexcept;
+  [[nodiscard]] static expected<iocp_reactor, core::error> create(size_t ring_size = 256) noexcept;
 
   iocp_reactor(iocp_reactor&& other) noexcept;
   iocp_reactor& operator=(iocp_reactor&& other) noexcept;
@@ -110,20 +111,20 @@ class iocp_reactor {
    *
    * Calls FlushFileBuffers directly (synchronous operation).
    * @param file_descriptor File handle (cast to int) to flush.
-   * @return An expected<void, std::string>. On success, contains void.
-   *         On failure, contains an error message describing the failure.
+   * @return An expected<void, core::error>. On success, contains void.
+   *         On failure, contains an error describing the failure.
    */
-  [[nodiscard]] expected<void, std::string> flush(file_handle_t file_descriptor) noexcept;
+  [[nodiscard]] expected<void, core::error> flush(file_handle_t file_descriptor) noexcept;
 
   /**
    * @brief Synchronously close the file handle.
    *
    * Calls CloseHandle directly (synchronous operation).
    * @param file_descriptor File handle (cast to int) to close.
-   * @return An expected<void, std::string>. On success, contains void.
-   *         On failure, contains an error message describing the failure.
+   * @return An expected<void, core::error>. On success, contains void.
+   *         On failure, contains an error describing the failure.
    */
-  [[nodiscard]] expected<void, std::string> close_file(file_handle_t file_descriptor) noexcept;
+  [[nodiscard]] expected<void, core::error> close_file(file_handle_t file_descriptor) noexcept;
 
   /**
    * @brief Cancel all pending overlapped IO operations on a socket.
@@ -147,10 +148,10 @@ class iocp_reactor {
    * callbacks will be invoked via the normal IOCP completion path.
    *
    * @param socket_handle Socket handle to close.
-   * @return An expected<void, std::string>. On success, contains void.
-   *         On failure, contains an error message describing the failure.
+   * @return An expected<void, core::error>. On success, contains void.
+   *         On failure, contains an error describing the failure.
    */
-  [[nodiscard]] expected<void, std::string> close_socket(socket_type socket_handle) noexcept;
+  [[nodiscard]] expected<void, core::error> close_socket(socket_type socket_handle) noexcept;
 
   /**
    * @brief Submit an async open operation.
@@ -167,10 +168,10 @@ class iocp_reactor {
    *
    * Creates a socket using WSASocket and associates it with this reactor's completion port.
    * @param kind The socket kind (stream/TCP or datagram/UDP).
-   * @return An expected<socket_type, std::string>. On success, contains the new socket handle.
-   *         On failure, contains an error message describing the creation failure.
+   * @return An expected<socket_type, core::error>. On success, contains the new socket handle.
+   *         On failure, contains an error describing the creation failure.
    */
-  [[nodiscard]] expected<socket_type, std::string> create_socket(socket_type_id kind) noexcept;
+  [[nodiscard]] expected<socket_type, core::error> create_socket(socket_type_id kind) noexcept;
 
   /**
    * @brief Bind a socket to a local address.
@@ -178,10 +179,10 @@ class iocp_reactor {
    * Binds the socket to the specified sockaddr. The socket must already be created.
    * @param socket_handle The socket handle to bind.
    * @param address Buffer containing the local sockaddr structure.
-   * @return An expected<void, std::string>. On success, contains void.
-   *         On failure, contains an error message describing the bind failure.
+   * @return An expected<void, core::error>. On success, contains void.
+   *         On failure, contains an error describing the bind failure.
    */
-  [[nodiscard]] expected<void, std::string> bind_socket(socket_type socket_handle, std::span<const std::byte> address) noexcept;
+  [[nodiscard]] expected<void, core::error> bind_socket(socket_type socket_handle, std::span<const std::byte> address) noexcept;
 
   /**
    * @brief Set a socket to listening mode.
@@ -189,10 +190,10 @@ class iocp_reactor {
    * Calls listen() on the socket with the specified backlog.
    * @param socket_handle The listening socket handle.
    * @param backlog Maximum length of the pending connections queue.
-   * @return An expected<void, std::string>. On success, contains void.
-   *         On failure, contains an error message describing the listen failure.
+   * @return An expected<void, core::error>. On success, contains void.
+   *         On failure, contains an error describing the listen failure.
    */
-  [[nodiscard]] expected<void, std::string> listen_socket(socket_type socket_handle, int backlog = SOMAXCONN) noexcept;
+  [[nodiscard]] expected<void, core::error> listen_socket(socket_type socket_handle, int backlog = SOMAXCONN) noexcept;
 
   /**
    * @brief Submit an async send operation on a socket.
@@ -242,18 +243,8 @@ class iocp_reactor {
    */
   void submit_connect_socket(socket_type socket_handle, std::span<const std::byte> remote_address, continue_void_callback_t&& callback);
 
-  /**
-   * @brief Convert Windows GetLastError() to a UTF-8 error string.
-   *
-   * Uses FormatMessageW to get the system error message and converts it to UTF-8.
-   * @return A human-readable error string, or empty string if no error.
-   */
-  [[nodiscard]] static std::string format_windows_error() noexcept;
-
  private:
   iocp_reactor() noexcept;
-
-  [[nodiscard]] static std::string wide_to_utf8(const wchar_t* wide, int length) noexcept;
 
   /**
    * @brief Dispatch completion for a known operation type (used in process_loop submit phase).

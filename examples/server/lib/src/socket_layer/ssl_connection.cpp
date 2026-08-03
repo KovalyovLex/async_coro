@@ -11,6 +11,7 @@
 #include <async_coro/await/await_callback.h>
 #include <async_coro/config.h>
 #include <async_coro/utils/passkey.h>
+#include <server/core/error.h>
 #include <server/socket_layer/connection.h>
 #include <server/socket_layer/reactor.h>
 #include <server/socket_layer/ssl_connection.h>
@@ -68,7 +69,7 @@ ssl_error ssl_connection::get_error(int result) const noexcept {
 #endif
 }
 
-async_coro::task<expected<bool, std::string>> ssl_connection::handshake(connection& connection) {  // NOLINT(*-reference*)
+async_coro::task<expected<bool, core::error>> ssl_connection::handshake(connection& connection) {  // NOLINT(*-reference*)
   ASYNC_CORO_ASSERT(_ssl != nullptr);
 
 #if SERVER_HAS_SSL
@@ -76,19 +77,19 @@ async_coro::task<expected<bool, std::string>> ssl_connection::handshake(connecti
 
   while (int ret = SSL_accept(ssl)) {
     if (ret == 1) {
-      co_return expected<bool, std::string>{true};
+      co_return expected<bool, core::error>{true};
     }
 
     if (ret == 2) {
       // was shutdown by peer
-      co_return expected<bool, std::string>{false};
+      co_return expected<bool, core::error>{false};
     }
 
     const int err = SSL_get_error(ssl, ret);
 
     if (err == SSL_ERROR_ZERO_RETURN) {
       // was shutdown by peer
-      co_return expected<bool, std::string>{false};
+      co_return expected<bool, core::error>{false};
     }
 
     if (err == SSL_ERROR_WANT_WRITE) {
@@ -100,7 +101,7 @@ async_coro::task<expected<bool, std::string>> ssl_connection::handshake(connecti
 
       if (res == reactor::connection_state::closed) {
         connection.close_connection();
-        co_return expected<bool, std::string>{false};
+        co_return expected<bool, core::error>{false};
       }
     } else if (err == SSL_ERROR_WANT_READ) {
       connection.check_subscribed();
@@ -110,17 +111,17 @@ async_coro::task<expected<bool, std::string>> ssl_connection::handshake(connecti
       });
       if (res == reactor::connection_state::closed) {
         connection.close_connection();
-        co_return expected<bool, std::string>{false};
+        co_return expected<bool, core::error>{false};
       }
     } else {
-      co_return expected<bool, std::string>{unexpect, ssl_context::get_ssl_error()};
+      co_return expected<bool, core::error>{unexpect, core::error{core::error_type::system_windows}};
     }
   }
 
   ASYNC_CORO_ASSERT(false && "SSL_accept returned zero");  // NOLINT(*static-assert)
 #endif
 
-  co_return expected<bool, std::string>{unexpect, ssl_context::get_ssl_error()};
+  co_return expected<bool, core::error>{unexpect, core::error{core::error_type::system_windows}};
 }
 
 int ssl_connection::read(std::span<std::byte> bytes) {

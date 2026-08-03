@@ -2,6 +2,7 @@
 
 #if EPOLL_KQUEUE_ENABLED
 
+#include <server/core/error.h>
 #include <server/core/i_read_connection.h>
 #include <server/core/i_write_connection.h>
 #include <server/http1/forwarding_params.h>
@@ -57,8 +58,8 @@ client_request http_client::forward_request(request&& orig, const forwarding_par
   return req;
 }
 
-auto http_client::send_request(client_request& req, server::core::i_write_connection& write, server::core::i_read_connection& read) -> async_coro::task<expected<client_response, std::string>> {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): request lifetime managed by caller through session
-  using res_t = expected<client_response, std::string>;
+auto http_client::send_request(client_request& req, server::core::i_write_connection& write, server::core::i_read_connection& read) -> async_coro::task<expected<client_response, core::error>> {  // NOLINT(cppcoreguidelines-avoid-reference-coroutine-parameters): request lifetime managed by caller through session
+  using res_t = expected<client_response, core::error>;
 
   // make sure request has correct version
   req.set_version(_ver);
@@ -71,7 +72,7 @@ auto http_client::send_request(client_request& req, server::core::i_write_connec
   client_response resp;
   auto read_res = co_await resp.read(read);
   if (!read_res) {
-    co_return res_t{unexpect, std::string{read_res.error().get_reason()}};
+    co_return res_t{unexpect, core::error{core::error_type::http_parse_error, static_cast<int>(read_res.error().get_status_code())}};
   }
 
   co_return res_t{std::move(resp)};

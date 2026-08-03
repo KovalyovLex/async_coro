@@ -501,7 +501,7 @@ TEST(iocp_file_tests, read_closed_file) {
     if (read_result) {
       co_return -1;
     }
-    EXPECT_EQ(read_result.error(), "File is closed");
+    EXPECT_EQ(read_result.error().type, server::core::error_type::file_closed);
 
     co_return 0;
   };

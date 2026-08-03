@@ -3,6 +3,7 @@
 #if WIN_IOCP_ENABLED
 
 #include <async_coro/task.h>
+#include <server/core/error.h>
 #include <server/io/io_config.h>
 #include <server/io/iocp/iocp_reactor.h>
 #include <server/utils/expected.h>
@@ -10,7 +11,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
-#include <string>
 
 // Windows socket headers — already included via io_config.h when WIN_SOCKET is defined.
 #if WIN_SOCKET
@@ -48,10 +48,10 @@ class iocp_socket {
    * @param reactor The IOCP reactor to use. Must outlive this socket.
    * @param remote_address Buffer containing destination sockaddr structure.
    * @param address_length Length of the address structure in bytes.
-   * @return An awaitable that resolves to an expected<iocp_socket, std::string>.
-   *         On success, contains the connected socket. On failure, contains an error message.
+   * @return An awaitable that resolves to an expected<iocp_socket, core::error>.
+   *         On success, contains the connected socket. On failure, contains an error.
    */
-  [[nodiscard]] static async_coro::task<expected<iocp_socket, std::string>> connect_coro(
+  [[nodiscard]] static async_coro::task<expected<iocp_socket, core::error>> connect_coro(
       iocp_reactor& reactor, const void* remote_address, socklen_t address_length) noexcept;
 
   // Non-copyable to prevent multiple objects from closing the same socket handle.
@@ -69,11 +69,11 @@ class iocp_socket {
    * Sends in a loop until all data is sent (or error).
    *
    * @param data The data to send.
-   * @return An awaitable that resolves to an expected<size_t, std::string>.
+   * @return An awaitable that resolves to an expected<size_t, core::error>.
    *         On success, contains the total number of bytes sent.
-   *         On failure, contains an error message.
+   *         On failure, contains an error.
    */
-  [[nodiscard]] async_coro::task<expected<size_t, std::string>> send(std::span<const std::byte> data);
+  [[nodiscard]] async_coro::task<expected<size_t, core::error>> send(std::span<const std::byte> data);
 
   /**
    * @brief Receive data from the socket into a buffer.
@@ -82,11 +82,11 @@ class iocp_socket {
    * Returns the number of bytes actually received, which may be less than the buffer size.
    *
    * @param buffer The buffer to receive into.
-   * @return An awaitable that resolves to an expected<size_t, std::string>.
+   * @return An awaitable that resolves to an expected<size_t, core::error>.
    *         On success, contains the total number of bytes received.
-   *         On failure, contains an error message. Zero bytes indicates connection closed.
+   *         On failure, contains an error. Zero bytes indicates connection closed.
    */
-  [[nodiscard]] async_coro::task<expected<size_t, std::string>> receive(std::span<std::byte> buffer);
+  [[nodiscard]] async_coro::task<expected<size_t, core::error>> receive(std::span<std::byte> buffer);
 
   /**
    * @brief Close the socket synchronously.
@@ -94,10 +94,10 @@ class iocp_socket {
    * Closes the socket handle via closesocket().
    * After this returns successfully, the socket is no longer valid for I/O.
    *
-   * @return An expected<void, std::string>. On success, contains void.
-   *         On failure, contains an error message.
+   * @return An expected<void, core::error>. On success, contains void.
+   *         On failure, contains an error.
    */
-  [[nodiscard]] expected<void, std::string> close() noexcept;
+  [[nodiscard]] expected<void, core::error> close() noexcept;
 
   /**
    * @brief Check if the socket is closed.
@@ -117,10 +117,10 @@ class iocp_socket {
    * @brief Set TCP_NODELAY option.
    *
    * @param enable true to disable Nagle's algorithm, false to enable.
-   * @return An expected<void, std::string>. On success, contains void.
-   *         On failure, contains an error message.
+   * @return An expected<void, core::error>. On success, contains void.
+   *         On failure, contains an error.
    */
-  [[nodiscard]] expected<void, std::string> set_no_delay(bool enable) noexcept;
+  [[nodiscard]] expected<void, core::error> set_no_delay(bool enable) noexcept;
 
  private:
   /**
