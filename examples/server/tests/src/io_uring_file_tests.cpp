@@ -1,5 +1,7 @@
 #include <server/io/uring/io_uring_file.h>
 
+#include <span>
+
 #if IO_URING_ENABLED
 
 #include <async_coro/execution_system.h>
@@ -12,7 +14,6 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "utils/io_helpers.h"
@@ -107,10 +108,9 @@ TEST(io_uring_file_tests, write_to_file) {
 
     auto file = std::move(*result);
 
-    const std::string write_content = "Written via io_uring";
-    std::vector<uint8_t> data(write_content.begin(), write_content.end());
+    const std::string_view write_content = "Written via io_uring";
 
-    auto write_result = co_await file.write(data);
+    auto write_result = co_await file.write(std::as_bytes(std::span{write_content}));
     if (!write_result) {
       co_return -1;
     }
@@ -194,7 +194,7 @@ TEST(io_uring_file_tests, seek_and_read) {
     EXPECT_EQ(seek_result.value(), 5);
 
     // Read 4 bytes from position 5
-    std::vector<uint8_t> buffer(4);
+    std::vector<std::byte> buffer(4);
     auto read_result = co_await file.read(buffer);
     if (!read_result) {
       co_return -1;
@@ -264,7 +264,7 @@ TEST(io_uring_file_tests, read_closed_file) {
 
     EXPECT_TRUE(file.is_closed());
 
-    std::vector<uint8_t> buffer(10);
+    std::vector<std::byte> buffer(10);
     auto read_result = co_await file.read(buffer);
     if (read_result) {
       co_return -1;

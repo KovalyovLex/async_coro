@@ -10,7 +10,6 @@
 #include <sys/types.h>
 
 #include <cstddef>
-#include <cstdint>
 #include <span>
 #include <vector>
 
@@ -127,7 +126,7 @@ class io_uring_file {
    * @return An expected<off_t, std::string>. On success, contains the new file offset.
    *         On failure, contains an error message.
    */
-  [[nodiscard]] expected<off_t, std::string> seek(off_t offset);
+  [[nodiscard]] expected<off_t, core::error> seek(off_t offset);
 
   /**
    * @brief Read the entire file contents into a vector.
@@ -138,7 +137,7 @@ class io_uring_file {
    * @return An awaitable that resolves to an expected<std::vector<std::byte>, std::string>.
    *         On success, contains all bytes read from the file. On failure, contains an error message.
    */
-  [[nodiscard]] async_coro::task<expected<std::vector<std::byte>, std::string>> read_all();
+  [[nodiscard]] async_coro::task<expected<std::vector<std::byte>, core::error>> read_all();
 
  private:
   /**

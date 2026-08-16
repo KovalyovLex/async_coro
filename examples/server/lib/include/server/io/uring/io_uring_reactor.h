@@ -6,9 +6,9 @@
 #include <async_coro/internal/await_callback.h>
 #include <async_coro/utils/unique_function.h>
 #include <server/core/error.h>
+#include <server/io/file_open_mode.h>
 #include <server/utils/expected.h>
 
-#include <cerrno>
 #include <chrono>
 #include <cstdint>
 #include <memory>

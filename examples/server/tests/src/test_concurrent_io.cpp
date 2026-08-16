@@ -1,3 +1,6 @@
+
+#if IO_URING_ENABLED
+
 #include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/task.h>
@@ -5,13 +8,9 @@
 #include <server/io/uring/io_uring_file.h>
 #include <server/io/uring/io_uring_reactor.h>
 
-#include <atomic>
 #include <cstddef>
 #include <string>
-#include <thread>
 #include <vector>
-
-#if IO_URING_ENABLED
 
 namespace fs = std::filesystem;
 
@@ -56,7 +55,7 @@ TEST(concurrent_io, concurrent_with_io_uring) {
 
     int successes = 0;
     for (int i = 0; i < num_files; ++i) {
-      std::vector<uint8_t> buffer(data_size);
+      std::vector<std::byte> buffer(data_size);
       auto read_result = co_await iuring_files[static_cast<size_t>(i)].read(buffer);
       auto close_result = co_await iuring_files[static_cast<size_t>(i)].close();
 

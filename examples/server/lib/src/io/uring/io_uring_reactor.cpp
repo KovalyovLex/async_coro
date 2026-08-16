@@ -17,7 +17,6 @@
 #include <cerrno>
 #include <cstring>
 #include <span>
-#include <string>
 
 namespace server::io {
 
@@ -37,7 +36,7 @@ expected<io_uring_reactor, core::error> io_uring_reactor::create(size_t ring_siz
   struct io_uring_params params{};
 
   if (io_uring_queue_init_params(ring_size, &reactor._ring, &params) != 0) {
-    return expected<io_uring_reactor, core::error>{unexpect, error_type::io_uring_init_failed, errno};
+    return expected<io_uring_reactor, core::error>{unexpect, core::error_type::io_uring_init_failed, errno};
   }
   return std::move(reactor);
 }
@@ -171,7 +170,7 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOL
 
     // Update entry fields
     const auto is_error = (result < 0);
-    core::error err = is_error ? core::error{error_type::system_posix, errno} : core::error{};
+    core::error err = is_error ? core::error{core::error_type::system_error, errno} : core::error{};
 
     std::visit([&](auto& var) {
       if (!var) {
@@ -231,7 +230,7 @@ void io_uring_reactor::submit_write(int file_descriptor, uint64_t offset, std::s
   entry.operation = operation_type::send_data;
   entry.callback = std::move(callback);
   // io_uring requires mutable buffers for write operations
-  entry.buffer_data = std::span<uint8_t>{const_cast<uint8_t*>(buffer.data()), buffer.size()};  // NOLINT(cppcoreguidelines-pro-type-const-cast): liburing API requires non-const buffer pointer
+  entry.buffer_data = std::span<std::byte>{const_cast<std::byte*>(buffer.data()), buffer.size()};  // NOLINT(cppcoreguidelines-pro-type-const-cast): liburing API requires non-const buffer pointer
   entry.offset = offset;
 
   _requests.push(std::move(entry));

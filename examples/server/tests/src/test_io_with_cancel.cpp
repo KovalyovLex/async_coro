@@ -43,7 +43,7 @@ TEST(io_cancel, cancel_with_io_uring) {
 
     auto file = std::move(*result);
 
-    std::vector<uint8_t> buffer(65536);
+    std::vector<std::byte> buffer(65536);
     read_started.store(true);
 
     auto read_result = co_await file.read(buffer);

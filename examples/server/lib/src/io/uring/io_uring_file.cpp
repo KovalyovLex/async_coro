@@ -67,7 +67,7 @@ async_coro::task<expected<io_uring_file, core::error>> io_uring_file::open_coro(
   co_return io_uring_file{reactor, result.value()};
 }
 
-async_coro::task<expected<size_t, core::error>> io_uring_file::read(std::span<uint8_t> buffer) {
+async_coro::task<expected<size_t, core::error>> io_uring_file::read(std::span<std::byte> buffer) {
   if (is_closed()) {
     co_return expected<size_t, core::error>{unexpect, core::error_type::file_closed};
   }
@@ -154,7 +154,7 @@ expected<size_t, core::error> io_uring_file::get_size() const {
 
   struct stat stat_buf{};
   if (::fstat(_fd, &stat_buf) != 0) {
-    return expected<size_t, core::error>{unexpect, core::error_type::system_posix, errno};
+    return expected<size_t, core::error>{unexpect, core::error_type::system_error, errno};
   }
 
   return static_cast<size_t>(stat_buf.st_size);
@@ -188,7 +188,7 @@ async_coro::task<expected<std::vector<std::byte>, core::error>> io_uring_file::r
   std::vector<std::byte> buffer;
   buffer.resize(file_size);
 
-  auto result = co_await read(std::span<uint8_t>{reinterpret_cast<uint8_t*>(buffer.data()), file_size});  // NOLINT(*-reinterpret-cast)
+  auto result = co_await read(buffer);
   if (!result) {
     co_return expected<std::vector<std::byte>, core::error>{unexpect, std::move(result).error()};
   }
