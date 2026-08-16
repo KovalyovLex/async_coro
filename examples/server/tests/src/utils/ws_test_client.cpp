@@ -1,7 +1,5 @@
 #include "ws_test_client.h"
 
-#if EPOLL_KQUEUE_ENABLED
-
 #include <gtest/gtest.h>
 
 #include <array>
@@ -229,5 +227,3 @@ std::vector<std::byte> ws_test_client::generate_frame(uint8_t opcode, std::span<
   std::vector<std::byte> frame_bytes;
   return generate_frame_impl(frame_bytes, opcode, data, final);
 }
-
-#endif  // EPOLL_KQUEUE_ENABLED

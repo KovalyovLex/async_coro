@@ -1,5 +1,6 @@
 #include "server/core/error.h"
 
+#include <cstring>
 #include <format>
 
 namespace server::core {

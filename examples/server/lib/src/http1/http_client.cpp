@@ -72,7 +72,7 @@ auto http_client::send_request(client_request& req, server::core::i_write_connec
   client_response resp;
   auto read_res = co_await resp.read(read);
   if (!read_res) {
-    co_return res_t{unexpect, core::error{core::error_type::http_parse_error, static_cast<int>(read_res.error().get_status_code())}};
+    co_return res_t{unexpect, core::error{core::error_type::http_parse_error, static_cast<int>(read_res.error().status_code.value)}};
   }
 
   co_return res_t{std::move(resp)};

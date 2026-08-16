@@ -84,6 +84,10 @@ enum class error_type : uint16_t {
   http_bad_chunked_format = 1010,
   http_wrong_chunk_size = 1011,
   http_parse_error = 1012,
+
+  // SSL errors
+  ssl_unavailable_on_this_platform = 1101,
+  ssl_accept_error = 1102,
 };
 
 struct error {

@@ -27,7 +27,7 @@ static bool check_connection_error_need_try(core::error* error) {
   if (error_code == EAGAIN || error_code == EWOULDBLOCK || error_code == WSAEWOULDBLOCK || error_code == ERROR_REQ_NOT_ACCEP) {
     try_again = true;
   } else if (error != nullptr) {
-    *error = core::error{core::error_type::system_wsa, static_cast<int>(error_code)};
+    *error = core::error{core::error_type::system_error, static_cast<int>(error_code)};
   }
 #else
   const auto error_code = errno;
@@ -35,7 +35,7 @@ static bool check_connection_error_need_try(core::error* error) {
   if (error_code == EAGAIN || error_code == EWOULDBLOCK) {
     try_again = true;
   } else if (error != nullptr) {
-    *error = core::error{core::error_type::system_posix, error_code};
+    *error = core::error{core::error_type::system_error, error_code};
   }
 #endif
 
@@ -134,7 +134,7 @@ async_coro::task<expected<void, core::error>> connection::write_buffer(std::span
           co_return res_t{};
         }
       } else {
-        co_return res_t{unexpect, core::error{core::error_type::system_windows}};
+        co_return res_t{unexpect, core::error{core::error_type::system_error, sent_local}};
       }
     }
 
@@ -217,7 +217,7 @@ async_coro::task<expected<size_t, core::error>> connection::read_buffer(std::spa
           co_return 0;
         }
       } else {
-        co_return expected<size_t, core::error>{unexpect, core::error{core::error_type::system_windows}};
+        co_return expected<size_t, core::error>{unexpect, core::error{core::error_type::system_error, received}};
       }
     }
 

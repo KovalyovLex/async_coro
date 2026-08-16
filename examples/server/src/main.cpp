@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
 
         co_await this_session.send_data(resp, std::as_bytes(std::span{req_frame.get_payload_as_string()}));
       } else {
-        co_await response_frame::send_error_and_close_connection(this_session.get_connection(), core::error{core::error_type::ws_invalid_payload_length});
+        co_await response_frame::send_error_and_close_connection(this_session.get_connection(), server::core::error{server::core::error_type::ws_invalid_payload_length});
       }
     });
   };

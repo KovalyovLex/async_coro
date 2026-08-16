@@ -114,14 +114,14 @@ async_coro::task<expected<bool, core::error>> ssl_connection::handshake(connecti
         co_return expected<bool, core::error>{false};
       }
     } else {
-      co_return expected<bool, core::error>{unexpect, core::error{core::error_type::system_windows}};
+      co_return expected<bool, core::error>{unexpect, core::error{core::error_type::ssl_accept_error, err}};
     }
   }
 
   ASYNC_CORO_ASSERT(false && "SSL_accept returned zero");  // NOLINT(*static-assert)
 #endif
 
-  co_return expected<bool, core::error>{unexpect, core::error{core::error_type::system_windows}};
+  co_return expected<bool, core::error>{unexpect, core::error{core::error_type::ssl_unavailable_on_this_platform}};
 }
 
 int ssl_connection::read(std::span<std::byte> bytes) {

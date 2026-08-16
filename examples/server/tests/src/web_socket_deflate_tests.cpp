@@ -44,7 +44,7 @@ class web_socket_deflate_tests : public web_socket_integration_tests {
                                                  answer += req_frame.get_payload_as_string();
                                                  co_await this_session.send_data(resp, std::as_bytes(std::span{answer}));
                                                } else {
-                                                 co_await response_frame::send_error_and_close_connection(this_session.get_connection(), core::error{core::error_type::ws_invalid_payload_length});
+                                                 co_await response_frame::send_error_and_close_connection(this_session.get_connection(), server::core::error{server::core::error_type::ws_invalid_payload_length});
                                                }
                                              });
                                            });
