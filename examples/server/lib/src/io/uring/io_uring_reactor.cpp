@@ -25,7 +25,7 @@ io_uring_reactor::io_uring_reactor() noexcept = default;
 expected<io_uring_reactor, core::error> io_uring_reactor::create(size_t ring_size) noexcept {
   io_uring_reactor reactor;
   reactor._ring_size = ring_size;
-  reactor._local_ring = std::make_unique<request_entry[]>(ring_size);  // NOLINT(*-c-arrays): io_uring requires contiguous heap allocation managed by unique_ptr
+  reactor._local_ring = std::make_unique<request_variant[]>(ring_size);  // NOLINT(*-c-arrays): io_uring requires contiguous heap allocation managed by unique_ptr
   reactor._free_indices.reserve(ring_size);
   reactor._events_to_push.reserve(ring_size);
 
@@ -79,7 +79,7 @@ io_uring_reactor::~io_uring_reactor() noexcept {
 void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOLINT(readability-function-cognitive-complexity): complex but well-structured 4-phase io_uring processing loop
   // Phase 1: Drain atomic_queue into local ring buffer
   while (!_free_indices.empty()) {
-    request_entry entry;
+    request_variant entry;
     if (!_requests.try_pop(entry)) {
       break;
     }
@@ -97,34 +97,32 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOL
   while (!_events_to_push.empty()) {
     const auto index = _events_to_push.back();
 
-    io_uring_sqe* sqe = io_uring_get_sqe(&_ring);
-    if (sqe == nullptr) {
+    io_uring_sqe* sqe_ptr = io_uring_get_sqe(&_ring);
+    if (sqe_ptr == nullptr) {
       // Ring full — leave remaining entries in atomic_queue for next update call
       break;
     }
 
     // Submit SQE
-    auto& entry = _local_ring[index];
+    auto& entry_ref = _local_ring[index];
 
-    switch (entry.operation) {
-      case operation_type::receive_data:
-        io_uring_prep_read(sqe, entry.fd, entry.buffer_data.data(), entry.buffer_data.size(), entry.offset);
-        break;
-      case operation_type::send_data:
-        io_uring_prep_write(sqe, entry.fd, entry.buffer_data.data(), entry.buffer_data.size(), entry.offset);
-        break;
-      case operation_type::fsync:
-        io_uring_prep_fsync(sqe, entry.fd, 0);
-        break;
-      case operation_type::open_file:
-        io_uring_prep_openat(sqe, AT_FDCWD, entry.file_path, entry.open_flags, entry.open_mode);
-        break;
-      case operation_type::close_file:
-        io_uring_prep_close(sqe, entry.fd);
-        break;
-    }
+    std::visit([sqe_ptr](auto& operation) {
+      using op_type = std::decay_t<decltype(operation)>;
+      if constexpr (std::is_same_v<op_type, op_read>) {
+        io_uring_prep_read(sqe_ptr, operation.fd, operation.buffer_data.data(), operation.buffer_data.size(), operation.offset);
+      } else if constexpr (std::is_same_v<op_type, op_write>) {
+        io_uring_prep_write(sqe_ptr, operation.fd, operation.buffer_data.data(), operation.buffer_data.size(), operation.offset);
+      } else if constexpr (std::is_same_v<op_type, op_fsync>) {
+        io_uring_prep_fsync(sqe_ptr, operation.fd, 0);
+      } else if constexpr (std::is_same_v<op_type, op_open>) {
+        io_uring_prep_openat(sqe_ptr, AT_FDCWD, operation.file_path, operation.open_flags, operation.open_mode);
+      } else if constexpr (std::is_same_v<op_type, op_close>) {
+        io_uring_prep_close(sqe_ptr, operation.fd);
+      }
+    },
+               entry_ref);
 
-    io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(static_cast<uintptr_t>(index)));  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast): required by liburing API to store index as user data
+    io_uring_sqe_set_data(sqe_ptr, reinterpret_cast<void*>(static_cast<uintptr_t>(index)));  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast,performance-no-int-to-ptr): required by liburing API to store index as user data
 
     // remove index from non pushed
     _events_to_push.pop_back();
@@ -172,36 +170,31 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOL
     const auto is_error = (result < 0);
     core::error err = is_error ? core::error{core::error_type::system_error, errno} : core::error{};
 
-    std::visit([&](auto& var) {
-      if (!var) {
-        return;
-      }
-
-      using T = std::decay_t<decltype(var)>;
-
-      if constexpr (std::is_same_v<T, continue_size_callback_t>) {
+    std::visit([result, is_error, err](auto& operation) {
+      using op_type = std::decay_t<decltype(operation)>;
+      if constexpr (std::is_same_v<op_type, op_read> || std::is_same_v<op_type, op_write>) {
         if (is_error) {
-          var(expected<size_t, core::error>{unexpect, err});
+          operation.callback(expected<size_t, core::error>{unexpect, err});
         } else {
-          var(static_cast<size_t>(result));
+          operation.callback(static_cast<size_t>(result));
         }
-      } else if constexpr (std::is_same_v<T, continue_file_callback_t>) {
+      } else if constexpr (std::is_same_v<op_type, op_open>) {
         if (is_error) {
-          var(expected<int, core::error>{unexpect, err});
+          operation.callback(expected<int, core::error>{unexpect, err});
         } else {
-          var(static_cast<int>(result));
+          operation.callback(static_cast<int>(result));
         }
-      } else if constexpr (std::is_same_v<T, continue_void_callback_t>) {
+      } else if constexpr (std::is_same_v<op_type, op_fsync> || std::is_same_v<op_type, op_close>) {
         if (is_error) {
-          var(expected<void, core::error>{unexpect, err});
+          operation.callback(expected<void, core::error>{unexpect, err});
         } else {
-          var(expected<void, core::error>{});
+          operation.callback(expected<void, core::error>{});
         }
       } else {
-        static_assert(async_coro::always_false<T>::value, "Unsupported callback type");
+        static_assert(async_coro::always_false<op_type>::value, "Unsupported operation type");
       }
     },
-               entry.callback);
+               entry);
 
     _free_indices.push_back(index);
 
@@ -214,57 +207,52 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOL
 }
 
 void io_uring_reactor::submit_read(int file_descriptor, uint64_t offset, std::span<std::byte> buffer, continue_size_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters): order matches POSIX read(fd, buf, len) semantics
-  request_entry entry;
-  entry.fd = file_descriptor;
-  entry.operation = operation_type::receive_data;
-  entry.callback = std::move(callback);
-  entry.buffer_data = buffer;
-  entry.offset = offset;
+  op_read read_op{};
+  read_op.fd = file_descriptor;
+  read_op.callback = std::move(callback);
+  read_op.buffer_data = buffer;
+  read_op.offset = offset;
 
-  _requests.push(std::move(entry));
+  _requests.push(std::move(read_op));
 }
 
 void io_uring_reactor::submit_write(int file_descriptor, uint64_t offset, std::span<const std::byte> buffer, continue_size_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters): order matches POSIX write(fd, buf, len) semantics
-  request_entry entry;
-  entry.fd = file_descriptor;
-  entry.operation = operation_type::send_data;
-  entry.callback = std::move(callback);
+  op_write write_op{};
+  write_op.fd = file_descriptor;
+  write_op.callback = std::move(callback);
   // io_uring requires mutable buffers for write operations
-  entry.buffer_data = std::span<std::byte>{const_cast<std::byte*>(buffer.data()), buffer.size()};  // NOLINT(cppcoreguidelines-pro-type-const-cast): liburing API requires non-const buffer pointer
-  entry.offset = offset;
+  write_op.buffer_data = std::span<std::byte>{const_cast<std::byte*>(buffer.data()), buffer.size()};  // NOLINT(cppcoreguidelines-pro-type-const-cast): liburing API requires non-const buffer pointer
+  write_op.offset = offset;
 
-  _requests.push(std::move(entry));
+  _requests.push(std::move(write_op));
 }
 
 void io_uring_reactor::submit_fsync(int file_descriptor, continue_void_callback_t&& callback) {
-  request_entry entry;
-  entry.fd = file_descriptor;
-  entry.operation = operation_type::fsync;
-  entry.callback = std::move(callback);
+  op_fsync fsync_op{};
+  fsync_op.fd = file_descriptor;
+  fsync_op.callback = std::move(callback);
 
-  _requests.push(std::move(entry));
+  _requests.push(std::move(fsync_op));
 }
 
 void io_uring_reactor::submit_close(int file_descriptor, continue_void_callback_t&& callback) {
-  request_entry entry;
-  entry.fd = file_descriptor;
-  entry.operation = operation_type::close_file;
-  entry.callback = std::move(callback);
+  op_close close_op{};
+  close_op.fd = file_descriptor;
+  close_op.callback = std::move(callback);
 
-  _requests.push(std::move(entry));
+  _requests.push(std::move(close_op));
 }
 
 void io_uring_reactor::submit_open(const char* path, file_open_mode open_mode, int permissions, continue_file_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters): order matches POSIX open(path, flags, mode) semantics
   int posix_flags = mode_to_posix_flags(open_mode);
 
-  request_entry entry;
-  entry.file_path = path;
-  entry.open_flags = posix_flags;
-  entry.open_mode = permissions;
-  entry.operation = operation_type::open_file;
-  entry.callback = std::move(callback);
+  op_open open_op{};
+  open_op.file_path = path;
+  open_op.open_flags = posix_flags;
+  open_op.open_mode = permissions;
+  open_op.callback = std::move(callback);
 
-  _requests.push(std::move(entry));
+  _requests.push(std::move(open_op));
 }
 
 }  // namespace server::io

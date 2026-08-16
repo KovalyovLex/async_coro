@@ -55,13 +55,7 @@ class io_uring_reactor {
    */
   using continue_file_callback_t = async_coro::unique_function<void(expected<int, core::error>)>;
 
-  enum class operation_type : uint8_t {
-    send_data,
-    receive_data,
-    fsync,
-    open_file,
-    close_file,
-  };
+  static constexpr size_t k_default_ring_size = 256;  // NOLINT(readability-magic-numbers)
 
   /**
    * @brief Factory method to create a new io_uring reactor.
@@ -71,7 +65,7 @@ class io_uring_reactor {
    * @return An expected<io_uring_reactor, core::error>. On success, contains the reactor.
    *         On failure, contains an error describing the initialization failure.
    */
-  [[nodiscard]] static expected<io_uring_reactor, core::error> create(size_t ring_size = 256) noexcept;
+  [[nodiscard]] static expected<io_uring_reactor, core::error> create(size_t ring_size = k_default_ring_size) noexcept;
 
   io_uring_reactor(io_uring_reactor&& other) noexcept;
   io_uring_reactor& operator=(io_uring_reactor&& other) noexcept;
@@ -141,34 +135,71 @@ class io_uring_reactor {
  private:
   io_uring_reactor() noexcept;
 
- private:
   /**
-   * @brief A request entry stored in the atomic_queue.
+   * @brief Async file read operation.
    *
-   * Holds all request data by value — no heap allocation per request.
-   * Callbacks live here in the atomic_queue.
+   * Reads data from a file descriptor at the specified offset using io_uring.
    */
-  struct request_entry {
-    // offset in file to read from\to
+  struct op_read {
+    int fd = -1;
     uint64_t offset = 0;
-
-    // Buffer data for read/write operations
     std::span<std::byte> buffer_data;
+    continue_size_callback_t callback;
+  };
 
-    // callback to run after complete
-    std::variant<continue_file_callback_t, continue_size_callback_t, continue_void_callback_t> callback;
+  /**
+   * @brief Async file write operation.
+   *
+   * Writes data to a file descriptor at the specified offset using io_uring.
+   */
+  struct op_write {
+    int fd = -1;
+    uint64_t offset = 0;
+    std::span<std::byte> buffer_data;  // cast from const for io_uring API
+    continue_size_callback_t callback;
+  };
 
-    // Path data for open operations
+  /**
+   * @brief Async fsync operation.
+   *
+   * Flushes a file descriptor to ensure all data is written to disk.
+   */
+  struct op_fsync {
+    int fd = -1;
+    continue_void_callback_t callback;
+  };
+
+  /**
+   * @brief Async close operation.
+   *
+   * Closes a file descriptor.
+   */
+  struct op_close {
+    int fd = -1;
+    continue_void_callback_t callback;
+  };
+
+  /**
+   * @brief Async file open operation.
+   *
+   * Opens a file and returns the new file descriptor.
+   */
+  struct op_open {
+    int fd = -1;
     const char* file_path = nullptr;
     int open_flags = 0;
     int open_mode = 0;
-
-    // file-socket descriptor
-    int fd = -1;
-
-    // operation type
-    operation_type operation = operation_type::fsync;
+    continue_file_callback_t callback;
   };
+
+  /**
+   * @brief Variant holding all possible io_uring operation types.
+   *
+   * Each operation type is a struct containing only the fields it needs,
+   * eliminating the need for an explicit operation_type enum and reducing
+   * wasted space in request_entry.
+   */
+  using request_variant = std::variant<op_read, op_write, op_fsync, op_close, op_open>;
 
   struct io_uring _ring{};
   bool _ring_initialized = false;
@@ -179,7 +210,7 @@ class io_uring_reactor {
    *
    * Submit threads push entries here. The update thread drains them.
    */
-  async_coro::atomic_queue<request_entry> _requests;
+  async_coro::atomic_queue<request_variant> _requests;
 
   /**
    * @brief Fixed-capacity local ring buffer (capacity = ring_size).
@@ -187,7 +218,7 @@ class io_uring_reactor {
    * The update thread drains _requests into this buffer, assigns sequential indices,
    * pushes entries to SQEs, submits, then processes CQEs — all without any mutex.
    */
-  std::unique_ptr<request_entry[]> _local_ring;
+  std::unique_ptr<request_variant[]> _local_ring;  // NOLINT(*-c-arrays): io_uring requires contiguous heap allocation managed by unique_ptr
 
   /**
    * @brief Stack of free indices (capacity = ring_size).
