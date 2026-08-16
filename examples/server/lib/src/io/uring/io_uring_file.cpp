@@ -1,11 +1,13 @@
 #if IO_URING_ENABLED
 
 #include <async_coro/await/await_callback.h>
-#include <fcntl.h>
 #include <server/core/error.h>
 #include <server/io/file_open_mode.h>
 #include <server/io/uring/io_uring_file.h>
 #include <server/utils/expected.h>
+
+// Linux socket headers
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 

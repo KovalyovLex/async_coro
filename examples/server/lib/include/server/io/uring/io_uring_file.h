@@ -151,7 +151,7 @@ class io_uring_file {
   /**
    * @brief Synchronously close the file by submitting a close operation with empty callback.
    *
-   * Submits the close to io_uring and processes the completion queue to wait for completion.
+   * Submits the close to io_uring and dont wait the completion.
    * This is used by the destructor and move assignment operator.
    */
   void close_sync() noexcept;

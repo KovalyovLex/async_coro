@@ -9,7 +9,6 @@
 #include <server/utils/expected.h>
 
 #include <cstddef>
-#include <cstdint>
 #include <span>
 
 namespace server::io {

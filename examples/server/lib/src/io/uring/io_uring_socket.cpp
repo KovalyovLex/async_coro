@@ -1,13 +1,15 @@
 #if IO_URING_ENABLED
 
-#include <arpa/inet.h>
 #include <async_coro/await/await_callback.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <server/core/error.h>
 #include <server/io/uring/io_uring_reactor.h>
 #include <server/io/uring/io_uring_socket.h>
 #include <server/utils/expected.h>
+
+// Linux socket headers
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <unistd.h>
 

@@ -1,16 +1,17 @@
 #if IO_URING_ENABLED
 
-#include <arpa/inet.h>
 #include <async_coro/await/await_callback.h>
-#include <netinet/in.h>
 #include <server/core/error.h>
 #include <server/io/uring/io_uring_listener.h>
 #include <server/io/uring/io_uring_reactor.h>
 #include <server/utils/expected.h>
+
+// Linux socket headers
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include <cstring>
 #include <utility>
 
 namespace server::io {
@@ -68,7 +69,7 @@ expected<io_uring_listener, core::error> io_uring_listener::open(io_uring_reacto
       reinterpret_cast<const char*>(&reuse_addr),  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast): required by POSIX setsockopt() API
       sizeof(reuse_addr));
   if (result < 0) {
-    (void)reactor.submit_close(sock, {});
+    reactor.submit_close(sock, {});
     return expected<io_uring_listener, core::error>{unexpect, core::error{core::error_type::setsockopt_failed, errno}};  // NOLINT(readability-redundant-casting): suppress unused result warning from submit_close
   }
 

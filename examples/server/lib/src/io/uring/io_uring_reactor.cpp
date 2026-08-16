@@ -1,24 +1,25 @@
-#include <cstddef>
-#include <cstdint>
-#include <type_traits>
-#include <variant>
-
-#include "async_coro/utils/always_false.h"
 #if IO_URING_ENABLED
 
 #include <async_coro/config.h>
-#include <fcntl.h>
-#include <liburing.h>
-#include <linux/io_uring.h>
+#include <async_coro/utils/always_false.h>
 #include <server/core/error.h>
 #include <server/io/uring/io_uring_reactor.h>
 #include <server/utils/expected.h>
+
+// Linux socket headers
+#include <fcntl.h>
+#include <liburing.h>
+#include <linux/io_uring.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
 #include <cerrno>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <span>
+#include <type_traits>
+#include <variant>
 
 namespace server::io {
 
