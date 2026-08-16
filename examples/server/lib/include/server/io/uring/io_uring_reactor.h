@@ -7,6 +7,8 @@
 #include <async_coro/utils/unique_function.h>
 #include <server/core/error.h>
 #include <server/io/file_open_mode.h>
+#include <server/io/io_config.h>
+#include <server/io/socket_type_id.h>
 #include <server/utils/expected.h>
 
 #include <chrono>
@@ -20,6 +22,8 @@
 #include <fcntl.h>
 #include <liburing.h>
 #include <linux/io_uring.h>
+#include <sys/socket.h>
+#include <unistd.h>
 #else
 #error "io_uring is only available on Linux 5.1+"
 #endif
@@ -54,6 +58,11 @@ class io_uring_reactor {
    * @brief Callback type for io_uring completion events. Returns filedescriptor or error.
    */
   using continue_file_callback_t = async_coro::unique_function<void(expected<int, core::error>)>;
+
+  /**
+   * @brief Callback type for io_uring socket completion events. Returns socket descriptor or error.
+   */
+  using continue_socket_callback_t = async_coro::unique_function<void(expected<socket_type, core::error>)>;
 
   static constexpr size_t k_default_ring_size = 256;  // NOLINT(readability-magic-numbers)
 
@@ -132,6 +141,78 @@ class io_uring_reactor {
    */
   void submit_open(const char* path, file_open_mode open_mode, int permissions, continue_file_callback_t&& callback);
 
+  /**
+   * @brief Create a new socket and associate it with io_uring.
+   *
+   * Creates a socket using the POSIX socket() syscall.
+   * @param kind The socket kind (stream/TCP or datagram/UDP).
+   * @return An expected<socket_type, core::error>. On success, contains the new socket descriptor.
+   *         On failure, contains an error describing the creation failure.
+   */
+  [[nodiscard]] expected<socket_type, core::error> create_socket(socket_type_id kind) noexcept;
+
+  /**
+   * @brief Bind a socket to a local address.
+   *
+   * Binds the socket to the specified sockaddr. The socket must already be created.
+   * @param socket_handle The socket descriptor to bind.
+   * @param address Buffer containing the local sockaddr structure.
+   * @return An expected<void, core::error>. On success, contains void.
+   *         On failure, contains an error describing the bind failure.
+   */
+  [[nodiscard]] expected<void, core::error> bind_socket(socket_type socket_handle, std::span<const std::byte> address) noexcept;
+
+  /**
+   * @brief Set a socket to listening mode.
+   *
+   * Calls listen() on the socket with the specified backlog.
+   * @param socket_handle The listening socket descriptor.
+   * @param backlog Maximum length of the pending connections queue.
+   * @return An expected<void, core::error>. On success, contains void.
+   *         On failure, contains an error describing the listen failure.
+   */
+  [[nodiscard]] expected<void, core::error> listen_socket(socket_type socket_handle, int backlog = SOMAXCONN) noexcept;
+
+  /**
+   * @brief Submit an async send operation on a socket.
+   *
+   * Uses io_uring's send operation. The socket must already be created.
+   * @param socket_handle Socket descriptor to send to.
+   * @param buffer Buffer containing data to send. MUST remain valid until callback is invoked.
+   * @param callback Continuation called after send completes with bytes sent or error.
+   */
+  void submit_send_socket(socket_type socket_handle, std::span<const std::byte> buffer, continue_size_callback_t&& callback);
+
+  /**
+   * @brief Submit an async receive operation on a socket.
+   *
+   * Uses io_uring's recv operation. The socket must already be created.
+   * @param socket_handle Socket descriptor to receive from.
+   * @param buffer Buffer to receive into. MUST remain valid until callback is invoked.
+   * @param callback Continuation called after receive completes with bytes received or error.
+   */
+  void submit_receive_socket(socket_type socket_handle, std::span<std::byte> buffer, continue_size_callback_t&& callback);
+
+  /**
+   * @brief Submit an async accept operation on a listening socket.
+   *
+   * Uses io_uring's accept operation. The listen socket must already be created and in listening mode.
+   * Creates an accept socket internally.
+   * @param listen_socket The listening socket descriptor.
+   * @param callback Continuation called after accept completes with the accepted socket or error.
+   */
+  void submit_accept_socket(socket_type listen_socket, continue_socket_callback_t&& callback);
+
+  /**
+   * @brief Submit an async connect operation on a socket.
+   *
+   * Uses io_uring's connect operation. The socket must already be created and bound to a local address.
+   * @param socket_handle The client socket descriptor.
+   * @param remote_address Buffer containing destination sockaddr.
+   * @param callback Continuation called after connect completes with void or error.
+   */
+  void submit_connect_socket(socket_type socket_handle, std::span<const std::byte> remote_address, continue_void_callback_t&& callback);
+
  private:
   io_uring_reactor() noexcept;
 
@@ -193,13 +274,59 @@ class io_uring_reactor {
   };
 
   /**
+   * @brief Async socket send operation.
+   *
+   * Sends data using io_uring's send operation.
+   */
+  struct op_send_socket {
+    socket_type socket_fd = invalid_socket_id;
+    std::span<std::byte> buffer_data;  // cast from const for io_uring API
+    continue_size_callback_t callback;
+  };
+
+  /**
+   * @brief Async socket receive operation.
+   *
+   * Receives data using io_uring's recv operation.
+   */
+  struct op_receive_socket {
+    socket_type socket_fd = invalid_socket_id;
+    std::span<std::byte> buffer_data;
+    continue_size_callback_t callback;
+  };
+
+  /**
+   * @brief Async socket accept operation.
+   *
+   * Accepts a connection using io_uring's accept operation.
+   * Creates an accept socket internally.
+   */
+  struct op_accept_socket {
+    socket_type listen_socket_fd = invalid_socket_id;
+    continue_socket_callback_t callback;
+  };
+
+  /**
+   * @brief Async socket connect operation.
+   *
+   * Connects a client socket using io_uring's connect operation.
+   */
+  struct op_connect_socket {
+    socket_type socket_fd = invalid_socket_id;
+    std::span<const std::byte> remote_address;
+    continue_void_callback_t callback;
+  };
+
+  /**
    * @brief Variant holding all possible io_uring operation types.
    *
    * Each operation type is a struct containing only the fields it needs,
    * eliminating the need for an explicit operation_type enum and reducing
    * wasted space in request_entry.
    */
-  using request_variant = std::variant<op_read, op_write, op_fsync, op_close, op_open>;
+  using request_variant = std::variant<op_read, op_write, op_fsync, op_close, op_open,
+                                       op_send_socket, op_receive_socket,
+                                       op_accept_socket, op_connect_socket>;
 
   struct io_uring _ring{};
   bool _ring_initialized = false;

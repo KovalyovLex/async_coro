@@ -13,6 +13,8 @@
 #include <server/core/error.h>
 #include <server/io/uring/io_uring_reactor.h>
 #include <server/utils/expected.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #include <cerrno>
 #include <cstring>
@@ -118,6 +120,16 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOL
         io_uring_prep_openat(sqe_ptr, AT_FDCWD, operation.file_path, operation.open_flags, operation.open_mode);
       } else if constexpr (std::is_same_v<op_type, op_close>) {
         io_uring_prep_close(sqe_ptr, operation.fd);
+      } else if constexpr (std::is_same_v<op_type, op_send_socket>) {
+        io_uring_prep_send(sqe_ptr, operation.socket_fd, operation.buffer_data.data(), operation.buffer_data.size(), 0);
+      } else if constexpr (std::is_same_v<op_type, op_receive_socket>) {
+        io_uring_prep_recv(sqe_ptr, operation.socket_fd, operation.buffer_data.data(), operation.buffer_data.size(), 0);
+      } else if constexpr (std::is_same_v<op_type, op_accept_socket>) {
+        io_uring_prep_accept(sqe_ptr, operation.listen_socket_fd, nullptr, 0, 0);  // NOLINT(hicpp-use-nullptr): liburing API requires null for optional addr
+      } else if constexpr (std::is_same_v<op_type, op_connect_socket>) {
+        io_uring_prep_connect(sqe_ptr, operation.socket_fd,
+                              reinterpret_cast<const struct sockaddr*>(operation.remote_address.data()),  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast): required by liburing API
+                              static_cast<socklen_t>(operation.remote_address.size() / sizeof(std::byte)));
       }
     },
                entry_ref);
@@ -170,9 +182,11 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOL
     const auto is_error = (result < 0);
     core::error err = is_error ? core::error{core::error_type::system_error, errno} : core::error{};
 
+    // Dispatch completion based on operation type.
     std::visit([result, is_error, err](auto& operation) {
       using op_type = std::decay_t<decltype(operation)>;
-      if constexpr (std::is_same_v<op_type, op_read> || std::is_same_v<op_type, op_write>) {
+      if constexpr (std::is_same_v<op_type, op_read> || std::is_same_v<op_type, op_write> ||
+                    std::is_same_v<op_type, op_send_socket> || std::is_same_v<op_type, op_receive_socket>) {
         if (is_error) {
           operation.callback(expected<size_t, core::error>{unexpect, err});
         } else {
@@ -189,6 +203,20 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOL
           operation.callback(expected<void, core::error>{unexpect, err});
         } else {
           operation.callback(expected<void, core::error>{});
+        }
+      } else if constexpr (std::is_same_v<op_type, op_accept_socket> || std::is_same_v<op_type, op_connect_socket>) {
+        if constexpr (std::is_same_v<op_type, op_accept_socket>) {
+          if (is_error) {
+            operation.callback(expected<socket_type, core::error>{unexpect, err});
+          } else {
+            operation.callback(static_cast<socket_type>(result));
+          }
+        } else {
+          if (is_error) {
+            operation.callback(expected<void, core::error>{unexpect, err});
+          } else {
+            operation.callback(expected<void, core::error>{});
+          }
         }
       } else {
         static_assert(async_coro::always_false<op_type>::value, "Unsupported operation type");
@@ -253,6 +281,73 @@ void io_uring_reactor::submit_open(const char* path, file_open_mode open_mode, i
   open_op.callback = std::move(callback);
 
   _requests.push(std::move(open_op));
+}
+
+expected<socket_type, core::error> io_uring_reactor::create_socket(socket_type_id kind) noexcept {  // NOLINT(readability-convert-member-functions-to-static): socket creation may need reactor state in future
+  const int domain = AF_INET;
+  const int type = (kind == socket_type_id::tcp) ? SOCK_STREAM : SOCK_DGRAM;
+  const int protocol = 0;
+
+  const socket_type sock = socket(domain, type, protocol);
+  if (sock < 0) {
+    return expected<socket_type, core::error>{unexpect, core::error{core::error_type::create_socket_failed, errno}};
+  }
+
+  return sock;
+}
+
+expected<void, core::error> io_uring_reactor::bind_socket(socket_type socket_handle, std::span<const std::byte> address) noexcept {  // NOLINT(readability-convert-member-functions-to-static): socket ops may need reactor state in future
+  const int result = bind(socket_handle,
+                          reinterpret_cast<const struct sockaddr*>(address.data()),  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast): required by POSIX bind() API
+                          static_cast<socklen_t>(address.size() / sizeof(std::byte)));
+  if (result < 0) {
+    return expected<void, core::error>{unexpect, core::error{core::error_type::bind_failed, errno}};
+  }
+  return expected<void, core::error>{};
+}
+
+expected<void, core::error> io_uring_reactor::listen_socket(socket_type socket_handle, int backlog) noexcept {  // NOLINT(readability-convert-member-functions-to-static): socket ops may need reactor state in future
+  const int result = listen(socket_handle, backlog);
+  if (result < 0) {
+    return expected<void, core::error>{unexpect, core::error{core::error_type::listen_failed, errno}};
+  }
+  return expected<void, core::error>{};
+}
+
+void io_uring_reactor::submit_send_socket(socket_type socket_handle, std::span<const std::byte> buffer, continue_size_callback_t&& callback) {
+  op_send_socket send_op{};
+  send_op.socket_fd = socket_handle;
+  send_op.callback = std::move(callback);
+  // io_uring requires mutable buffers for send operations
+  send_op.buffer_data = std::span<std::byte>{const_cast<std::byte*>(buffer.data()), buffer.size()};  // NOLINT(cppcoreguidelines-pro-type-const-cast): liburing API requires non-const buffer pointer
+
+  _requests.push(std::move(send_op));
+}
+
+void io_uring_reactor::submit_receive_socket(socket_type socket_handle, std::span<std::byte> buffer, continue_size_callback_t&& callback) {
+  op_receive_socket recv_op{};
+  recv_op.socket_fd = socket_handle;
+  recv_op.callback = std::move(callback);
+  recv_op.buffer_data = buffer;
+
+  _requests.push(std::move(recv_op));
+}
+
+void io_uring_reactor::submit_accept_socket(socket_type listen_socket, continue_socket_callback_t&& callback) {
+  op_accept_socket accept_op{};
+  accept_op.listen_socket_fd = listen_socket;
+  accept_op.callback = std::move(callback);
+
+  _requests.push(std::move(accept_op));
+}
+
+void io_uring_reactor::submit_connect_socket(socket_type socket_handle, std::span<const std::byte> remote_address, continue_void_callback_t&& callback) {
+  op_connect_socket connect_op{};
+  connect_op.socket_fd = socket_handle;
+  connect_op.callback = std::move(callback);
+  connect_op.remote_address = remote_address;
+
+  _requests.push(std::move(connect_op));
 }
 
 }  // namespace server::io
