@@ -1,12 +1,14 @@
-#if IO_URING_ENABLED
+#include <server/io/io_config.h>
+
+#if EPOLL_SOCKET || KQUEUE_SOCKET
 
 #include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>
 #include <async_coro/task.h>
 #include <gtest/gtest.h>
-#include <server/io/uring/io_uring_listener.h>
-#include <server/io/uring/io_uring_reactor.h>
-#include <server/io/uring/io_uring_socket.h>
+#include <server/io/epoll/epoll_listener.h>
+#include <server/io/epoll/epoll_reactor.h>
+#include <server/io/epoll/epoll_socket.h>
 
 #include <array>
 #include <cstddef>
@@ -14,9 +16,8 @@
 #include <string>
 #include <vector>
 
-// Linux socket headers
+// POSIX socket headers
 #include <arpa/inet.h>
-#include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -25,23 +26,21 @@
 #include "utils/temp_file.h"
 
 // ============================================================================
-// io_uring socket lifecycle and basic operations
+// epoll/kqueue socket lifecycle and basic operations
 // ============================================================================
 
-TEST(io_uring_socket_tests, socket_basic_lifecycle) {
-  auto reactor_result = server::io::io_uring_reactor::create();
-  ASSERT_TRUE(reactor_result) << "Failed to create io_uring reactor: " << reactor_result.error();
-  auto& reactor = *reactor_result;
+TEST(epoll_socket_tests, socket_basic_lifecycle) {
+  server::io::epoll_reactor reactor;
   async_coro::scheduler scheduler;
 
   auto test = [&]() -> async_coro::task<int> {
     // Open a listener on port 0 (auto-assign port)
-    auto listener_result = server::io::io_uring_listener::open(reactor, "127.0.0.1", 0);
+    auto listener_result = server::io::epoll_listener::open(reactor, "127.0.0.1", 0);
     if (!listener_result) {
       EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
-    server::io::io_uring_listener listener = std::move(*listener_result);
+    server::io::epoll_listener listener = std::move(*listener_result);
 
     // Get the actual port from getsockname
     sockaddr_in addr{};
@@ -58,7 +57,7 @@ TEST(io_uring_socket_tests, socket_basic_lifecycle) {
     client_addr.sin_port = htons(actual_port);
     client_addr.sin_addr = addr.sin_addr;
     auto connect_result =
-        co_await server::io::io_uring_socket::connect_coro(reactor, &client_addr, sizeof(client_addr));
+        co_await server::io::epoll_socket::connect_coro(reactor, &client_addr, sizeof(client_addr));
     if (!connect_result) {
       EXPECT_TRUE(connect_result) << connect_result.error();
       co_return -1;
@@ -97,23 +96,21 @@ TEST(io_uring_socket_tests, socket_basic_lifecycle) {
     co_return 0;
   };
 
-  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_epoll(test(), scheduler, reactor));
 }
 
-TEST(io_uring_socket_tests, socket_send_receive_small) {
-  auto reactor_result = server::io::io_uring_reactor::create();
-  ASSERT_TRUE(reactor_result) << "Failed to create io_uring reactor: " << reactor_result.error();
-  auto& reactor = *reactor_result;
+TEST(epoll_socket_tests, socket_send_receive_small) {
+  server::io::epoll_reactor reactor;
   async_coro::scheduler scheduler;
 
   auto test = [&]() -> async_coro::task<int> {
     // Open a listener on port 0 (auto-assign port)
-    auto listener_result = server::io::io_uring_listener::open(reactor, "127.0.0.1", 0);
+    auto listener_result = server::io::epoll_listener::open(reactor, "127.0.0.1", 0);
     if (!listener_result) {
       EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
-    server::io::io_uring_listener listener = std::move(*listener_result);
+    server::io::epoll_listener listener = std::move(*listener_result);
 
     // Get the actual port from getsockname
     sockaddr_in addr{};
@@ -130,7 +127,7 @@ TEST(io_uring_socket_tests, socket_send_receive_small) {
     client_addr.sin_port = htons(actual_port);
     client_addr.sin_addr = addr.sin_addr;
     auto connect_result =
-        co_await server::io::io_uring_socket::connect_coro(reactor, &client_addr, sizeof(client_addr));
+        co_await server::io::epoll_socket::connect_coro(reactor, &client_addr, sizeof(client_addr));
     if (!connect_result) {
       EXPECT_TRUE(connect_result) << connect_result.error();
       co_return -1;
@@ -147,8 +144,8 @@ TEST(io_uring_socket_tests, socket_send_receive_small) {
 
     auto server_socket = std::move(*accept_result);
 
-    // Client sends "Hello, io_uring!"
-    constexpr std::string_view message = "Hello, io_uring!";
+    // Client sends "Hello, epoll!"
+    constexpr std::string_view message = "Hello, epoll!";
     auto send_result = co_await client_socket.send(
         std::as_bytes(std::span(message)));
     if (!send_result) {
@@ -172,25 +169,23 @@ TEST(io_uring_socket_tests, socket_send_receive_small) {
     co_return 0;
   };
 
-  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_epoll(test(), scheduler, reactor));
 }
 
-TEST(io_uring_socket_tests, socket_send_receive_large) {
-  auto reactor_result = server::io::io_uring_reactor::create();
-  ASSERT_TRUE(reactor_result) << "Failed to create io_uring reactor: " << reactor_result.error();
-  auto& reactor = *reactor_result;
+TEST(epoll_socket_tests, socket_send_receive_large) {
+  server::io::epoll_reactor reactor;
   async_coro::scheduler scheduler;
 
   constexpr size_t data_size = 65536;  // 64 KB
 
   auto test = [&]() -> async_coro::task<int> {
     // Open a listener on port 0 (auto-assign port)
-    auto listener_result = server::io::io_uring_listener::open(reactor, "127.0.0.1", 0);
+    auto listener_result = server::io::epoll_listener::open(reactor, "127.0.0.1", 0);
     if (!listener_result) {
       EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
-    server::io::io_uring_listener listener = std::move(*listener_result);
+    server::io::epoll_listener listener = std::move(*listener_result);
 
     // Get the actual port from getsockname
     sockaddr_in addr{};
@@ -210,7 +205,7 @@ TEST(io_uring_socket_tests, socket_send_receive_large) {
     client_addr.sin_port = htons(actual_port);
     client_addr.sin_addr = addr.sin_addr;
     auto connect_result =
-        co_await server::io::io_uring_socket::connect_coro(reactor, &client_addr, sizeof(client_addr));
+        co_await server::io::epoll_socket::connect_coro(reactor, &client_addr, sizeof(client_addr));
     if (!connect_result) {
       EXPECT_TRUE(connect_result) << connect_result.error();
       co_return -1;
@@ -259,23 +254,21 @@ TEST(io_uring_socket_tests, socket_send_receive_large) {
     co_return 0;
   };
 
-  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_epoll(test(), scheduler, reactor));
 }
 
-TEST(io_uring_socket_tests, socket_multiple_messages) {
-  auto reactor_result = server::io::io_uring_reactor::create();
-  ASSERT_TRUE(reactor_result) << "Failed to create io_uring reactor: " << reactor_result.error();
-  auto& reactor = *reactor_result;
+TEST(epoll_socket_tests, socket_multiple_messages) {
+  server::io::epoll_reactor reactor;
   async_coro::scheduler scheduler;
 
   auto test = [&]() -> async_coro::task<int> {
     // Open a listener on port 0 (auto-assign port)
-    auto listener_result = server::io::io_uring_listener::open(reactor, "127.0.0.1", 0);
+    auto listener_result = server::io::epoll_listener::open(reactor, "127.0.0.1", 0);
     if (!listener_result) {
       EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
-    server::io::io_uring_listener listener = std::move(*listener_result);
+    server::io::epoll_listener listener = std::move(*listener_result);
 
     // Get the actual port from getsockname
     sockaddr_in addr{};
@@ -292,7 +285,7 @@ TEST(io_uring_socket_tests, socket_multiple_messages) {
     client_addr.sin_port = htons(actual_port);
     client_addr.sin_addr = addr.sin_addr;
     auto connect_result =
-        co_await server::io::io_uring_socket::connect_coro(reactor, &client_addr, sizeof(client_addr));
+        co_await server::io::epoll_socket::connect_coro(reactor, &client_addr, sizeof(client_addr));
     if (!connect_result) {
       EXPECT_TRUE(connect_result) << connect_result.error();
       co_return -1;
@@ -338,25 +331,23 @@ TEST(io_uring_socket_tests, socket_multiple_messages) {
     co_return 0;
   };
 
-  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_epoll(test(), scheduler, reactor));
 }
 
-TEST(io_uring_socket_tests, socket_partial_send) {
-  auto reactor_result = server::io::io_uring_reactor::create();
-  ASSERT_TRUE(reactor_result) << "Failed to create io_uring reactor: " << reactor_result.error();
-  auto& reactor = *reactor_result;
+TEST(epoll_socket_tests, socket_partial_send) {
+  server::io::epoll_reactor reactor;
   async_coro::scheduler scheduler;
 
   constexpr size_t data_size = 32768;  // 32 KB — large enough to potentially be split
 
   auto test = [&]() -> async_coro::task<int> {
     // Open a listener on port 0 (auto-assign port)
-    auto listener_result = server::io::io_uring_listener::open(reactor, "127.0.0.1", 0);
+    auto listener_result = server::io::epoll_listener::open(reactor, "127.0.0.1", 0);
     if (!listener_result) {
       EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
-    server::io::io_uring_listener listener = std::move(*listener_result);
+    server::io::epoll_listener listener = std::move(*listener_result);
 
     // Get the actual port from getsockname
     sockaddr_in addr{};
@@ -376,7 +367,7 @@ TEST(io_uring_socket_tests, socket_partial_send) {
     client_addr.sin_port = htons(actual_port);
     client_addr.sin_addr = addr.sin_addr;
     auto connect_result =
-        co_await server::io::io_uring_socket::connect_coro(reactor, &client_addr, sizeof(client_addr));
+        co_await server::io::epoll_socket::connect_coro(reactor, &client_addr, sizeof(client_addr));
     if (!connect_result) {
       EXPECT_TRUE(connect_result) << connect_result.error();
       co_return -1;
@@ -417,13 +408,11 @@ TEST(io_uring_socket_tests, socket_partial_send) {
     co_return 0;
   };
 
-  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_epoll(test(), scheduler, reactor));
 }
 
-TEST(io_uring_socket_tests, socket_connection_refused) {
-  auto reactor_result = server::io::io_uring_reactor::create();
-  ASSERT_TRUE(reactor_result) << "Failed to create io_uring reactor: " << reactor_result.error();
-  auto& reactor = *reactor_result;
+TEST(epoll_socket_tests, socket_connection_refused) {
+  server::io::epoll_reactor reactor;
   async_coro::scheduler scheduler;
 
   auto test = [&]() -> async_coro::task<int> {
@@ -432,7 +421,7 @@ TEST(io_uring_socket_tests, socket_connection_refused) {
     target_addr.sin_family = AF_INET;
     target_addr.sin_port = htons(65432);
     inet_pton(AF_INET, "127.0.0.1", &target_addr.sin_addr);
-    auto connect_result = co_await server::io::io_uring_socket::connect_coro(
+    auto connect_result = co_await server::io::epoll_socket::connect_coro(
         reactor, &target_addr, sizeof(target_addr));
 
     // Should fail because no listener is on that port
@@ -448,23 +437,21 @@ TEST(io_uring_socket_tests, socket_connection_refused) {
     co_return 0;
   };
 
-  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_epoll(test(), scheduler, reactor));
 }
 
-TEST(io_uring_socket_tests, socket_set_no_delay) {
-  auto reactor_result = server::io::io_uring_reactor::create();
-  ASSERT_TRUE(reactor_result) << "Failed to create io_uring reactor: " << reactor_result.error();
-  auto& reactor = *reactor_result;
+TEST(epoll_socket_tests, socket_set_no_delay) {
+  server::io::epoll_reactor reactor;
   async_coro::scheduler scheduler;
 
   auto test = [&]() -> async_coro::task<int> {
     // Open a listener on port 0 (auto-assign port)
-    auto listener_result = server::io::io_uring_listener::open(reactor, "127.0.0.1", 0);
+    auto listener_result = server::io::epoll_listener::open(reactor, "127.0.0.1", 0);
     if (!listener_result) {
       EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
-    server::io::io_uring_listener listener = std::move(*listener_result);
+    server::io::epoll_listener listener = std::move(*listener_result);
 
     // Get the actual port from getsockname
     sockaddr_in addr{};
@@ -481,7 +468,7 @@ TEST(io_uring_socket_tests, socket_set_no_delay) {
     client_addr.sin_port = htons(actual_port);
     client_addr.sin_addr = addr.sin_addr;
     auto connect_result =
-        co_await server::io::io_uring_socket::connect_coro(reactor, &client_addr, sizeof(client_addr));
+        co_await server::io::epoll_socket::connect_coro(reactor, &client_addr, sizeof(client_addr));
     if (!connect_result) {
       EXPECT_TRUE(connect_result) << connect_result.error();
       co_return -1;
@@ -515,23 +502,21 @@ TEST(io_uring_socket_tests, socket_set_no_delay) {
     co_return 0;
   };
 
-  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_epoll(test(), scheduler, reactor));
 }
 
-TEST(io_uring_socket_tests, socket_move_semantics) {
-  auto reactor_result = server::io::io_uring_reactor::create();
-  ASSERT_TRUE(reactor_result) << "Failed to create io_uring reactor: " << reactor_result.error();
-  auto& reactor = *reactor_result;
+TEST(epoll_socket_tests, socket_move_semantics) {
+  server::io::epoll_reactor reactor;
   async_coro::scheduler scheduler;
 
   auto test = [&]() -> async_coro::task<int> {
     // Open a listener on port 0 (auto-assign port)
-    auto listener_result = server::io::io_uring_listener::open(reactor, "127.0.0.1", 0);
+    auto listener_result = server::io::epoll_listener::open(reactor, "127.0.0.1", 0);
     if (!listener_result) {
       EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
-    server::io::io_uring_listener listener = std::move(*listener_result);
+    server::io::epoll_listener listener = std::move(*listener_result);
 
     // Get the actual port from getsockname
     sockaddr_in addr{};
@@ -548,7 +533,7 @@ TEST(io_uring_socket_tests, socket_move_semantics) {
     client_addr.sin_port = htons(actual_port);
     client_addr.sin_addr = addr.sin_addr;
     auto connect_result =
-        co_await server::io::io_uring_socket::connect_coro(reactor, &client_addr, sizeof(client_addr));
+        co_await server::io::epoll_socket::connect_coro(reactor, &client_addr, sizeof(client_addr));
     if (!connect_result) {
       EXPECT_TRUE(connect_result) << connect_result.error();
       co_return -1;
@@ -558,7 +543,7 @@ TEST(io_uring_socket_tests, socket_move_semantics) {
     EXPECT_FALSE(socket1.is_closed());
     EXPECT_NE(socket1.get_native_handle(), server::io::invalid_socket_id);
 
-    // Move-construct another io_uring_socket
+    // Move-construct another epoll_socket
     auto socket2 = std::move(socket1);
 
     // Original should be closed after move
@@ -596,23 +581,21 @@ TEST(io_uring_socket_tests, socket_move_semantics) {
     co_return 0;
   };
 
-  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_epoll(test(), scheduler, reactor));
 }
 
-TEST(io_uring_socket_tests, listener_open_close) {
-  auto reactor_result = server::io::io_uring_reactor::create();
-  ASSERT_TRUE(reactor_result) << "Failed to create io_uring reactor: " << reactor_result.error();
-  auto& reactor = *reactor_result;
+TEST(epoll_socket_tests, listener_open_close) {
+  server::io::epoll_reactor reactor;
   async_coro::scheduler scheduler;
 
   auto test = [&]() -> async_coro::task<int> {
     // Create and open listener
-    auto listener_result = server::io::io_uring_listener::open(reactor, "127.0.0.1", 0);
+    auto listener_result = server::io::epoll_listener::open(reactor, "127.0.0.1", 0);
     if (!listener_result) {
       EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
-    server::io::io_uring_listener listener = std::move(*listener_result);
+    server::io::epoll_listener listener = std::move(*listener_result);
 
     // Verify listener is open
     EXPECT_TRUE(listener.is_open());
@@ -642,23 +625,21 @@ TEST(io_uring_socket_tests, listener_open_close) {
     co_return 0;
   };
 
-  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_epoll(test(), scheduler, reactor));
 }
 
-TEST(io_uring_socket_tests, socket_echo_server) {
-  auto reactor_result = server::io::io_uring_reactor::create();
-  ASSERT_TRUE(reactor_result) << "Failed to create io_uring reactor: " << reactor_result.error();
-  auto& reactor = *reactor_result;
+TEST(epoll_socket_tests, socket_echo_server) {
+  server::io::epoll_reactor reactor;
   async_coro::scheduler scheduler;
 
   auto test = [&]() -> async_coro::task<int> {
     // Open a listener on port 0 (auto-assign port)
-    auto listener_result = server::io::io_uring_listener::open(reactor, "127.0.0.1", 0);
+    auto listener_result = server::io::epoll_listener::open(reactor, "127.0.0.1", 0);
     if (!listener_result) {
       EXPECT_TRUE(listener_result) << listener_result.error();
       co_return -1;
     }
-    server::io::io_uring_listener listener = std::move(*listener_result);
+    server::io::epoll_listener listener = std::move(*listener_result);
 
     // Get the actual port from getsockname
     sockaddr_in addr{};
@@ -675,7 +656,7 @@ TEST(io_uring_socket_tests, socket_echo_server) {
     client_addr.sin_port = htons(actual_port);
     client_addr.sin_addr = addr.sin_addr;
     auto connect_result =
-        co_await server::io::io_uring_socket::connect_coro(reactor, &client_addr, sizeof(client_addr));
+        co_await server::io::epoll_socket::connect_coro(reactor, &client_addr, sizeof(client_addr));
     if (!connect_result) {
       EXPECT_TRUE(connect_result) << connect_result.error();
       co_return -1;
@@ -743,7 +724,7 @@ TEST(io_uring_socket_tests, socket_echo_server) {
     co_return 0;
   };
 
-  ASSERT_TRUE(test_utils::run_task_io_uring(test(), scheduler, reactor));
+  ASSERT_TRUE(test_utils::run_task_epoll(test(), scheduler, reactor));
 }
 
-#endif  // IO_URING_ENABLED
+#endif  // EPOLL_SOCKET || KQUEUE_SOCKET
