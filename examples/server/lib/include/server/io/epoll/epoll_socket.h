@@ -2,7 +2,7 @@
 
 #include <server/io/io_config.h>
 
-#if EPOLL_SOCKET
+#if EPOLL_KQUEUE_ENABLED
 
 #include <async_coro/task.h>
 #include <server/core/error.h>
@@ -15,11 +15,11 @@
 namespace server::io {
 
 /**
- * @brief Async socket I/O operations using Linux epoll.
+ * @brief Async socket I/O operations using Linux epoll or BSD kqueue.
  *
  * Provides non-blocking socket send/receive operations that integrate with the
- * epoll reactor. This is the standard backend for Linux systems, offering
- * reliable async I/O through the epoll event loop.
+ * epoll/kqueue reactor. This is the standard backend for Linux (epoll) and
+ * BSD/macOS (kqueue) systems, offering reliable async I/O through the event loop.
  *
  * @note The epoll_reactor must outlive any epoll_socket registered with it.
  * @note Socket handles are created through the reactor (no direct socket() calls).
@@ -145,4 +145,4 @@ class epoll_socket {
 
 }  // namespace server::io
 
-#endif  // EPOLL_SOCKET
+#endif  // EPOLL_KQUEUE_ENABLED

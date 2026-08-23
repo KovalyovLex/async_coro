@@ -1,6 +1,6 @@
 #include <server/io/io_config.h>
 
-#if EPOLL_SOCKET
+#if EPOLL_KQUEUE_ENABLED
 
 #include <async_coro/await/await_callback.h>
 #include <server/core/error.h>
@@ -157,4 +157,4 @@ expected<void, core::error> epoll_listener::close() noexcept {
 
 }  // namespace server::io
 
-#endif  // EPOLL_SOCKET
+#endif  // EPOLL_KQUEUE_ENABLED

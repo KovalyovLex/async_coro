@@ -5,7 +5,6 @@
 #include <async_coro/config.h>
 #include <async_coro/thread_safety/unique_lock.h>
 #include <server/core/error.h>
-#include <server/io/io_config.h>
 #include <server/io/reactor.h>
 #include <server/utils/expected.h>
 

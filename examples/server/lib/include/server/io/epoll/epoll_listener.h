@@ -2,7 +2,7 @@
 
 #include <server/io/io_config.h>
 
-#if EPOLL_SOCKET
+#if EPOLL_KQUEUE_ENABLED
 
 #include <async_coro/task.h>
 #include <server/core/error.h>
@@ -15,10 +15,10 @@
 namespace server::io {
 
 /**
- * @brief Async TCP listener using Linux epoll.
+ * @brief Async TCP listener using Linux epoll or BSD kqueue.
  *
  * Provides non-blocking socket listen/accept operations that integrate with the
- * epoll reactor. Uses epoll to detect incoming connections and accepts them
+ * epoll/kqueue reactor. Uses epoll/kqueue to detect incoming connections and accepts them
  * asynchronously.
  *
  * @note The epoll_reactor must outlive this listener.
@@ -91,4 +91,4 @@ class epoll_listener {
 
 }  // namespace server::io
 
-#endif  // EPOLL_SOCKET
+#endif  // EPOLL_KQUEUE_ENABLED

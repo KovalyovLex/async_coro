@@ -2,7 +2,7 @@
 
 #include <server/io/io_config.h>
 
-#if EPOLL_SOCKET
+#if EPOLL_KQUEUE_ENABLED
 
 #include <async_coro/internal/await_callback.h>
 #include <async_coro/thread_safety/analysis.h>
@@ -23,13 +23,13 @@ namespace server::io {
 class epoll_socket;
 
 /**
- * @brief epoll-based event reactor for sockets.
+ * @brief epoll/kqueue-based event reactor for sockets.
  *
  * This reactor provides an interface for polling socket file descriptors using
- * the Linux epoll subsystem. It supports async send/receive/accept/connect
+ * the Linux epoll or BSD kqueue subsystem. It supports async send/receive/accept/connect
  * operations on TCP sockets.
  *
- * @note Requires Linux kernel 2.6+.
+ * @note Requires Linux kernel 2.6+ (epoll) or BSD/macOS (kqueue).
  * @note The reactor must outlive any socket that is registered with it.
  * @note This class is not copyable or movable to prevent accidental sharing.
  */
@@ -72,7 +72,7 @@ class epoll_reactor {
    *
    * @param max_wait Maximum time to wait for events (e.g., std::chrono::milliseconds(100)).
    * @return An expected<void, core::error>. On success, contains void.
-   *         On failure, contains an error describing the epoll_wait failure.
+   *         On failure, contains an error describing the epoll_wait/kevent failure.
    * @note Must be called from the owning thread.
    */
   [[nodiscard]] expected<void, core::error> process_loop(std::chrono::nanoseconds max_wait);
@@ -115,6 +115,7 @@ class epoll_reactor {
    * @param sock The socket id to add.
    * @return The index of the registered fd, or invalid_index on failure.
    * @note The socket will be set to non-blocking mode if not already.
+   * @note On epoll, EPOLLET (edge-triggered) is used. On kqueue, level-triggered.
    */
   expected<size_t, core::error> add_sock(socket_type sock);
 
@@ -124,13 +125,14 @@ class epoll_reactor {
    * @param sock The socket id to remove.
    * @param index The index returned by add_sock.
    * @note The socket is closed after removal.
+   * @note On kqueue, EV_DELETE removes the filter; on epoll, EPOLL_CTL_DEL does the same.
    */
   expected<void, core::error> remove_sock(socket_type sock, size_t index);
 
   /**
    * @brief Register for write readiness notification.
    *
-   * Arms epoll for write events. When data can be written, the callback is invoked
+   * Arms epoll/kqueue for write events. When data can be written, the callback is invoked
    * with connection_state::available_write. The actual send() should be performed
    * by the socket code after receiving this notification.
    * @param socket The socket to monitor.
@@ -141,7 +143,7 @@ class epoll_reactor {
   /**
    * @brief Register for read readiness notification.
    *
-   * Arms epoll for read events. When data is available, the callback is invoked
+   * Arms epoll/kqueue for read events. When data is available, the callback is invoked
    * with connection_state::available_read. The actual recv() should be performed
    * by the socket code after receiving this notification.
    * @param socket The socket to monitor.
@@ -152,7 +154,7 @@ class epoll_reactor {
   /**
    * @brief Register for accept readiness notification.
    *
-   * Arms epoll for read events on a listening socket. When a connection is pending,
+   * Arms epoll/kqueue for read events on a listening socket. When a connection is pending,
    * the callback is invoked with connection_state::available_read. The actual accept()
    * should be performed by the listener code after receiving this notification.
    * @param socket The listening socket to monitor.
@@ -163,7 +165,7 @@ class epoll_reactor {
   /**
    * @brief Register for connect completion notification.
    *
-   * Arms epoll for write events. When the non-blocking connect completes,
+   * Arms epoll/kqueue for write events. When the non-blocking connect completes,
    * the callback is invoked with connection_state::available_write (success) or
    * connection_state::closed (error).
    * @param socket The connecting socket to monitor.
@@ -180,7 +182,7 @@ class epoll_reactor {
   void submit_close_socket(socket_type socket_handle, continue_void_callback_t&& callback);
 
  private:
-  [[nodiscard]] expected<void, core::error> epoll_ctl_impl(socket_type socket_handle, int action, uint32_t flags, size_t index) const;
+  [[nodiscard]] expected<void, core::error> epoll_ctl_impl(socket_type socket_handle, int action, uint32_t flags, void* user_data) const;
 
  private:
   /**
@@ -219,7 +221,7 @@ class epoll_reactor {
   };
 
   /**
-   * @brief Variant holding all possible epoll operation types.
+   * @brief Variant holding all possible epoll/kqueue operation types.
    */
   using request_variant = std::variant<no_op, op_send_socket, op_receive_socket,
                                        op_accept_socket, op_connect_socket>;
@@ -241,4 +243,4 @@ class epoll_reactor {
 
 }  // namespace server::io
 
-#endif  // EPOLL_SOCKET
+#endif  // EPOLL_KQUEUE_ENABLED

@@ -1,6 +1,6 @@
 #include <server/io/io_config.h>
 
-#if EPOLL_SOCKET
+#if EPOLL_KQUEUE_ENABLED
 
 #include <async_coro/config.h>
 #include <async_coro/utils/always_false.h>
@@ -13,7 +13,13 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#if EPOLL_SOCKET
 #include <sys/epoll.h>
+#elif KQUEUE_SOCKET
+#include <sys/event.h>
+#else
+#error "Unsupported platform"
+#endif
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -29,7 +35,11 @@ namespace server::io {
 
 // NOLINTBEGIN(*-member-initializer)
 epoll_reactor::epoll_reactor() noexcept {
+#if EPOLL_SOCKET
   _epoll_fd = epoll_create1(0);
+#elif KQUEUE_SOCKET
+  _epoll_fd = kqueue();
+#endif
 }
 // NOLINTEND(*-member-initializer)
 
@@ -39,6 +49,16 @@ epoll_reactor::~epoll_reactor() noexcept {
 
 expected<void, core::error> epoll_reactor::process_loop(std::chrono::nanoseconds max_wait) {
   constexpr int MAXEVENTS = 64;
+
+  struct continuation {
+    request_variant op;
+    bool is_error = false;
+  };
+
+  std::array<continuation, MAXEVENTS> continuation_data;
+  size_t num_continuations = 0;
+
+#if EPOLL_SOCKET
   std::array<epoll_event, MAXEVENTS> events{};
 
   auto timeout_ms = std::chrono::duration_cast<std::chrono::milliseconds>(max_wait).count();
@@ -51,14 +71,6 @@ expected<void, core::error> epoll_reactor::process_loop(std::chrono::nanoseconds
   if (n_events <= 0) {
     return {};
   }
-
-  struct continuation {
-    request_variant op;
-    bool is_error = false;
-  };
-
-  std::array<continuation, MAXEVENTS> continuation_data;
-  size_t num_continuations = 0;
 
   {
     std::span events_to_process{events.data(), static_cast<size_t>(n_events)};
@@ -107,6 +119,73 @@ expected<void, core::error> epoll_reactor::process_loop(std::chrono::nanoseconds
       num_continuations++;
     }
   }
+
+#elif KQUEUE_SOCKET
+  std::array<struct kevent, MAXEVENTS> events{};
+
+  timespec timeout{};
+  timeout.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(max_wait).count();
+  timeout.tv_nsec = max_wait.count();
+
+  int n_events = ::kevent(_epoll_fd, nullptr, 0, events.data(), events.size(), &timeout);
+
+  if (n_events == -1) {
+    return expected<void, core::error>{unexpect, core::error{core::error_type::epoll_wait_failed, errno}};
+  }
+
+  if (n_events <= 0) {
+    return {};
+  }
+
+  {
+    std::span events_to_process{events.data(), static_cast<size_t>(n_events)};
+
+    async_coro::unique_lock lock{_mutex};
+    for (const auto& event : events_to_process) {
+      const auto event_flags = event.flags;
+      void* user_data = event.udata;
+
+      const bool is_error = (event_flags & EV_ERROR) != 0;
+      const bool is_read_available = !is_error;
+      const bool is_write_available = !is_error;
+
+      auto index = static_cast<size_t>(reinterpret_cast<uintptr_t>(user_data));  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast): converting user-data pointer back to index
+
+      if (index >= _handled_fds.size()) {
+        continue;
+      }
+
+      auto& cont = continuation_data[num_continuations];  // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index): dynamic index from event count is bounded by MAXEVENTS
+      cont.is_error = is_error;
+
+      auto& fd_info = _handled_fds[index];
+
+      if (!is_error) {
+        // skip unwanted events
+        if (std::holds_alternative<op_send_socket>(fd_info.pending_op)) {
+          if (!is_write_available) {
+            continue;
+          }
+        }
+        if (std::holds_alternative<op_receive_socket>(fd_info.pending_op)) {
+          if (!is_read_available) {
+            continue;
+          }
+        }
+      }
+
+      // Move the pending operation out of the guarded vector
+      cont.op = std::move(fd_info.pending_op);
+      fd_info.pending_op = no_op{};
+
+      if (std::holds_alternative<no_op>(cont.op)) {
+        continue;
+      }
+      num_continuations++;
+    }
+  }
+
+#endif
 
   std::span continuations_to_process{continuation_data.data(), num_continuations};
   for (auto& cont : continuations_to_process) {
@@ -224,7 +303,12 @@ expected<size_t, core::error> epoll_reactor::add_sock(socket_type sock) {
     }
   }
 
-  auto res = epoll_ctl_impl(sock, EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET, index);
+  auto* user_data = reinterpret_cast<void*>(index);  // NOLINT
+#if EPOLL_SOCKET
+  auto res = epoll_ctl_impl(sock, EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLRDHUP | EPOLLET, user_data);
+#elif KQUEUE_SOCKET
+  auto res = epoll_ctl_impl(sock, EV_ADD, EVFILT_READ | EVFILT_WRITE, user_data);
+#endif
   if (!res) {
     return expected<size_t, core::error>{unexpect, res.error()};
   }
@@ -245,7 +329,11 @@ expected<void, core::error> epoll_reactor::remove_sock(socket_type sock, size_t 
     _empty_fds.push_back(index);
   }
 
-  return epoll_ctl_impl(sock, EPOLL_CTL_DEL, 0, 0);
+#if EPOLL_SOCKET
+  return epoll_ctl_impl(sock, EPOLL_CTL_DEL, 0, nullptr);
+#elif KQUEUE_SOCKET
+  return epoll_ctl_impl(sock, EV_DELETE, 0, nullptr);
+#endif
 }
 
 void epoll_reactor::submit_send_socket(epoll_socket& socket, continue_size_callback_t&& callback) {
@@ -255,7 +343,12 @@ void epoll_reactor::submit_send_socket(epoll_socket& socket, continue_size_callb
   async_coro::unique_lock lock{_mutex};
   ASYNC_CORO_ASSERT(socket._index < _handled_fds.size());
 
-  auto res = epoll_ctl_impl(socket.get_native_handle(), EPOLL_CTL_MOD, EPOLLOUT | EPOLLRDHUP | EPOLLET, socket._index);
+  auto* user_data = reinterpret_cast<void*>(socket._index);  // NOLINT
+#if EPOLL_SOCKET
+  auto res = epoll_ctl_impl(socket.get_native_handle(), EPOLL_CTL_MOD, EPOLLOUT | EPOLLRDHUP | EPOLLET, user_data);
+#elif KQUEUE_SOCKET
+  auto res = epoll_ctl_impl(socket.get_native_handle(), EV_ADD, EVFILT_WRITE, user_data);
+#endif
   if (!res) {
     if (callback) {
       callback(expected<size_t, core::error>{unexpect, res.error()});
@@ -277,7 +370,12 @@ void epoll_reactor::submit_receive_socket(epoll_socket& socket, continue_size_ca
   async_coro::unique_lock lock{_mutex};
   ASYNC_CORO_ASSERT(socket._index < _handled_fds.size());
 
-  auto res = epoll_ctl_impl(socket.get_native_handle(), EPOLL_CTL_MOD, EPOLLIN | EPOLLRDHUP | EPOLLET, socket._index);
+  auto* user_data = reinterpret_cast<void*>(socket._index);  // NOLINT
+#if EPOLL_SOCKET
+  auto res = epoll_ctl_impl(socket.get_native_handle(), EPOLL_CTL_MOD, EPOLLIN | EPOLLRDHUP | EPOLLET, user_data);
+#elif KQUEUE_SOCKET
+  auto res = epoll_ctl_impl(socket.get_native_handle(), EV_ADD, EVFILT_READ, user_data);
+#endif
   if (!res) {
     if (callback) {
       callback(expected<size_t, core::error>{unexpect, res.error()});
@@ -299,7 +397,12 @@ void epoll_reactor::submit_accept_socket(epoll_socket& socket, continue_socket_c
   async_coro::unique_lock lock{_mutex};
   ASYNC_CORO_ASSERT(socket._index < _handled_fds.size());
 
-  auto res = epoll_ctl_impl(socket.get_native_handle(), EPOLL_CTL_MOD, EPOLLIN | EPOLLRDHUP | EPOLLET, socket._index);
+  auto* user_data = reinterpret_cast<void*>(socket._index);  // NOLINT
+#if EPOLL_SOCKET
+  auto res = epoll_ctl_impl(socket.get_native_handle(), EPOLL_CTL_MOD, EPOLLIN | EPOLLRDHUP | EPOLLET, user_data);
+#elif KQUEUE_SOCKET
+  auto res = epoll_ctl_impl(socket.get_native_handle(), EV_ADD, EVFILT_READ, user_data);
+#endif
   if (!res) {
     if (callback) {
       callback(expected<socket_type, core::error>{unexpect, res.error()});
@@ -317,8 +420,13 @@ void epoll_reactor::submit_connect_socket(epoll_socket& socket, continue_void_ca
   socket.check_subscribed();
   ASYNC_CORO_ASSERT(!socket.is_closed());
 
-  // Re-arm epoll for write events (connect completion is signaled by writability)
-  auto res = epoll_ctl_impl(socket.get_native_handle(), EPOLL_CTL_MOD, EPOLLOUT | EPOLLRDHUP | EPOLLET, socket._index);
+  auto* user_data = reinterpret_cast<void*>(socket._index);  // NOLINT
+  // Re-arm epoll/kqueue for write events (connect completion is signaled by writability)
+#if EPOLL_SOCKET
+  auto res = epoll_ctl_impl(socket.get_native_handle(), EPOLL_CTL_MOD, EPOLLOUT | EPOLLRDHUP | EPOLLET, user_data);
+#elif KQUEUE_SOCKET
+  auto res = epoll_ctl_impl(socket.get_native_handle(), EV_ADD, EVFILT_WRITE, user_data);
+#endif
 
   if (!res) {
     if (callback) {
@@ -348,16 +456,24 @@ void epoll_reactor::submit_close_socket(socket_type socket_handle, continue_void
   }
 }
 
-expected<void, core::error> epoll_reactor::epoll_ctl_impl(socket_type socket_handle, int action, uint32_t flags, size_t index) const {
+expected<void, core::error> epoll_reactor::epoll_ctl_impl(socket_type socket_handle, int action, uint32_t flags, void* user_data) const {
+#if EPOLL_SOCKET
   epoll_event event{};
-  event.data.ptr = reinterpret_cast<void*>(index);  // NOLINT(*-reinterpret-cast, *-int-to-ptr)
+  event.data.ptr = user_data;  // NOLINT(*-reinterpret-cast, *-int-to-ptr)
   event.events = flags;
   if (-1 == ::epoll_ctl(_epoll_fd, action, socket_handle, &event)) {
     return expected<void, core::error>{unexpect, core::error{core::error_type::epoll_ctl_failed, errno}};
   }
+#elif KQUEUE_SOCKET
+  struct kevent ev_set;
+  EV_SET(&ev_set, socket_handle, flags, action, 0, 0, user_data);
+  if (-1 == ::kevent(_epoll_fd, &ev_set, 1, nullptr, 0, nullptr)) {
+    return expected<void, core::error>{unexpect, core::error{core::error_type::epoll_ctl_failed, errno}};
+  }
+#endif
   return {};
 }
 
 }  // namespace server::io
 
-#endif  // EPOLL_SOCKET
+#endif  // EPOLL_KQUEUE_ENABLED

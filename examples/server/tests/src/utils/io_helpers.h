@@ -64,7 +64,7 @@ inline bool run_task_io_uring(async_coro::task<int> task,
 
 #endif
 
-#if EPOLL_SOCKET || KQUEUE_SOCKET
+#if EPOLL_KQUEUE_ENABLED
 
 /**
  * @brief Helper to run a coroutine task with the epoll/kqueue reactor.

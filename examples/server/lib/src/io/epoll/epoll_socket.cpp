@@ -1,6 +1,6 @@
 #include <server/io/io_config.h>
 
-#if EPOLL_SOCKET
+#if EPOLL_KQUEUE_ENABLED
 
 #include <async_coro/await/await_callback.h>
 #include <server/core/error.h>
@@ -277,4 +277,4 @@ void epoll_socket::check_subscribed() {
 
 }  // namespace server::io
 
-#endif  // EPOLL_SOCKET
+#endif  // EPOLL_KQUEUE_ENABLED

@@ -1,6 +1,6 @@
 #include <server/io/io_config.h>
 
-#if EPOLL_SOCKET || KQUEUE_SOCKET
+#if EPOLL_KQUEUE_ENABLED
 
 #include <async_coro/execution_system.h>
 #include <async_coro/scheduler.h>
@@ -727,4 +727,4 @@ TEST(epoll_socket_tests, socket_echo_server) {
   ASSERT_TRUE(test_utils::run_task_epoll(test(), scheduler, reactor));
 }
 
-#endif  // EPOLL_SOCKET || KQUEUE_SOCKET
+#endif  // EPOLL_KQUEUE_ENABLED
