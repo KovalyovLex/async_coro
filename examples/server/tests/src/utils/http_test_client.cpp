@@ -1,7 +1,6 @@
 #include "http_test_client.h"
 
 #include <server/io/io_config.h>
-#include <server/socket_layer/connection_id.h>
 
 #if EPOLL_KQUEUE_ENABLED
 
@@ -14,6 +13,9 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
+
+#include <server/io/utils.h>
+#include <server/socket_layer/connection_id.h>
 
 #include <array>
 #include <charconv>

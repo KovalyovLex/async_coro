@@ -4,6 +4,7 @@
 
 #include <async_coro/config.h>
 #include <server/io/io_config.h>
+#include <server/io/utils.h>
 #include <server/utils/expected.h>
 
 #include <cstddef>

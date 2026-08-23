@@ -2,8 +2,10 @@
 
 #include <async_coro/await/await_callback.h>
 #include <server/core/error.h>
+#include <server/io/io_config.h>
 #include <server/io/iocp/iocp_listener.h>
 #include <server/io/iocp/iocp_reactor.h>
+#include <server/io/utils.h>
 #include <server/utils/expected.h>
 
 #include <cstddef>
@@ -12,13 +14,6 @@
 #include <vector>
 
 // Windows socket headers for inet_pton.
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <winsock2.h>
 #include <ws2tcpip.h>
 
 namespace server::io {

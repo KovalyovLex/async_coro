@@ -6,6 +6,7 @@
 #include <async_coro/thread_safety/unique_lock.h>
 #include <server/core/error.h>
 #include <server/io/reactor.h>
+#include <server/io/utils.h>
 #include <server/utils/expected.h>
 
 #include <array>

@@ -7,7 +7,7 @@
 #include <async_coro/scheduler.h>
 #include <async_coro/warnings.h>
 #include <gtest/gtest.h>
-#include <server/io/io_config.h>
+#include <server/io/utils.h>
 #include <server/socket_layer/connection_id.h>
 #include <server/tcp_server.h>
 #include <server/tcp_server_config.h>

@@ -2,6 +2,7 @@
 #include <server/io/file_open_mode.h>
 #include <server/io/io_config.h>
 #include <server/io/sync_file.h>
+#include <server/io/utils.h>
 #include <server/utils/expected.h>
 
 #include <cerrno>

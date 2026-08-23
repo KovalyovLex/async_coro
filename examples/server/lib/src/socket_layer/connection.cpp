@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <server/core/error.h>
+#include <server/io/utils.h>
 #include <server/socket_layer/connection.h>
 #include <server/socket_layer/connection_id.h>
 #include <server/socket_layer/reactor.h>

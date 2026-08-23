@@ -3,6 +3,7 @@
 #if EPOLL_KQUEUE_ENABLED
 
 #include <server/core/error.h>
+#include <server/io/utils.h>
 #include <server/socket_layer/reactor.h>
 
 namespace server::socket_layer {

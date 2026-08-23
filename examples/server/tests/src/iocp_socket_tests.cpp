@@ -4,6 +4,7 @@
 #include <async_coro/scheduler.h>
 #include <async_coro/task.h>
 #include <gtest/gtest.h>
+#include <server/io/io_config.h>
 #include <server/io/iocp/iocp_listener.h>
 #include <server/io/iocp/iocp_reactor.h>
 #include <server/io/iocp/iocp_socket.h>
@@ -16,13 +17,6 @@
 #include <vector>
 
 // Windows socket headers
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <winsock2.h>
 #include <ws2tcpip.h>
 
 #include "utils/io_helpers.h"

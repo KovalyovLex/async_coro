@@ -6,6 +6,7 @@
 #include <server/core/error.h>
 #include <server/io/epoll/epoll_listener.h>
 #include <server/io/epoll/epoll_reactor.h>
+#include <server/io/utils.h>
 #include <server/utils/expected.h>
 
 // Linux socket headers

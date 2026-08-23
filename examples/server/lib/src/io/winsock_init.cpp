@@ -4,6 +4,7 @@
 
 #include <server/core/error.h>
 #include <server/io/io_config.h>
+#include <server/io/utils.h>
 #include <server/utils/expected.h>
 
 // WinSock2 headers for socket I/O.
