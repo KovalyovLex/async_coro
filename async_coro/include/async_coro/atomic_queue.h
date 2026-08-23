@@ -38,7 +38,7 @@ class atomic_queue {
 
   struct value {
     union_store val;
-    value* next;
+    value* next = nullptr;
   };
 
   struct values_bank {

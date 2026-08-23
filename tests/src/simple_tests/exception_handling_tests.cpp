@@ -69,7 +69,7 @@ TEST(exception_handling, simple_throw_in_coroutine) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(throwing_coroutine());
+  auto handle = scheduler.start_task(throwing_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_TRUE(handle.done());
 
@@ -97,7 +97,7 @@ TEST(exception_handling, throw_after_await) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(throwing_coroutine());
+  auto handle = scheduler.start_task(throwing_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_FALSE(handle.done());
   ASSERT_TRUE(continue_f);
@@ -122,7 +122,7 @@ TEST(exception_handling, throw_in_void_coroutine) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(throwing_void_coroutine());
+  auto handle = scheduler.start_task(throwing_void_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_TRUE(handle.done());
 
@@ -153,7 +153,7 @@ TEST(exception_handling, nested_coroutine_throw) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(outer_coroutine());
+  auto handle = scheduler.start_task(outer_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_TRUE(handle.done());
 
@@ -183,7 +183,7 @@ TEST(exception_handling, nested_coroutine_catch_and_return) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(outer_coroutine());
+  auto handle = scheduler.start_task(outer_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), -1);
@@ -207,7 +207,7 @@ TEST(exception_handling, deep_nested_exception_propagation) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(level1_coroutine());
+  auto handle = scheduler.start_task(level1_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_TRUE(handle.done());
 
@@ -233,8 +233,8 @@ TEST(exception_handling, when_all_one_task_throws) {
   auto main_coroutine = [normal_task, throwing_task]() -> async_coro::task<int> {
     try {
       auto results = co_await (
-          co_await async_coro::start_task(normal_task) &&
-          co_await async_coro::start_task(throwing_task));
+          co_await async_coro::start_task(normal_task, async_coro::execution_queues::main) &&
+          co_await async_coro::start_task(throwing_task, async_coro::execution_queues::main));
 
       const auto sum = std::apply(
           [](auto... values) {
@@ -251,7 +251,7 @@ TEST(exception_handling, when_all_one_task_throws) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(main_coroutine());
+  auto handle = scheduler.start_task(main_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), -1);
@@ -275,9 +275,9 @@ TEST(exception_handling, when_all_multiple_tasks_throw) {
   auto main_coroutine = [throwing_task1, throwing_task2, normal_task]() -> async_coro::task<int> {
     try {
       auto results = co_await (
-          co_await async_coro::start_task(throwing_task1) &&
-          co_await async_coro::start_task(throwing_task2) &&
-          co_await async_coro::start_task(normal_task));
+          co_await async_coro::start_task(throwing_task1, async_coro::execution_queues::main) &&
+          co_await async_coro::start_task(throwing_task2, async_coro::execution_queues::main) &&
+          co_await async_coro::start_task(normal_task, async_coro::execution_queues::main));
 
       const auto sum = std::apply(
           [](auto... values) {
@@ -296,7 +296,7 @@ TEST(exception_handling, when_all_multiple_tasks_throw) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(main_coroutine());
+  auto handle = scheduler.start_task(main_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), -1);
@@ -327,8 +327,8 @@ TEST(exception_handling, when_all_async_throwing_tasks) {
   auto main_coroutine = [async_throwing_task1, async_throwing_task2]() -> async_coro::task<int> {
     try {
       auto results = co_await (
-          co_await async_coro::start_task(async_throwing_task1) &&
-          co_await async_coro::start_task(async_throwing_task2));
+          co_await async_coro::start_task(async_throwing_task1, async_coro::execution_queues::main) &&
+          co_await async_coro::start_task(async_throwing_task2, async_coro::execution_queues::main));
 
       const auto sum = std::apply(
           [](auto... values) {
@@ -345,7 +345,7 @@ TEST(exception_handling, when_all_async_throwing_tasks) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(main_coroutine());
+  auto handle = scheduler.start_task(main_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_FALSE(handle.done());
   ASSERT_TRUE(continue_f1);
@@ -373,8 +373,8 @@ TEST(exception_handling, when_any_one_task_throws) {
   auto main_coroutine = [normal_task, throwing_task]() -> async_coro::task<int> {
     try {
       auto result = co_await (
-          co_await async_coro::start_task(normal_task) ||
-          co_await async_coro::start_task(throwing_task));
+          co_await async_coro::start_task(normal_task, async_coro::execution_queues::main) ||
+          co_await async_coro::start_task(throwing_task, async_coro::execution_queues::main));
 
       int value = 0;
       std::visit([&value](auto v) {
@@ -393,7 +393,7 @@ TEST(exception_handling, when_any_one_task_throws) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(main_coroutine());
+  auto handle = scheduler.start_task(main_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_TRUE(handle.done());
   // Should get the result from the normal task (42)
@@ -414,8 +414,8 @@ TEST(exception_handling, when_any_all_tasks_throw) {
   auto main_coroutine = [throwing_task1, throwing_task2]() -> async_coro::task<int> {
     try {
       auto result = co_await (
-          co_await async_coro::start_task(throwing_task1) ||
-          co_await async_coro::start_task(throwing_task2));
+          co_await async_coro::start_task(throwing_task1, async_coro::execution_queues::main) ||
+          co_await async_coro::start_task(throwing_task2, async_coro::execution_queues::main));
 
       int value = 0;
       std::visit([&value](auto v) {
@@ -434,7 +434,7 @@ TEST(exception_handling, when_any_all_tasks_throw) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(main_coroutine());
+  auto handle = scheduler.start_task(main_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), -1);
@@ -449,7 +449,7 @@ TEST(exception_handling, start_task_throws) {
 
   auto main_coroutine = [throwing_task]() -> async_coro::task<int> {
     try {
-      auto handle = co_await async_coro::start_task(async_coro::task_launcher{throwing_task});
+      auto handle = co_await async_coro::start_task(async_coro::task_launcher{throwing_task, async_coro::execution_queues::main});
       co_return handle.get();
     } catch (const test_exception& e) {
       EXPECT_STREQ(e.what(), "start_task exception");
@@ -472,13 +472,13 @@ TEST(exception_handling, start_task_nested_throws) {
   };
 
   auto outer_task = [inner_throwing_task]() -> async_coro::task<int> {
-    auto result = co_await async_coro::start_task(async_coro::task_launcher{inner_throwing_task});
+    auto result = co_await async_coro::start_task(async_coro::task_launcher{inner_throwing_task, async_coro::execution_queues::main});
     co_return result.get() * 2;
   };
 
   auto main_coroutine = [outer_task]() -> async_coro::task<int> {
     try {
-      auto handle = co_await async_coro::start_task(async_coro::task_launcher{outer_task});
+      auto handle = co_await async_coro::start_task(async_coro::task_launcher{outer_task, async_coro::execution_queues::main});
       co_return handle.get();
     } catch (const test_exception& e) {
       EXPECT_STREQ(e.what(), "Inner start_task exception");
@@ -488,7 +488,7 @@ TEST(exception_handling, start_task_nested_throws) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(main_coroutine());
+  auto handle = scheduler.start_task(main_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), -1);
@@ -514,7 +514,7 @@ TEST(exception_handling, await_callback_throws_in_callback) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(callback_throwing_coroutine());
+  auto handle = scheduler.start_task(callback_throwing_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_TRUE(handle.done());
   ASSERT_TRUE(continue_f);
@@ -540,7 +540,7 @@ TEST(exception_handling, await_callback_throws_after_resume) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(callback_throwing_coroutine());
+  auto handle = scheduler.start_task(callback_throwing_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_FALSE(handle.done());
   ASSERT_TRUE(continue_f);
@@ -592,9 +592,9 @@ TEST(exception_handling, mixed_success_and_failure_scenarios) {
   auto main_coroutine = [successful_task, async_throwing_task, callback_throwing_task]() -> async_coro::task<int> {
     try {
       auto results = co_await (
-          co_await async_coro::start_task(successful_task) &&
-          co_await async_coro::start_task(async_throwing_task) &&
-          co_await async_coro::start_task(callback_throwing_task));
+          co_await async_coro::start_task(successful_task, async_coro::execution_queues::main) &&
+          co_await async_coro::start_task(async_throwing_task, async_coro::execution_queues::main) &&
+          co_await async_coro::start_task(callback_throwing_task, async_coro::execution_queues::main));
 
       const auto sum = std::apply(
           [](auto... values) {
@@ -611,7 +611,7 @@ TEST(exception_handling, mixed_success_and_failure_scenarios) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(main_coroutine());
+  auto handle = scheduler.start_task(main_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_FALSE(handle.done());
   ASSERT_TRUE(continue_f1);
@@ -652,7 +652,7 @@ TEST(exception_handling, exception_propagation_across_queues) {
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
       async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
-  auto handle = scheduler.start_task(main_coroutine());
+  auto handle = scheduler.start_task(main_coroutine(), async_coro::execution_queues::main);
 
   EXPECT_FALSE(handle.done());
 
@@ -690,7 +690,7 @@ TEST(exception_handling, exception_with_lifetime_tracking) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(main_coroutine());
+  auto handle = scheduler.start_task(main_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), -1);
@@ -713,8 +713,8 @@ TEST(exception_handling, void_coroutines_with_exceptions) {
   auto main_coroutine = [void_normal_task, void_throwing_task]() -> async_coro::task<int> {
     try {
       co_await (
-          co_await async_coro::start_task(void_normal_task) &&
-          co_await async_coro::start_task(void_throwing_task));
+          co_await async_coro::start_task(void_normal_task, async_coro::execution_queues::main) &&
+          co_await async_coro::start_task(void_throwing_task, async_coro::execution_queues::main));
 
       co_return 42;
     } catch (const test_exception& e) {
@@ -725,7 +725,7 @@ TEST(exception_handling, void_coroutines_with_exceptions) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(main_coroutine());
+  auto handle = scheduler.start_task(main_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), -1);
@@ -744,8 +744,8 @@ TEST(exception_handling, void_coroutines_when_any_exception) {
   auto main_coroutine = [void_normal_task, void_throwing_task]() -> async_coro::task<int> {
     try {
       auto result = co_await (
-          co_await async_coro::start_task(void_normal_task) ||
-          co_await async_coro::start_task(void_throwing_task));
+          co_await async_coro::start_task(void_normal_task, async_coro::execution_queues::main) ||
+          co_await async_coro::start_task(void_throwing_task, async_coro::execution_queues::main));
 
       EXPECT_EQ(result.index(), 0);  // Should get the normal task
       co_return 42;
@@ -757,7 +757,7 @@ TEST(exception_handling, void_coroutines_when_any_exception) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(main_coroutine());
+  auto handle = scheduler.start_task(main_coroutine(), async_coro::execution_queues::main);
 
   ASSERT_TRUE(handle.done());
   EXPECT_EQ(handle.get(), 42);  // Should succeed with normal task

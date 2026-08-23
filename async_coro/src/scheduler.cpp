@@ -22,7 +22,7 @@ scheduler::scheduler(i_execution_system::ptr system) noexcept
   ASYNC_CORO_ASSERT(_execution_system);
 }
 
-scheduler::~scheduler() {
+void scheduler::stop() noexcept {
   unique_lock lock{_mutex};
   auto coros = std::move(_managed_coroutines);
   _is_destroying = true;
@@ -31,8 +31,14 @@ scheduler::~scheduler() {
   for (auto& coro : coros) {
     coro->request_cancel();
   }
-  _execution_system = nullptr;
-  coros.clear();
+
+  if (_execution_system) {
+    _execution_system->stop();
+  }
+}
+
+scheduler::~scheduler() {
+  stop();
 }
 
 bool scheduler::is_thread_fits(execution_queue_mark execution_queue, std::thread::id thread_id) noexcept {

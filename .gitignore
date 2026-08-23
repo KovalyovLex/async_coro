@@ -4,3 +4,4 @@ build/*
 node_modules/*
 compile_commands.json
 .cache
+.github/prompts/*

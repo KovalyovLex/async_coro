@@ -42,7 +42,7 @@ TEST(cancel_task, await_cancel_direct) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(parent());
+  auto handle = scheduler.start_task(parent(), async_coro::execution_queues::main);
   // parent is suspended waiting for child
   ASSERT_FALSE(handle.done());
 
@@ -71,7 +71,7 @@ TEST(cancel_task, when_any_cancel_others) {
 
   auto parent = [&]() -> async_coro::task<int> {
     // when_any: first completed should cancel others
-    auto res = co_await ((co_await async_coro::start_task(long_task())) || (co_await async_coro::start_task(immediate())));
+    auto res = co_await ((co_await async_coro::start_task(long_task(), async_coro::execution_queues::main)) || (co_await async_coro::start_task(immediate(), async_coro::execution_queues::main)));
     // result variant should contain 1 (immediate) or long_task result; ensure parent finishes
     EXPECT_EQ(res.index(), 1);
 
@@ -81,7 +81,7 @@ TEST(cancel_task, when_any_cancel_others) {
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
       async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
-  auto handle = scheduler.start_task(parent());
+  auto handle = scheduler.start_task(parent(), async_coro::execution_queues::main);
   ASSERT_TRUE(handle.done());
 
   // update main to process cancellations
@@ -118,7 +118,7 @@ TEST(cancel_task, when_all_parent_cancelled) {
 
   auto parent = [&]() -> async_coro::task<int> {
     // both children awaited with when_all - cancellation in one should cancel the whole group
-    co_await (co_await async_coro::start_task(child1()) && co_await async_coro::start_task(infinite_task()));
+    co_await (co_await async_coro::start_task(child1(), async_coro::execution_queues::main) && co_await async_coro::start_task(infinite_task(), async_coro::execution_queues::main));
 
     // should not reach here
     ADD_FAILURE();
@@ -129,7 +129,7 @@ TEST(cancel_task, when_all_parent_cancelled) {
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
       async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
-  auto handle = scheduler.start_task(parent());
+  auto handle = scheduler.start_task(parent(), async_coro::execution_queues::main);
   EXPECT_FALSE(handle.done());
   EXPECT_FALSE(handle.is_cancelled());
 
@@ -171,7 +171,7 @@ TEST(cancel_task, when_any_all_children_cancelled) {
 
   auto parent = [&]() -> async_coro::task<int> {
     // both children awaited with when_all - cancellation in one should cancel the whole group
-    co_await (co_await async_coro::start_task(child1()) || co_await async_coro::start_task(child2()));
+    co_await (co_await async_coro::start_task(child1(), async_coro::execution_queues::main) || co_await async_coro::start_task(child2(), async_coro::execution_queues::main));
 
     // should not reach here
     ADD_FAILURE();
@@ -182,7 +182,7 @@ TEST(cancel_task, when_any_all_children_cancelled) {
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
       async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
-  auto handle = scheduler.start_task(parent());
+  auto handle = scheduler.start_task(parent(), async_coro::execution_queues::main);
   EXPECT_FALSE(handle.done());
   EXPECT_FALSE(handle.is_cancelled());
 
@@ -219,7 +219,7 @@ TEST(cancel_task, cross_queue_cancel) {
   };
 
   auto parent = [&]() -> async_coro::task<void> {
-    co_await (co_await async_coro::start_task(worker_task()) || co_await async_coro::start_task(infinite_task()));
+    co_await (co_await async_coro::start_task(worker_task(), async_coro::execution_queues::main) || co_await async_coro::start_task(infinite_task(), async_coro::execution_queues::main));
 
     // should not reach here
     ADD_FAILURE();
@@ -228,7 +228,7 @@ TEST(cancel_task, cross_queue_cancel) {
   async_coro::scheduler scheduler{std::make_unique<async_coro::execution_system>(
       async_coro::execution_system_config{.worker_configs = {{"worker1"}}})};
 
-  auto handle = scheduler.start_task(parent());
+  auto handle = scheduler.start_task(parent(), async_coro::execution_queues::main);
 
   // wait for worker run
   std::size_t tries = 0;
@@ -276,7 +276,7 @@ TEST(cancel_task, root_request_cancel_with_embedded_children) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(parent());
+  auto handle = scheduler.start_task(parent(), async_coro::execution_queues::main);
 
   // ensure child was started and embedded
   ASSERT_TRUE(child_started);
@@ -313,8 +313,8 @@ TEST(cancel_task, root_request_cancel_with_started_children) {
 
   auto parent = [&]() -> async_coro::task<int> {
     // start children in parallel
-    auto h1 = co_await async_coro::start_task(infinite_task1());
-    auto h2 = co_await async_coro::start_task(infinite_task2());
+    auto h1 = co_await async_coro::start_task(infinite_task1(), async_coro::execution_queues::main);
+    auto h2 = co_await async_coro::start_task(infinite_task2(), async_coro::execution_queues::main);
     // wait for both (when_all)
     co_await (std::move(h1) && std::move(h2));
     // should not reach here if parent cancelled
@@ -324,7 +324,7 @@ TEST(cancel_task, root_request_cancel_with_started_children) {
 
   async_coro::scheduler scheduler;
 
-  auto handle = scheduler.start_task(parent());
+  auto handle = scheduler.start_task(parent(), async_coro::execution_queues::main);
 
   // wait a bit for children to start
   std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -349,7 +349,7 @@ TEST(cancel_task, cancel_while_sleep_active) {
   };
 
   {
-    auto handle = scheduler.start_task(parent());
+    auto handle = scheduler.start_task(parent(), async_coro::execution_queues::main);
 
     // give child a moment to schedule its sleep on the worker
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -393,7 +393,7 @@ TEST(cancel_task, cancel_parent_while_sleep_active) {
     co_return;
   };
 
-  auto handle = scheduler.start_task(parent());
+  auto handle = scheduler.start_task(parent(), async_coro::execution_queues::main);
 
   // give child a moment to schedule its sleep on the worker
   std::this_thread::sleep_for(std::chrono::milliseconds(5));

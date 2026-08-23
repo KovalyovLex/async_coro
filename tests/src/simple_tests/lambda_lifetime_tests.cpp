@@ -108,7 +108,7 @@ TEST(lambda_lifetime, start_task_with_scheduler) {
     EXPECT_EQ(lifetime_tracker::num_instances, 1);  // 1 captured in lambda
 
     // Start task with scheduler
-    handle = scheduler.start_task(async_coro::task_launcher{std::move(task)});
+    handle = scheduler.start_task(async_coro::task_launcher{std::move(task), async_coro::execution_queues::main});
   }
 
   EXPECT_EQ(lifetime_tracker::num_destructors, 1);  // temp lambda
@@ -167,7 +167,7 @@ TEST(lambda_lifetime, start_task_in_coroutine) {
       };
 
       // Start nested task using async_coro::start_task
-      auto nested_handle = co_await async_coro::start_task(async_coro::task_launcher{std::move(nested_task)});
+      auto nested_handle = co_await async_coro::start_task(async_coro::task_launcher{std::move(nested_task), async_coro::execution_queues::main});
 
       co_await async_coro::await_callback([&nested_handle](auto f) {
         nested_handle.continue_with([f = std::move(f)](auto&, bool) mutable { f(); });
@@ -176,7 +176,7 @@ TEST(lambda_lifetime, start_task_in_coroutine) {
       co_return captured_arg.value;
     };
 
-    handle = scheduler.start_task(std::move(main_coroutine));
+    handle = scheduler.start_task(std::move(main_coroutine), async_coro::execution_queues::main);
   }
 
   ASSERT_FALSE(handle.done());
@@ -245,9 +245,9 @@ TEST(lambda_lifetime, when_all_tasks) {
 
       // Use when_all to wait for all tasks
       auto results = co_await (
-          co_await async_coro::start_task(std::move(task1)) &&
-          co_await async_coro::start_task(std::move(task2)) &&
-          co_await async_coro::start_task(std::move(task3)));
+          co_await async_coro::start_task(std::move(task1), async_coro::execution_queues::main) &&
+          co_await async_coro::start_task(std::move(task2), async_coro::execution_queues::main) &&
+          co_await async_coro::start_task(std::move(task3), async_coro::execution_queues::main));
 
       EXPECT_EQ(lifetime_tracker::num_instances, 3);
 
@@ -263,7 +263,7 @@ TEST(lambda_lifetime, when_all_tasks) {
 
     EXPECT_EQ(lifetime_tracker::num_instances, 6);
 
-    handle = scheduler.start_task(std::move(main_coroutine));
+    handle = scheduler.start_task(std::move(main_coroutine), async_coro::execution_queues::main);
 
     EXPECT_EQ(lifetime_tracker::num_instances, 9);  // temp main_coroutine still alive
   }
@@ -342,9 +342,9 @@ TEST(lambda_lifetime, when_any_tasks) {
 
       // Use when_any to wait for the first task to complete
       auto result = co_await (
-          co_await async_coro::start_task(std::move(task1)) ||
-          co_await async_coro::start_task(std::move(task2)) ||
-          co_await async_coro::start_task(std::move(task3)));
+          co_await async_coro::start_task(std::move(task1), async_coro::execution_queues::main) ||
+          co_await async_coro::start_task(std::move(task2), async_coro::execution_queues::main) ||
+          co_await async_coro::start_task(std::move(task3), async_coro::execution_queues::main));
 
       EXPECT_EQ(lifetime_tracker::num_instances, 3);
 
@@ -362,7 +362,7 @@ TEST(lambda_lifetime, when_any_tasks) {
 
     EXPECT_EQ(lifetime_tracker::num_instances, 6);
 
-    handle = scheduler.start_task(std::move(main_coroutine));
+    handle = scheduler.start_task(std::move(main_coroutine), async_coro::execution_queues::main);
 
     EXPECT_EQ(lifetime_tracker::num_instances, 9);
   }
@@ -456,7 +456,7 @@ TEST(lambda_lifetime, embedded_coro) {
 
     EXPECT_EQ(lifetime_tracker::num_instances, 0);
 
-    auto handle = scheduler.start_task(std::move(main_coroutine));
+    auto handle = scheduler.start_task(std::move(main_coroutine), async_coro::execution_queues::main);
 
     EXPECT_EQ(lifetime_tracker::num_instances, 0);
     EXPECT_TRUE(handle.done());

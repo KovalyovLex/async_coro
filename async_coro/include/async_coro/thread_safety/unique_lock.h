@@ -36,7 +36,7 @@ class CORO_THREAD_SCOPED_CAPABILITY unique_lock : protected std::unique_lock<typ
 
   using super::operator bool;
 
-  auto mutex() const noexcept CORO_THREAD_RETURN_CAPABILITY(this) {
+  [[nodiscard]] auto mutex() const noexcept CORO_THREAD_RETURN_CAPABILITY(this) {
     return super::mutex();
   }
 

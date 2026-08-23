@@ -17,11 +17,18 @@ echo "[$(date +'%Y-%m-%d %H:%M:%S')] Logging output to $LOG_FILE"
 # Write the runner PID so external cleanup can signal this script
 echo "$$" > "$PID_FILE"
 
+# Detect Windows (MSVC adds .exe extension)
+EXE_EXT=""
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "linux-msvc" ]]; then
+    EXE_EXT=".exe"
+fi
+
 # Maintainable list of commands to run sequentially (each element is a full command string)
 TEST_COMMANDS=(
-    "./tests/tests_simple --gtest_repeat=500 --gtest_brief=1 --gtest_filter=*.multiple_workers*"
-    "./tests/tests_simple --gtest_repeat=30 --gtest_brief=1"
-    "./tests/tests_long --gtest_brief=1"
+    "./tests/tests_simple${EXE_EXT} --gtest_repeat=500 --gtest_brief=1 --gtest_filter=*.multiple_workers*"
+    "./tests/tests_simple${EXE_EXT} --gtest_repeat=30 --gtest_brief=1"
+    "./tests/tests_long${EXE_EXT} --gtest_brief=1"
+    "./examples/server/server_example_tests${EXE_EXT} --gtest_repeat=1"
 )
 
 STOP=0

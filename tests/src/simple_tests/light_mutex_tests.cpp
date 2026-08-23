@@ -33,6 +33,10 @@ TEST_P(light_mutex_mt, perf_simple_lock) {
     });
   }
 
+  m1.lock();
+  a = 0;
+  m1.unlock();
+
   const auto start_mutex = clock::now();
 
   for (size_t i = 0; i < kTests; i++) {
@@ -40,6 +44,10 @@ TEST_P(light_mutex_mt, perf_simple_lock) {
     a = a + 1;
     m1.unlock();
   }
+
+  m1.lock();
+  const auto total_mutex_locks = a;
+  m1.unlock();
 
   const auto mutex_t = clock::now() - start_mutex;
 
@@ -63,6 +71,10 @@ TEST_P(light_mutex_mt, perf_simple_lock) {
     });
   }
 
+  m2.lock();
+  a = 0;
+  m2.unlock();
+
   const auto start_light = clock::now();
 
   for (size_t i = 0; i < kTests; i++) {
@@ -70,6 +82,10 @@ TEST_P(light_mutex_mt, perf_simple_lock) {
     a = a + 1;
     m2.unlock();
   }
+
+  m2.lock();
+  const auto total_light_locks = a;
+  m2.unlock();
 
   const auto light_t = clock::now() - start_light;
 
@@ -79,7 +95,13 @@ TEST_P(light_mutex_mt, perf_simple_lock) {
   }
   workers.clear();
 
+  double mutex_sec = std::chrono::duration<double>(mutex_t).count();
+  double light_sec = std::chrono::duration<double>(light_t).count();
+
   std::cout << "mutex_t: " << mutex_t.count() << " light_t: " << light_t.count() << "\n";
+  std::cout << "total_mutex_locks: " << total_mutex_locks << " total_light_locks: " << total_light_locks << "\n";
+  std::cout << "num_workers: " << (num_workers + 1) << "\n";
+  std::cout << "throughput_mutex: " << (total_mutex_locks / mutex_sec) << " throughput_light: " << (total_light_locks / light_sec) << "\n";
 }
 
 TEST_P(light_mutex_mt, perf_try_lock) {
@@ -106,6 +128,10 @@ TEST_P(light_mutex_mt, perf_try_lock) {
     });
   }
 
+  m1.lock();
+  a = 0;
+  m1.unlock();
+
   const auto start_mutex = clock::now();
 
   for (size_t i = 0; i < kTests; i++) {
@@ -114,6 +140,10 @@ TEST_P(light_mutex_mt, perf_try_lock) {
       m1.unlock();
     }
   }
+
+  m1.lock();
+  const auto total_mutex_locks = a;
+  m1.unlock();
 
   const auto mutex_t = clock::now() - start_mutex;
 
@@ -137,6 +167,10 @@ TEST_P(light_mutex_mt, perf_try_lock) {
     });
   }
 
+  m2.lock();
+  a = 0;
+  m2.unlock();
+
   const auto start_light = clock::now();
 
   for (size_t i = 0; i < kTests; i++) {
@@ -146,6 +180,10 @@ TEST_P(light_mutex_mt, perf_try_lock) {
     }
   }
 
+  m2.lock();
+  const auto total_light_locks = a;
+  m2.unlock();
+
   const auto light_t = clock::now() - start_light;
 
   running = false;
@@ -154,7 +192,13 @@ TEST_P(light_mutex_mt, perf_try_lock) {
   }
   workers.clear();
 
+  double mutex_sec = std::chrono::duration<double>(mutex_t).count();
+  double light_sec = std::chrono::duration<double>(light_t).count();
+
   std::cout << "mutex_t: " << mutex_t.count() << " light_t: " << light_t.count() << "\n";
+  std::cout << "total_mutex_locks: " << total_mutex_locks << " total_light_locks: " << total_light_locks << "\n";
+  std::cout << "num_workers: " << (num_workers + 1) << "\n";
+  std::cout << "throughput_mutex: " << (total_mutex_locks / mutex_sec) << " throughput_light: " << (total_light_locks / light_sec) << "\n";
 }
 
 INSTANTIATE_TEST_SUITE_P(

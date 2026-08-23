@@ -27,9 +27,10 @@ class callback_base {
       : _executor(exec) {}
 
  public:
-  void destroy() noexcept(is_noexcept) {
+  void destroy() noexcept {
     internal::callback_execute_command arg;
-    _executor(arg, *this);
+    // destroy should newer throw exceptions
+    reinterpret_cast<void (*)(internal::callback_execute_command&, callback_base&) noexcept>(_executor)(arg, *this);  // NOLINT(*reinterpret-cast*)
   }
 
  protected:

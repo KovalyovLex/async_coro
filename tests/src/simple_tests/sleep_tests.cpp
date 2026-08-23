@@ -30,7 +30,7 @@ TEST(sleep_tests, duration_and_resume_on_parent_queue) {
   };
 
   auto main_tid = std::this_thread::get_id();
-  auto h = scheduler.start_task(t());
+  auto h = scheduler.start_task(t(), async_coro::execution_queues::main);
 
   // wait for completion with a timeout
   for (int i = 0; i < 2000 && !done.load(std::memory_order::relaxed); ++i) {
@@ -67,7 +67,7 @@ TEST(sleep_tests, resume_on_worker_queue) {
   };
 
   auto main_tid = std::this_thread::get_id();
-  auto h = scheduler.start_task(t());
+  auto h = scheduler.start_task(t(), async_coro::execution_queues::main);
 
   // wait for completion with a timeout
   for (int i = 0; i < 2000 && !done.load(std::memory_order::relaxed); ++i) {

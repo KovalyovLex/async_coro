@@ -93,7 +93,14 @@ execution_system::execution_system(const execution_system_config& config, const 
 }
 
 execution_system::~execution_system() noexcept {
-  _is_stopping.store(true, std::memory_order::release);
+  stop();
+}
+
+void execution_system::stop() noexcept {
+  if (_is_stopping.exchange(true, std::memory_order::release)) {
+    // already stopping or stopped
+    return;
+  }
 
   for (std::uint32_t i = 0; i < _num_workers; i++) {
     _thread_data[i].notifier.notify();
@@ -166,6 +173,11 @@ bool execution_system::cancel_execution(const delayed_task_id& task_id) {
 
   if (task_it != _delayed_tasks.end()) {
     task_it->cancel_execution = true;
+
+    // function will be destroyed without lock
+    auto func = std::move(task_it->func);
+    lock.unlock();
+
     return true;
   }
   return false;

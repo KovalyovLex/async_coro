@@ -166,6 +166,23 @@ class i_execution_system {
    *       unnecessary queuing when immediate execution is possible
    */
   [[nodiscard]] virtual bool is_thread_fits(execution_queue_mark execution_queue, std::thread::id thread_id) const noexcept = 0;
+
+  /**
+   * @brief Stops the execution system and shuts down all worker threads
+   *
+   * Signals the execution system to stop processing new tasks and gracefully
+   * shuts down all worker threads. After calling this method, the execution
+   * system should not accept any new tasks and all running tasks should be
+   * allowed to complete or be cancelled.
+   *
+   * This method is typically called during cleanup before destroying the
+   * execution system instance.
+   *
+   * @note This method is thread-safe and can be called from any thread
+   * @note After calling this method, the execution system should not accept new tasks
+   * @note Worker threads should be properly joined before destruction
+   */
+  virtual void stop() noexcept = 0;
 };
 
 }  // namespace async_coro

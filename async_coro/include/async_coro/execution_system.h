@@ -3,11 +3,11 @@
 #include <async_coro/atomic_queue.h>
 #include <async_coro/executor_data.h>
 #include <async_coro/i_execution_system.h>
-#include <async_coro/internal/hardware_interference_size.h>
 #include <async_coro/thread_notifier.h>
 #include <async_coro/thread_safety/analysis.h>
 #include <async_coro/thread_safety/condition_variable.h>
 #include <async_coro/thread_safety/mutex.h>
+#include <async_coro/utils/hardware_interference_size.h>
 #include <async_coro/utils/unique_function.h>
 #include <async_coro/warnings.h>
 
@@ -186,6 +186,11 @@ class execution_system : public i_execution_system {
    * @note This method is useful for determining if immediate execution is possible
    */
   [[nodiscard]] bool is_thread_fits(execution_queue_mark execution_queue, std::thread::id thread_id) const noexcept override;
+
+  /**
+   * @brief Stops the execution system and shuts down all worker threads
+   */
+  void stop() noexcept override;
 
   /**
    * @brief Processes one task from the main thread's execution queues
