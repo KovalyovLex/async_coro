@@ -48,7 +48,9 @@ enum class error_type : uint16_t {
   accept_ex_query_failed = 504,   // WSAIoctl AcceptEx query failure
   connect_ex_query_failed = 505,  // WSAIoctl ConnectEx query failure
   temp_socket_creation_failed = 506,
-  epoll_ctl_failed = 507,  // + error code
+  epoll_ctl_failed = 507,      // + error code
+  epoll_wait_failed = 508,     // + error code
+  io_uring_wait_failed = 509,  // + error code
 
   // --- Network / protocol ---
   inet_pton_failed = 600,

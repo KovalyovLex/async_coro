@@ -150,7 +150,7 @@ iocp_reactor::~iocp_reactor() noexcept {
 // process_loop — mirrors io_uring_reactor's 4-phase pattern
 // ============================================================================
 
-void iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT(readability-function-cognitive-complexity): complex but well-structured 4-phase IOCP processing loop
+expected<void, core::error> iocp_reactor::process_loop(std::chrono::milliseconds max_wait) {  // NOLINT(readability-function-cognitive-complexity): complex but well-structured 4-phase IOCP processing loop
   // Phase 1: Drain atomic_queue into local ring buffer.
   while (!_free_indices.empty()) {
     request_variant entry;

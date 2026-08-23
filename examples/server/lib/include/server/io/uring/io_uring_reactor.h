@@ -89,9 +89,11 @@ class io_uring_reactor {
    *
    * Polls the completion queue and dispatches events to continuation callbacks.
    * @param max_wait Maximum time to wait for events.
+   * @return An expected<void, core::error>. On success, contains void.
+   *         On failure, contains an error describing the io_uring error.
    * @note Must be called from the owning thread.
    */
-  void process_loop(std::chrono::nanoseconds max_wait);
+  [[nodiscard]] expected<void, core::error> process_loop(std::chrono::nanoseconds max_wait);
 
   /**
    * @brief Submit an async read operation.

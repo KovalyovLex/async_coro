@@ -78,7 +78,7 @@ void tcp_server::serve(const tcp_server_config& conf, std::optional<ssl_config> 
 
     react.thread = std::thread([this, &react, sleep = conf.reactor_sleep]() {
       while (!_is_terminating.load(std::memory_order::relaxed)) {
-        react.reactor_instance.process_loop(sleep);
+        (void)react.reactor_instance.process_loop(sleep);
       }
     });
 

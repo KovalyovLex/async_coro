@@ -79,7 +79,7 @@ io_uring_reactor::~io_uring_reactor() noexcept {
   }
 }
 
-void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOLINT(readability-function-cognitive-complexity): complex but well-structured 4-phase io_uring processing loop
+expected<void, core::error> io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOLINT(readability-function-cognitive-complexity): complex but well-structured 4-phase io_uring processing loop
   // Phase 1: Drain atomic_queue into local ring buffer
   while (!_free_indices.empty()) {
     request_variant entry;
@@ -161,13 +161,19 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOL
     n_cqes = io_uring_wait_cqe_timeout(&_ring, &cqe_ptr, &timespec_val);
     if (n_cqes != 0) {
       // n_cqes < 0: error, n_cqes > 0: timeout (no CQE found)
-      return;
+      if (n_cqes < 0) {
+        return expected<void, core::error>{unexpect, core::error{core::error_type::io_uring_wait_failed, errno}};
+      }
+      return {};
     }
   } else {
     n_cqes = io_uring_peek_cqe(&_ring, &cqe_ptr);
     if (n_cqes != 0) {
       // n_cqes < 0: error, n_cqes == -EAGAIN: no CQE available
-      return;
+      if (n_cqes < 0) {
+        return expected<void, core::error>{unexpect, core::error{core::error_type::io_uring_wait_failed, errno}};
+      }
+      return {};
     }
   }
 
@@ -233,6 +239,7 @@ void io_uring_reactor::process_loop(std::chrono::nanoseconds max_wait) {  // NOL
       cqe_ptr = nullptr;
     }
   }
+  return {};
 }
 
 void io_uring_reactor::submit_read(int file_descriptor, uint64_t offset, std::span<std::byte> buffer, continue_size_callback_t&& callback) {  // NOLINT(bugprone-easily-swappable-parameters): order matches POSIX read(fd, buf, len) semantics

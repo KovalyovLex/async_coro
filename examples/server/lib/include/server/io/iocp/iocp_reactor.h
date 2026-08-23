@@ -80,9 +80,11 @@ class iocp_reactor {
    * Drains the submission queue, posts overlapped I/O operations, waits for
    * completion via GetQueuedCompletionStatus, then dispatches callbacks.
    * @param max_wait Maximum time to wait for completion events.
+   * @return An expected<void, core::error>. On success, contains void.
+   *         On failure, contains an error describing the IOCP error.
    * @note Must be called from the owning thread.
    */
-  void process_loop(std::chrono::milliseconds max_wait);
+  [[nodiscard]] expected<void, core::error> process_loop(std::chrono::milliseconds max_wait);
 
   /**
    * @brief Submit an async read operation.

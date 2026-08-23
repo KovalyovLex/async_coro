@@ -4,6 +4,7 @@
 
 #include <async_coro/config.h>
 #include <async_coro/thread_safety/unique_lock.h>
+#include <server/core/error.h>
 #include <server/io/io_config.h>
 #include <server/io/reactor.h>
 #include <server/utils/expected.h>
@@ -59,7 +60,7 @@ reactor::~reactor() noexcept {
   io::close_file(_epoll_fd);
 }
 
-void reactor::process_loop(std::chrono::nanoseconds max_wait) {
+expected<void, core::error> reactor::process_loop(std::chrono::nanoseconds max_wait) {
   constexpr int MAXEVENTS = 64;
 
   struct continuation {
@@ -78,11 +79,11 @@ void reactor::process_loop(std::chrono::nanoseconds max_wait) {
   int n_events = ::epoll_wait(_epoll_fd, events.data(), events.size(), static_cast<int>(timeout_ms));
 
   if (n_events == -1) {
-    std::cerr << "epoll_wait error: " << strerror(errno) << '\n';
+    return expected<void, core::error>{unexpect, core::error{core::error_type::epoll_wait_failed, errno}};
   }
 
   if (n_events <= 0) {
-    return;
+    return {};
   }
 
   {
@@ -137,11 +138,11 @@ void reactor::process_loop(std::chrono::nanoseconds max_wait) {
   int n_events = ::kevent(_epoll_fd, nullptr, 0, events.data(), events.size(), &timeout);
 
   if (n_events == -1) {
-    std::cerr << "kevent error: " << strerror(errno) << '\n';
+    return expected<void, core::error>{unexpect, core::error{core::error_type::epoll_wait_failed, errno}};
   }
 
   if (n_events <= 0) {
-    return;
+    return {};
   }
 
   {
@@ -203,6 +204,7 @@ void reactor::process_loop(std::chrono::nanoseconds max_wait) {
     }
     continue_struct.continuation = nullptr;
   }
+  return {};
 }
 
 size_t reactor::add_sock(socket_type sock) {

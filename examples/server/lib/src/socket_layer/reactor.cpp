@@ -2,6 +2,7 @@
 
 #if EPOLL_KQUEUE_ENABLED
 
+#include <server/core/error.h>
 #include <server/socket_layer/reactor.h>
 
 namespace server::socket_layer {
@@ -10,8 +11,8 @@ reactor::reactor() noexcept = default;
 
 reactor::~reactor() noexcept = default;
 
-void reactor::process_loop(std::chrono::nanoseconds max_wait) {
-  _reactor.process_loop(max_wait);
+expected<void, core::error> reactor::process_loop(std::chrono::nanoseconds max_wait) {
+  return _reactor.process_loop(max_wait);
 }
 
 size_t reactor::add_connection(connection_id conn) {

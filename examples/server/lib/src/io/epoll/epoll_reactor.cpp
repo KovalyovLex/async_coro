@@ -37,7 +37,7 @@ epoll_reactor::~epoll_reactor() noexcept {
   io::close_file(_epoll_fd);
 }
 
-void epoll_reactor::process_loop(std::chrono::nanoseconds max_wait) {
+expected<void, core::error> epoll_reactor::process_loop(std::chrono::nanoseconds max_wait) {
   constexpr int MAXEVENTS = 64;
   std::array<epoll_event, MAXEVENTS> events{};
 
@@ -45,12 +45,11 @@ void epoll_reactor::process_loop(std::chrono::nanoseconds max_wait) {
   int n_events = ::epoll_wait(_epoll_fd, events.data(), events.size(), static_cast<int>(timeout_ms));
 
   if (n_events == -1) {
-    std::cerr << "epoll_wait error: " << strerror(errno) << '\n';
-    return;
+    return expected<void, core::error>{unexpect, core::error{core::error_type::epoll_wait_failed, errno}};
   }
 
   if (n_events <= 0) {
-    return;
+    return {};
   }
 
   struct continuation {
@@ -155,6 +154,7 @@ void epoll_reactor::process_loop(std::chrono::nanoseconds max_wait) {
                  cont.op);
     }
   }
+  return {};
 }
 
 expected<socket_type, core::error> epoll_reactor::create_socket(socket_type_id kind) noexcept {

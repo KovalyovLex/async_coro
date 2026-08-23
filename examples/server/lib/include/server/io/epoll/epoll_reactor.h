@@ -71,9 +71,11 @@ class epoll_reactor {
    * @brief Process pending I/O events and resume waiting coroutines.
    *
    * @param max_wait Maximum time to wait for events (e.g., std::chrono::milliseconds(100)).
+   * @return An expected<void, core::error>. On success, contains void.
+   *         On failure, contains an error describing the epoll_wait failure.
    * @note Must be called from the owning thread.
    */
-  void process_loop(std::chrono::nanoseconds max_wait);
+  [[nodiscard]] expected<void, core::error> process_loop(std::chrono::nanoseconds max_wait);
 
   /**
    * @brief Create a new TCP or UDP socket.

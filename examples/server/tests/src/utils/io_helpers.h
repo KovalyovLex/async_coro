@@ -31,7 +31,7 @@ inline bool run_task_iocp(async_coro::task<int> task,
   auto handle = scheduler.start_task(std::move(task), async_coro::execution_queues::main);
   for (int i = 0; i < 2000 && !handle.done(); ++i) {
     scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
-    reactor.process_loop(std::chrono::milliseconds(1));
+    (void)reactor.process_loop(std::chrono::milliseconds(1));
   }
   return handle.done();
 }
@@ -57,7 +57,7 @@ inline bool run_task_io_uring(async_coro::task<int> task,
   auto handle = scheduler.start_task(std::move(task), async_coro::execution_queues::main);
   for (int i = 0; i < 2000 && !handle.done(); ++i) {
     scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
-    reactor.process_loop(std::chrono::milliseconds(1));  // 1 ms
+    (void)reactor.process_loop(std::chrono::milliseconds(1));  // 1 ms
   }
   return handle.done();
 }
@@ -83,7 +83,7 @@ inline bool run_task_epoll(async_coro::task<int> task,
   auto handle = scheduler.start_task(std::move(task), async_coro::execution_queues::main);
   for (int i = 0; i < 2000 && !handle.done(); ++i) {
     scheduler.get_execution_system<async_coro::execution_system>().update_from_main();
-    reactor.process_loop(std::chrono::milliseconds(1));
+    (void)reactor.process_loop(std::chrono::milliseconds(1));
   }
   return handle.done();
 }

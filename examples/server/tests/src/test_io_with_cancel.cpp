@@ -65,7 +65,7 @@ TEST(io_cancel, cancel_with_io_uring) {
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
     scheduler.get_execution_system<async_coro::execution_system>()
         .update_from_main();
-    reactor.process_loop(std::chrono::nanoseconds(1000000));
+    (void)reactor.process_loop(std::chrono::nanoseconds(1000000));
   }
 
   // Cancel the read
@@ -76,7 +76,7 @@ TEST(io_cancel, cancel_with_io_uring) {
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
     scheduler.get_execution_system<async_coro::execution_system>()
         .update_from_main();
-    reactor.process_loop(std::chrono::nanoseconds(1000000));
+    (void)reactor.process_loop(std::chrono::nanoseconds(1000000));
   }
 
   EXPECT_TRUE(handle.done())

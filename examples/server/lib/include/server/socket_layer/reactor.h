@@ -4,6 +4,7 @@
 
 #if EPOLL_KQUEUE_ENABLED
 
+#include <server/core/error.h>
 #include <server/io/reactor.h>
 #include <server/socket_layer/connection_id.h>
 
@@ -38,9 +39,11 @@ class reactor {
    * @brief Process pending I/O events and resume waiting coroutines.
    *
    * @param max_wait Maximum time to wait for events.
+   * @return An expected<void, core::error>. On success, contains void.
+   *         On failure, contains an error describing the reactor failure.
    * @note Must be called from the owning thread.
    */
-  void process_loop(std::chrono::nanoseconds max_wait);
+  [[nodiscard]] expected<void, core::error> process_loop(std::chrono::nanoseconds max_wait);
 
   /**
    * @brief Add a socket connection to the reactor for polling.
